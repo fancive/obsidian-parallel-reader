@@ -1,0 +1,9 @@
+{
+  "id": "parallel-reader",
+  "name": "Parallel Reader",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Split-view reading: left = original note, right = LLM-generated section bullets with scroll-sync highlight.",
+  "author": "lancivez",
+  "isDesktopOnly": true
+}

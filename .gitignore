@@ -1,0 +1,14 @@
+# Plugin runtime data (user cache + settings, not source)
+data.json
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if build tooling is added later)
+node_modules/
+dist/
+*.log
