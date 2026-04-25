@@ -294,7 +294,7 @@ class ParallelReaderPlugin extends Plugin {
   async ensureView() {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE_PARALLEL)[0];
-    if (!leaf) { leaf = workspace.getRightLeaf(false); await leaf.setViewState({ type: VIEW_TYPE_PARALLEL, active: true }); }
+    if (!leaf) { leaf = workspace.getRightLeaf(false)!; await leaf.setViewState({ type: VIEW_TYPE_PARALLEL, active: true }); }
     workspace.revealLeaf(leaf);
     return leaf.view as ParallelReaderView;
   }
@@ -360,7 +360,7 @@ class ParallelReaderPlugin extends Plugin {
     if (wasMarkdown && !isMarkdown) {
       if (this.cache[oldPath]) { delete this.cache[oldPath]; await this.saveCache(); }
       const view = this.getParallelView();
-      if (view?.sourceFile?.path === oldPath) view.renderEmpty();
+      if (view && view.sourceFile?.path === oldPath) view.renderEmpty();
       return;
     }
     if (!wasMarkdown) return;
@@ -446,10 +446,10 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('generationDone', { count: sections.length, suffix: unanchored ? this.t('unanchoredSuffix', { count: unanchored }) : '' }));
     }).catch(async e => {
       if (e instanceof GenerationJobAlreadyRunningError) { new Notice(e.message); return; }
-      if (e instanceof GenerationJobCancelledError) { if (this.viewIsShowingFile(view, file)) await view.renderError(file, this.t('cancelledError')); new Notice(this.t('cancelled')); return; }
+      if (e instanceof GenerationJobCancelledError) { if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, this.t('cancelledError')); new Notice(this.t('cancelled')); return; }
       const kind = classifyGenerationError(e);
       console.error(e);
-      if (this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
+      if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
       new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: e.message || e }));
     });
   }

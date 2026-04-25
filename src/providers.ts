@@ -161,8 +161,8 @@ function textFromContent(content) {
 
 function textFromOpenAiResponses(json) {
   if (typeof json.output_text === 'string') return json.output_text;
-  const parts = [];
-  const walk = value => {
+  const parts: string[] = [];
+  const walk = (value: any) => {
     if (!value) return;
     if (typeof value === 'string') return;
     if (Array.isArray(value)) {

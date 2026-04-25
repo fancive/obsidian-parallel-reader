@@ -107,7 +107,7 @@ function systemPromptContract(language: string, minCards: number, maxCards: numb
 
 export function buildPrompts(content: string, settings: PluginSettings): PromptPair {
   const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
-  const promptLanguage = PROMPT_LANGUAGES[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
+  const promptLanguage = (PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
   const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
   const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
   const languageInstruction = promptLanguageInstruction(promptLanguage);

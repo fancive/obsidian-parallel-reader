@@ -6,7 +6,7 @@ import { translate } from './i18n';
 export const ANTHROPIC_CARD_TOOL_NAME = 'record_parallel_reader_cards';
 
 export function collectJsonObjectCandidates(raw: string): string[] {
-  const candidates = [];
+  const candidates: string[] = [];
   let start = -1;
   let depth = 0;
   let inString = false;
@@ -61,13 +61,13 @@ export function extractJson(text: string): string {
   return raw;
 }
 
-export function parseCardsJson(text: string, settings?: PluginSettings): RawCard[] {
+export function parseCardsJson(text: string, settings?: PluginSettings | null): RawCard[] {
   const jsonText = extractJson(text);
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
   } catch (e) {
-    throw new Error(translate(settings, 'errorLlmNonJson', {
+    throw new Error(translate(settings || null, 'errorLlmNonJson', {
       excerpt: (text || '').slice(0, 500),
     }));
   }

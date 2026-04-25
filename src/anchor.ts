@@ -4,8 +4,8 @@ export function findLineForAnchor(content: string, anchor: string): number {
   if (!anchor) return -1;
   const normalize = s => s.replace(/\s+/g, ' ').trim();
   const normalizeWithMap = s => {
-    const chars = [];
-    const map = [];
+    const chars: string[] = [];
+    const map: number[] = [];
     let pendingWhitespace = false;
     for (let i = 0; i < s.length; i++) {
       const c = s[i];
