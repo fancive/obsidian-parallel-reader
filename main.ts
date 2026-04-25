@@ -1,12 +1,9 @@
 'use strict';
 import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal, MarkdownRenderer, requestUrl, setIcon } from 'obsidian';
-import { spawn } from 'child_process';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
+import { resolveCliPath, runCli, summarizeViaClaudeCode, summarizeViaCodex } from './src/cli';
 import { translate } from './src/i18n';
 import { cardToMarkdown, cardToPlain, cardsToMarkdown } from './src/markdown';
 import { activeSectionLine, nextCardIndex } from './src/navigation';
@@ -15,7 +12,6 @@ import { ensureVaultFolder, folderPathsForTarget, normalizeVaultPath } from './s
 import {
   extractJson,
   normalizeCardsPayload,
-  parseCardsJson,
 } from './src/schema';
 import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import {
@@ -56,133 +52,6 @@ import {
 } from './src/settings';
 
 const VIEW_TYPE_PARALLEL = 'parallel-reader-view';
-
-/* CLI discovery: Obsidian launched from GUI doesn't inherit shell PATH */
-function resolveCliPath(name, override) {
-  if (override && override.trim()) return override.trim();
-  const home = os.homedir();
-  const candidates = [
-    path.join(home, 'bin', name),                // user-maintained (take precedence)
-    path.join(home, '.local/bin', name),
-    path.join(home, '.claude/local', name),
-    path.join(home, '.codex/bin', name),
-    path.join(home, '.bun/bin', name),
-    path.join(home, '.npm-global/bin', name),
-    path.join(home, '.cargo/bin', name),
-    '/opt/homebrew/bin/' + name,                 // homebrew (apple silicon)
-    '/usr/local/bin/' + name,                    // may be stale on mac — last resort
-  ];
-  for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p; } catch (_) {}
-  }
-  return name; // fall back to PATH lookup
-}
-
-function runCli(cmd, args, stdinText, timeoutMs, job?) {
-  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    let child;
-    let settled = false;
-    let timer;
-    const fail = err => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      reject(err);
-    };
-    const succeed = value => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      resolve(value);
-    };
-    try {
-      child = spawn(cmd, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          // ensure common install paths are in PATH for sub-spawns
-          PATH: [
-            process.env.PATH || '',
-            '/usr/local/bin',
-            '/opt/homebrew/bin',
-            path.join(os.homedir(), '.local/bin'),
-            path.join(os.homedir(), '.claude/local'),
-          ].filter(Boolean).join(':'),
-        },
-      });
-    } catch (e) {
-      return reject(new Error(`Failed to start ${cmd}: ${e.message}`));
-    }
-
-    let stdout = '';
-    let stderr = '';
-    timer = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch (_) {}
-      fail(new Error(`CLI timed out (${timeoutMs}ms)`));
-    }, timeoutMs);
-    if (job) {
-      job.onCancel(() => {
-        try { child.kill('SIGKILL'); } catch (_) {}
-        fail(new GenerationJobCancelledError(job.key));
-      });
-    }
-
-    child.stdout.on('data', d => { stdout += d.toString('utf8'); });
-    child.stderr.on('data', d => { stderr += d.toString('utf8'); });
-    child.on('error', e => {
-      fail(new Error(`CLI startup error: ${e.message}. Try setting an absolute CLI path.`));
-    });
-    child.on('close', code => {
-      if (settled) return;
-      if (code !== 0) {
-        return fail(new Error(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`));
-      }
-      succeed({ stdout, stderr });
-    });
-
-    if (stdinText) {
-      try {
-        child.stdin.write(stdinText);
-        child.stdin.end();
-      } catch (e) {
-        // swallow — child may have exited
-      }
-    } else {
-      try { child.stdin.end(); } catch (_) {}
-    }
-  });
-}
-
-async function summarizeViaClaudeCode(system, user, settings, job) {
-  const cmd = resolveCliPath('claude', settings.cliPath);
-  // -p = print mode; disallow all tools so it returns plain text only; request JSON output format
-  const args = [
-    '-p',
-    '--output-format', 'json',
-    '--append-system-prompt', system,
-    '--disallowed-tools', 'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
-  ];
-  if (settings.model) {
-    args.push('--model', settings.model);
-  }
-  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job);
-
-  // claude -p --output-format json returns {"type":"result", ..., "result":"..."}
-  let envelope;
-  try { envelope = JSON.parse(stdout); } catch (e) {
-    throw new Error('claude CLI returned a non-JSON envelope:\n' + stdout.slice(0, 500));
-  }
-  const resultText = envelope.result || envelope.content || '';
-  return parseCardsJson(resultText, settings);
-}
-
-async function summarizeViaCodex(system, user, settings, job) {
-  const cmd = resolveCliPath('codex', settings.cliPath);
-  const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
-  const args = ['exec', '--skip-git-repo-check', '-'];
-  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job);
-  return parseCardsJson(stdout, settings);
-}
 
 async function testBackend(settings) {
   if (settings.backend === 'codex') {
@@ -1781,6 +1650,7 @@ export const __test = {
   nextCardIndex,
   pruneCacheEntries,
   removeCardAt,
+  resolveCliPath,
   serializeCacheFile,
   shouldConfirmRegenerate,
   summarizeViaApi,

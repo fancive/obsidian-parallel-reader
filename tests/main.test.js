@@ -56,6 +56,7 @@ assert.ok(/cacheTouch[\s\S]*scheduleCacheSave/.test(mainSource), 'cacheTouch sho
 assert.ok(!/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource), 'cacheTouch should not synchronously write cache.json');
 assert.strictEqual(typeof t.cardsToMarkdown, 'function');
 assert.strictEqual(typeof t.cancellationNoticeKey, 'function');
+assert.strictEqual(typeof t.resolveCliPath, 'function');
 assert.strictEqual(typeof t.buildPrompts, 'function');
 assert.strictEqual(typeof t.buildOpenAiChatBody, 'function');
 assert.strictEqual(typeof t.extractJson, 'function');
@@ -134,6 +135,7 @@ assert.strictEqual(
   'cancelRequested',
   'API cancellation outside the request phase can use the generic notice'
 );
+assert.strictEqual(t.resolveCliPath('codex', '  /tmp/codex  '), '/tmp/codex');
 assert.throws(
   () => t.modelForApi({ ...baseSettings, model: '', uiLanguage: 'en' }),
   /Model is not set/,
