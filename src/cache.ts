@@ -12,3 +12,7 @@ export function serializeCacheFile(entries) {
     entries: entries || {},
   });
 }
+
+export function shouldConfirmRegenerate(entry, force) {
+  return !!force && !!entry && typeof entry.updatedAt === 'string' && entry.updatedAt.trim().length > 0;
+}

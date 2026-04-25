@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { findLineForAnchor } from './src/anchor';
-import { serializeCacheFile, touchCacheEntry } from './src/cache';
+import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
 import { translate } from './src/i18n';
 import { cardToMarkdown, cardToPlain, cardsToMarkdown } from './src/markdown';
@@ -17,7 +17,7 @@ import {
   normalizeCardsPayload,
   parseCardsJson,
 } from './src/schema';
-import { createRafThrottledHandler } from './src/scroll';
+import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import {
   buildAnthropicMessagesBody,
   buildGeminiBody,
@@ -1065,6 +1065,14 @@ class ParallelReaderPlugin extends Plugin {
     else new Notice(this.t('noCancelableJob'));
   }
 
+  confirmRegenerateEditedCards() {
+    const message = this.t('confirmRegenerateEditedCards');
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      return window.confirm(message);
+    }
+    return true;
+  }
+
   addFileMenuItems(menu, file) {
     if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
     menu.addSeparator();
@@ -1175,6 +1183,10 @@ class ParallelReaderPlugin extends Plugin {
     if (this.jobs.isRunning(runningKey)) {
       new Notice(this.t('alreadyGenerating'));
       return;
+    }
+    if (shouldConfirmRegenerate(this.cacheGet(file.path), force) && !this.confirmRegenerateEditedCards()) {
+      new Notice(this.t('regenerateCancelled'));
+      return false;
     }
 
     let view = null;
@@ -1337,7 +1349,7 @@ class ParallelReaderPlugin extends Plugin {
 
     // Find visible top line
     const rect = scrollDom.getBoundingClientRect();
-    const topY = rect.top + 80; // offset to pick line just under the header
+    const topY = visibleTopProbeY(rect);
     let topLine = 0;
     try {
       const pos = cm.posAtCoords({ x: rect.left + 20, y: topY });
@@ -1770,9 +1782,11 @@ export const __test = {
   pruneCacheEntries,
   removeCardAt,
   serializeCacheFile,
+  shouldConfirmRegenerate,
   summarizeViaApi,
   touchCacheEntry,
   translate,
   tokenLimitFieldForOpenAiChat,
   updateCardAt,
+  visibleTopProbeY,
 };

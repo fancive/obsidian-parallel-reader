@@ -72,7 +72,9 @@ assert.strictEqual(typeof t.pruneCacheEntries, 'function');
 assert.strictEqual(typeof t.removeCardAt, 'function');
 assert.strictEqual(typeof t.activeIndexAfterCardDelete, 'function');
 assert.strictEqual(typeof t.createRafThrottledHandler, 'function');
+assert.strictEqual(typeof t.visibleTopProbeY, 'function');
 assert.strictEqual(typeof t.serializeCacheFile, 'function');
+assert.strictEqual(typeof t.shouldConfirmRegenerate, 'function');
 assert.strictEqual(typeof t.translate, 'function');
 assert.strictEqual(typeof t.updateCardAt, 'function');
 
@@ -246,6 +248,8 @@ scheduledFrames.shift()(0);
 assert.strictEqual(throttledCalls, 1);
 throttled();
 assert.strictEqual(scheduledFrames.length, 1, 'scroll handler should be schedulable after the frame runs');
+assert.strictEqual(t.visibleTopProbeY({ top: 100, height: 300 }), 130);
+assert.strictEqual(t.visibleTopProbeY({ top: 100, height: 1200 }), 180);
 const cardList = [{ title: 'A' }, { title: 'B' }, { title: 'C' }];
 assert.deepStrictEqual(t.removeCardAt(cardList, 1), [{ title: 'A' }, { title: 'C' }]);
 assert.deepStrictEqual(t.removeCardAt(cardList, -1), cardList);
@@ -270,6 +274,10 @@ const untouchedCacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z' };
 assert.strictEqual(t.touchCacheEntry(null), null);
 assert.strictEqual(t.touchCacheEntry(untouchedCacheEntry, '2024-01-05T00:00:00.000Z'), untouchedCacheEntry);
 assert.strictEqual(untouchedCacheEntry.lastAccessedAt, '2024-01-05T00:00:00.000Z');
+assert.strictEqual(t.shouldConfirmRegenerate({ updatedAt: '2024-01-05T00:00:00.000Z' }, true), true);
+assert.strictEqual(t.shouldConfirmRegenerate({ updatedAt: '2024-01-05T00:00:00.000Z' }, false), false);
+assert.strictEqual(t.shouldConfirmRegenerate({ generatedAt: '2024-01-01T00:00:00.000Z' }, true), false);
+assert.strictEqual(t.shouldConfirmRegenerate(null, true), false);
 const serializedCache = t.serializeCacheFile({
   'note.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [{ title: 'A' }] },
 });
