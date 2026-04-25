@@ -1,5 +1,5 @@
 'use strict';
-import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal, MarkdownRenderer, requestUrl, setIcon } from 'obsidian';
+import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal, MarkdownRenderer, requestUrl } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
@@ -29,6 +29,7 @@ import {
   GenerationJobManager,
   classifyGenerationError,
 } from './src/generation-job-manager';
+import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
 import {
   API_AUTH_TYPES,
   API_FORMATS,
@@ -104,59 +105,6 @@ async function summarizeDocument(content, settings, job) {
     return a.startLine - b.startLine;
   });
   return resolved;
-}
-
-function addIconButton(parent, icon, title, onClick) {
-  const button = parent.createEl('button', {
-    cls: 'parallel-reader-icon-button',
-    attr: { type: 'button', 'aria-label': title },
-  });
-  button.title = title;
-  if (typeof setIcon === 'function') {
-    setIcon(button, icon);
-  } else {
-    button.textContent = title;
-  }
-  button.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await onClick();
-    } catch (err) {
-      console.error(err);
-      new Notice(`${title} failed: ` + (err.message || err));
-    }
-  });
-  return button;
-}
-
-function addTextButton(parent, icon, label, onClick, cls) {
-  const button = parent.createEl('button', {
-    cls: cls || 'parallel-reader-text-button',
-    attr: { type: 'button' },
-  });
-  if (icon && typeof setIcon === 'function') setIcon(button, icon);
-  button.createSpan({ text: label });
-  button.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      await onClick();
-    } catch (err) {
-      console.error(err);
-      new Notice(`${label} failed: ` + (err.message || err));
-    }
-  });
-  return button;
-}
-
-async function copyToClipboard(text, successMsg) {
-  try {
-    await navigator.clipboard.writeText(text);
-    new Notice(successMsg);
-  } catch (e) {
-    new Notice('Copy failed: ' + (e.message || e));
-  }
 }
 
 function cancellationNoticeKey(settings, job) {
@@ -1628,6 +1576,8 @@ export const __test = {
   GenerationJobAlreadyRunningError,
   GenerationJobCancelledError,
   GenerationJobManager,
+  addIconButton,
+  addTextButton,
   activeIndexAfterCardDelete,
   activeSectionLine,
   buildAnthropicMessagesBody,
@@ -1639,6 +1589,7 @@ export const __test = {
   cacheEntryMatches,
   cancellationNoticeKey,
   classifyGenerationError,
+  copyToClipboard,
   createRafThrottledHandler,
   extractJson,
   findLineForAnchor,

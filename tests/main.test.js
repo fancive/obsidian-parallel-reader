@@ -54,8 +54,14 @@ assert.ok(/flushCacheSave\s*\(/.test(mainSource), 'pending cache touches should 
 assert.ok(/onunload[\s\S]*flushCacheSave/.test(mainSource), 'plugin unload should flush pending cache touches');
 assert.ok(/cacheTouch[\s\S]*scheduleCacheSave/.test(mainSource), 'cacheTouch should schedule a cache save');
 assert.ok(!/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource), 'cacheTouch should not synchronously write cache.json');
+assert.ok(!/function addIconButton/.test(mainSource), 'UI icon helper should live outside main.ts');
+assert.ok(!/function addTextButton/.test(mainSource), 'UI text-button helper should live outside main.ts');
+assert.ok(!/function copyToClipboard/.test(mainSource), 'clipboard helper should live outside main.ts');
 assert.strictEqual(typeof t.cardsToMarkdown, 'function');
 assert.strictEqual(typeof t.cancellationNoticeKey, 'function');
+assert.strictEqual(typeof t.addIconButton, 'function');
+assert.strictEqual(typeof t.addTextButton, 'function');
+assert.strictEqual(typeof t.copyToClipboard, 'function');
 assert.strictEqual(typeof t.resolveCliPath, 'function');
 assert.strictEqual(typeof t.buildPrompts, 'function');
 assert.strictEqual(typeof t.buildOpenAiChatBody, 'function');
