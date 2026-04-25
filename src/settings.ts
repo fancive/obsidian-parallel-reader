@@ -11,8 +11,14 @@ export const PROMPT_LANGUAGES = {
   en: 'English',
   auto: 'Auto-detect',
 };
+export const UI_LANGUAGES = {
+  auto: 'Auto',
+  zh: '中文',
+  en: 'English',
+};
 
 export const DEFAULT_SETTINGS = {
+  uiLanguage: 'auto',
   backend: 'claude-code',
   cliPath: '',
   apiProvider: 'anthropic',
@@ -312,6 +318,7 @@ export function applyApiProviderPreset(settings, providerId) {
 }
 
 export function normalizeSettings(settings) {
+  if (!UI_LANGUAGES[settings.uiLanguage]) settings.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
   if (!settings.apiProvider || !API_PROVIDER_PRESETS[settings.apiProvider]) {
     settings.apiProvider = 'anthropic';
   }

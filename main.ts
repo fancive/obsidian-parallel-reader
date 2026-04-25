@@ -4,7 +4,10 @@ import { spawn } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { findLineForAnchor } from './src/anchor';
+import { translate } from './src/i18n';
 import { cardToMarkdown, cardToPlain, cardsToMarkdown } from './src/markdown';
+import { buildPrompts } from './src/prompt';
 import {
   extractJson,
   normalizeCardsPayload,
@@ -32,8 +35,8 @@ import {
   CACHE_SCHEMA_VERSION,
   DEFAULT_SETTINGS,
   DEFAULT_MAX_CACHE_ENTRIES,
-  MAX_DOC_CHARS,
   PROMPT_LANGUAGES,
+  UI_LANGUAGES,
   applyApiProviderPreset,
   cacheEntryMatches,
   generationFingerprint,
@@ -46,149 +49,6 @@ import {
 } from './src/settings';
 
 const VIEW_TYPE_PARALLEL = 'parallel-reader-view';
-
-/* ---------- Document preparation & anchor resolution ---------- */
-
-function promptLanguageInstruction(language) {
-  if (language === 'en') return 'Write title, gist, and bullets in English.';
-  if (language === 'auto') return 'Write title, gist, and bullets in the main language of the source document.';
-  return '用中文输出 title、gist 和 bullets。';
-}
-
-function promptSchemaExample(language) {
-  if (language === 'en') {
-    return `{"cards":[
-  {"title":"U-shaped gains","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI productivity gains form a U shape, with both ends benefiting most","bullets":["Top-paid software managers benefit by accelerating existing work","Low-paid workers use AI to create new side income","Middle-layer specialists gain less because prompt precision is hard to trust","Average reported benefit is 5.1/7, with 42% describing gains as unclear"]}
-]}`;
-  }
-  return `{"cards":[
-  {"title":"U 型收益曲线","anchor":"那谁又会被 AI 所受益？整体来看，它把整个分数变成了一分到七分","gist":"AI 生产力收益呈 U 型，两端受益最大、中间层塌陷","bullets":["最高薪岗位（软件管理）通过加速既有工作受益最大","最低薪岗位（外卖员、园艺工）用 AI 开副业创造新收入","中间层科学家、律师收益最少，部分因对 prompt 精度信任不足","全体均分 5.1/7，42% 报告收益模糊"]}
-]}`;
-}
-
-function renderPromptTemplate(template, vars) {
-  return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-    return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match;
-  });
-}
-
-function buildPrompts(content, settings) {
-  const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
-  const promptLanguage = PROMPT_LANGUAGES[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
-  const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
-  const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
-  const languageInstruction = promptLanguageInstruction(promptLanguage);
-  const doc = content.length > maxDocChars
-    ? content.slice(0, maxDocChars) + (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
-    : content;
-
-  const schema = '{"cards":[{"title":"...","anchor":"...","gist":"...","bullets":["...","..."]}]}';
-  const example = promptSchemaExample(promptLanguage);
-  const templateVars = { minCards, maxCards, languageInstruction, schema, example };
-  const customSystem = renderPromptTemplate(settings.customSystemPrompt, templateVars).trim();
-
-  const defaultSystem = `你是一个长文阅读摘要助手。阅读全文后，把文章切成 ${minCards}-${maxCards} 个"自然主题单元"——不必对应 markdown heading，以"一个完整论点或话题"为单位自行判断粒度：短章节合并、长章节拆分。
-
-**每张卡片的结构：一句话领读 + 若干条 bullet。bullet 承载细节，gist 是一句话导读。**
-
-语言：
-- ${languageInstruction}
-
-对每个单元输出：
-
-- title: 3-10 字的短标题，要能独立说明这段讲什么，避免"背景""介绍"这类空泛词
-- anchor: 该单元开头的**逐字引用**，从原文 1:1 复制 40-80 字，保留原始标点/空格/换行；仅供插件内部定位，用户不可见
-- gist: **一句话领读**（20-40 字），点出该单元的核心立场或结论，作为 bullets 的导读
-- bullets: **3-6 条**支撑 bullet，每条 20-50 字。承载数据、对比、机制、例子、反直觉观察。gist 是立场，bullets 是具体内容，两者不允许重复。
-
-规则：
-- anchor 必须能在原文里 exact substring match 找到。绝对不要改动、总结、翻译，必须原样复制
-- anchor 选用该单元最靠前且足够独特的一段（避免通用套话如"综上所述"）
-- 每张卡都必须同时有 gist 和 bullets——不要只有 gist，也不要只有 bullets
-- bullet 每条是一个完整独立的断言，不要用"首先""其次"这种顺序词
-- 严格只输出 JSON，无 markdown fence、无解释、无 tool call
-
-输出格式：
-${schema}
-
-示例：
-${example}`;
-
-  const system = customSystem
-    ? `${customSystem}
-
-不可覆盖的输出契约：
-- 必须输出 ${minCards}-${maxCards} 张 cards。
-- ${languageInstruction}
-- anchor 必须从原文逐字复制，必须能在原文 exact substring match 找到。
-- 严格只输出 JSON，无 markdown fence、无解释、无 tool call。
-- JSON shape: ${schema}`
-    : defaultSystem;
-
-  const user = promptLanguage === 'en'
-    ? `Source document:\n\n${doc}`
-    : `以下是需要处理的文档全文：\n\n${doc}`;
-  return { system, user };
-}
-
-function findLineForAnchor(content, anchor) {
-  if (!anchor) return -1;
-  const normalize = s => s.replace(/\s+/g, ' ').trim();
-  const normalizeWithMap = s => {
-    const chars = [];
-    const map = [];
-    let pendingWhitespace = false;
-    for (let i = 0; i < s.length; i++) {
-      const c = s[i];
-      if (/\s/.test(c)) {
-        pendingWhitespace = chars.length > 0;
-        continue;
-      }
-      if (pendingWhitespace) {
-        chars.push(' ');
-        map.push(i);
-        pendingWhitespace = false;
-      }
-      chars.push(c);
-      map.push(i);
-    }
-    return { text: chars.join(''), map };
-  };
-  const tryAt = needle => {
-    if (!needle) return -1;
-    const idx = content.indexOf(needle);
-    if (idx === -1) return -1;
-    let line = 0;
-    for (let i = 0; i < idx; i++) if (content[i] === '\n') line++;
-    return line;
-  };
-
-  let line = tryAt(anchor);
-  if (line >= 0) return line;
-
-  // Fallback 1: trim trailing whitespace variants
-  line = tryAt(anchor.trim());
-  if (line >= 0) return line;
-
-  // Fallback 2: progressively shorter prefix (LLM may paraphrase the tail)
-  for (const len of [60, 40, 25, 15]) {
-    const prefix = anchor.trim().slice(0, len);
-    line = tryAt(prefix);
-    if (line >= 0) return line;
-  }
-
-  // Fallback 3: whitespace-normalized search (costlier, rarely needed)
-  const normDoc = normalizeWithMap(content);
-  const normAnchor = normalize(anchor).slice(0, 30);
-  if (!normAnchor) return -1;
-  const normIdx = normDoc.text.indexOf(normAnchor);
-  if (normIdx === -1) return -1;
-  const originalIdx = normDoc.map[normIdx];
-  if (originalIdx == null) return -1;
-  let l = 0;
-  for (let j = 0; j < originalIdx; j++) if (content[j] === '\n') l++;
-  return l;
-}
 
 /* CLI discovery: Obsidian launched from GUI doesn't inherit shell PATH */
 function resolveCliPath(name, override) {
@@ -244,14 +104,14 @@ function runCli(cmd, args, stdinText, timeoutMs, job?) {
         },
       });
     } catch (e) {
-      return reject(new Error(`无法启动 ${cmd}: ${e.message}`));
+      return reject(new Error(`Failed to start ${cmd}: ${e.message}`));
     }
 
     let stdout = '';
     let stderr = '';
     timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch (_) {}
-      fail(new Error(`CLI 超时 (${timeoutMs}ms)`));
+      fail(new Error(`CLI timed out (${timeoutMs}ms)`));
     }, timeoutMs);
     if (job) {
       job.onCancel(() => {
@@ -263,12 +123,12 @@ function runCli(cmd, args, stdinText, timeoutMs, job?) {
     child.stdout.on('data', d => { stdout += d.toString('utf8'); });
     child.stderr.on('data', d => { stderr += d.toString('utf8'); });
     child.on('error', e => {
-      fail(new Error(`CLI 启动错误: ${e.message}（尝试在设置里填绝对路径）`));
+      fail(new Error(`CLI startup error: ${e.message}. Try setting an absolute CLI path.`));
     });
     child.on('close', code => {
       if (settled) return;
       if (code !== 0) {
-        return fail(new Error(`CLI 退出码 ${code}\nstderr:\n${stderr.slice(0, 1000)}`));
+        return fail(new Error(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`));
       }
       succeed({ stdout, stderr });
     });
@@ -303,7 +163,7 @@ async function summarizeViaClaudeCode(system, user, settings, job) {
   // claude -p --output-format json returns {"type":"result", ..., "result":"..."}
   let envelope;
   try { envelope = JSON.parse(stdout); } catch (e) {
-    throw new Error('claude CLI 输出非 JSON envelope：\n' + stdout.slice(0, 500));
+    throw new Error('claude CLI returned a non-JSON envelope:\n' + stdout.slice(0, 500));
   }
   const resultText = envelope.result || envelope.content || '';
   return parseCardsJson(resultText);
@@ -311,7 +171,7 @@ async function summarizeViaClaudeCode(system, user, settings, job) {
 
 async function summarizeViaCodex(system, user, settings, job) {
   const cmd = resolveCliPath('codex', settings.cliPath);
-  const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\n直接输出 JSON，不要任何解释。`;
+  const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
   const args = ['exec', '--skip-git-repo-check', '-'];
   const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job);
   return parseCardsJson(stdout);
@@ -331,7 +191,7 @@ async function testBackend(settings) {
   if (isApiBackend(settings.backend)) {
     return testApiBackend(requestUrl, settings);
   }
-  throw new Error('未知 backend：' + settings.backend);
+  throw new Error('Unknown backend: ' + settings.backend);
 }
 
 async function summarizeDocument(content, settings, job) {
@@ -388,7 +248,7 @@ function addIconButton(parent, icon, title, onClick) {
       await onClick();
     } catch (err) {
       console.error(err);
-      new Notice(`${title}失败：` + (err.message || err));
+      new Notice(`${title} failed: ` + (err.message || err));
     }
   });
   return button;
@@ -408,7 +268,7 @@ function addTextButton(parent, icon, label, onClick, cls) {
       await onClick();
     } catch (err) {
       console.error(err);
-      new Notice(`${label}失败：` + (err.message || err));
+      new Notice(`${label} failed: ` + (err.message || err));
     }
   });
   return button;
@@ -419,7 +279,7 @@ async function copyToClipboard(text, successMsg) {
     await navigator.clipboard.writeText(text);
     new Notice(successMsg);
   } catch (e) {
-    new Notice('复制失败：' + (e.message || e));
+    new Notice('Copy failed: ' + (e.message || e));
   }
 }
 
@@ -447,7 +307,7 @@ class ParallelReaderView extends ItemView {
   }
 
   getViewType() { return VIEW_TYPE_PARALLEL; }
-  getDisplayText() { return '对照阅读笔记'; }
+  getDisplayText() { return this.plugin.t('displayName'); }
   getIcon() { return 'book-open'; }
 
   async onOpen() {
@@ -468,9 +328,9 @@ class ParallelReaderView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     const hint = container.createDiv({ cls: 'parallel-reader-empty' });
-    hint.createEl('h3', { text: '对照阅读笔记' });
-    hint.createEl('p', { text: '打开一篇笔记，然后运行命令：' });
-    hint.createEl('code', { text: 'Parallel Reader: 为当前笔记生成对照笔记' });
+    hint.createEl('h3', { text: this.plugin.t('appTitle') });
+    hint.createEl('p', { text: this.plugin.t('emptyOpenNote') });
+    hint.createEl('code', { text: this.plugin.t('commandGenerate') });
   }
 
   async loadFor(file, sections, stale) {
@@ -486,7 +346,7 @@ class ParallelReaderView extends ItemView {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
-    this.loadingMessage = message || '正在生成对照笔记...';
+    this.loadingMessage = message || this.plugin.t('loadingDefault');
     this.errorMessage = '';
     this.render();
   }
@@ -496,7 +356,7 @@ class ParallelReaderView extends ItemView {
     this.sections = [];
     this.stale = false;
     this.loadingMessage = '';
-    this.errorMessage = message || '生成失败';
+    this.errorMessage = message || this.plugin.t('errorTitle');
     this.render();
   }
 
@@ -510,8 +370,8 @@ class ParallelReaderView extends ItemView {
     container.empty();
     const hint = container.createDiv({ cls: 'parallel-reader-empty' });
     hint.createEl('h3', { text: file.basename });
-    hint.createEl('p', { text: '该笔记尚无对照笔记缓存。运行命令：' });
-    hint.createEl('code', { text: 'Parallel Reader: 为当前笔记生成对照笔记' });
+    hint.createEl('p', { text: this.plugin.t('emptyNoCache') });
+    hint.createEl('code', { text: this.plugin.t('commandGenerate') });
   }
 
   render() {
@@ -524,21 +384,21 @@ class ParallelReaderView extends ItemView {
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     if (this.sourceFile) {
       if (this.plugin.isGeneratingFile(this.sourceFile)) {
-        addIconButton(actions, 'square', '取消生成', () => this.plugin.cancelGenerationForFile(this.sourceFile));
+        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => this.plugin.cancelGenerationForFile(this.sourceFile));
       } else {
-        addIconButton(actions, 'refresh-cw', '重新生成', () => this.plugin.runForFile(this.sourceFile, true));
+        addIconButton(actions, 'refresh-cw', this.plugin.t('actionRegenerate'), () => this.plugin.runForFile(this.sourceFile, true));
       }
-      addIconButton(actions, 'copy', '复制全部 Markdown', () => this.plugin.copyCurrentViewMarkdown());
-      addIconButton(actions, 'download', '导出到 Vault', () => this.exportToVault());
+      addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => this.plugin.copyCurrentViewMarkdown());
+      addIconButton(actions, 'download', this.plugin.t('actionExport'), () => this.exportToVault());
     }
 
     if (this.stale) {
       const banner = container.createDiv({ cls: 'parallel-reader-stale-banner' });
-      banner.createSpan({ text: '源笔记或生成配置已修改，当前是旧缓存。' });
+      banner.createSpan({ text: this.plugin.t('staleBanner') });
       addTextButton(
         banner,
         'refresh-cw',
-        '重新生成',
+        this.plugin.t('actionRegenerate'),
         () => this.plugin.runForFile(this.sourceFile, true),
         'parallel-reader-stale-button'
       );
@@ -548,18 +408,18 @@ class ParallelReaderView extends ItemView {
       const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-loading' });
       state.createDiv({ cls: 'parallel-reader-spinner' });
       state.createEl('div', { text: this.loadingMessage, cls: 'parallel-reader-state-title' });
-      state.createEl('div', { text: '可以继续阅读原文，生成完成后会自动刷新右侧卡片。', cls: 'parallel-reader-state-subtitle' });
+      state.createEl('div', { text: this.plugin.t('loadingSubtitle'), cls: 'parallel-reader-state-subtitle' });
       return;
     }
 
     if (this.errorMessage) {
       const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-error' });
-      state.createEl('div', { text: '生成失败', cls: 'parallel-reader-state-title' });
+      state.createEl('div', { text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
       state.createEl('div', { text: this.errorMessage, cls: 'parallel-reader-state-subtitle' });
       addTextButton(
         state,
         'refresh-cw',
-        '重新生成',
+        this.plugin.t('actionRegenerate'),
         () => this.plugin.runForFile(this.sourceFile, true),
         'parallel-reader-text-button'
       );
@@ -578,7 +438,7 @@ class ParallelReaderView extends ItemView {
       const title = card.createEl('div', { cls: 'parallel-reader-card-title' });
       title.createSpan({ text: s.title });
       if (s.startLine < 0) {
-        title.createEl('span', { text: ' ⚠', cls: 'parallel-reader-warn', title: 'anchor 匹配失败，无法滚动联动' });
+        title.createEl('span', { text: ' ⚠', cls: 'parallel-reader-warn', title: this.plugin.t('anchorMismatch') });
       }
 
       // --- Gist (rendered as markdown so inline bold/code/links work) ---
@@ -598,7 +458,7 @@ class ParallelReaderView extends ItemView {
           bulletsEl.setText(md);
         });
       } else if (!s.gist) {
-        card.createEl('div', { cls: 'parallel-reader-empty-li', text: '（未生成）' });
+        card.createEl('div', { cls: 'parallel-reader-empty-li', text: this.plugin.t('emptyCard') });
       }
 
       // Left click → jump to source line
@@ -616,17 +476,17 @@ class ParallelReaderView extends ItemView {
       card.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const menu = new Menu();
-        menu.addItem(it => it.setTitle('复制 Markdown').setIcon('copy')
-          .onClick(() => copyToClipboard(cardToMarkdown(s), '已复制 Markdown')));
-        menu.addItem(it => it.setTitle('复制纯文本').setIcon('clipboard-copy')
-          .onClick(() => copyToClipboard(cardToPlain(s), '已复制纯文本')));
+        menu.addItem(it => it.setTitle(this.plugin.t('menuCopyMarkdown')).setIcon('copy')
+          .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))));
+        menu.addItem(it => it.setTitle(this.plugin.t('menuCopyPlain')).setIcon('clipboard-copy')
+          .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))));
         if (s.anchor) {
-          menu.addItem(it => it.setTitle('复制 anchor 引用').setIcon('quote-glyph')
-            .onClick(() => copyToClipboard(s.anchor, '已复制引用原文')));
+          menu.addItem(it => it.setTitle(this.plugin.t('menuCopyAnchor')).setIcon('quote-glyph')
+            .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))));
         }
         menu.addSeparator();
         if (s.startLine >= 0) {
-          menu.addItem(it => it.setTitle('跳转到原文').setIcon('arrow-right')
+          menu.addItem(it => it.setTitle(this.plugin.t('menuJumpSource')).setIcon('arrow-right')
             .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)));
         }
         menu.showAtMouseEvent(e);
@@ -651,7 +511,7 @@ class ParallelReaderView extends ItemView {
   async exportToVault() {
     if (!this.sourceFile) return;
     const folder = this.plugin.settings.exportFolder.replace(/\/$/, '');
-    const name = `${this.sourceFile.basename} - 对照笔记.md`;
+    const name = `${this.sourceFile.basename} - ${this.plugin.t('displayName')}.md`;
     const targetPath = `${folder}/${name}`;
 
     const markdown = [
@@ -661,7 +521,7 @@ class ParallelReaderView extends ItemView {
       'tool: parallel-reader',
       '---',
       '',
-      cardsToMarkdown(`${this.sourceFile.basename} · 对照笔记`, this.sections),
+      cardsToMarkdown(`${this.sourceFile.basename} · ${this.plugin.t('displayName')}`, this.sections),
       '',
     ].join('\n');
 
@@ -678,7 +538,7 @@ class ParallelReaderView extends ItemView {
     } else {
       await app.vault.create(targetPath, markdown);
     }
-    new Notice(`已导出 → ${targetPath}`);
+    new Notice(this.plugin.t('exported', { path: targetPath }));
   }
 }
 
@@ -691,11 +551,15 @@ class ParallelReaderPlugin extends Plugin {
   _scrollDispose: (() => void) | null;
   _settingsSaveTimer: ReturnType<typeof setTimeout> | null;
 
+  t(key, vars?) {
+    return translate(this.settings || DEFAULT_SETTINGS, key, vars);
+  }
+
   async onload() {
     await this.loadSettings();
     this.jobs = new GenerationJobManager();
 
-    this.addRibbonIcon('book-open', '打开对照笔记面板', async () => {
+    this.addRibbonIcon('book-open', this.t('ribbonOpen'), async () => {
       const active = this.getActiveView();
       await this.ensureView();
       if (active?.file) await this.syncViewToFile(active.file);
@@ -705,19 +569,19 @@ class ParallelReaderPlugin extends Plugin {
 
     this.addCommand({
       id: 'parallel-reader-run',
-      name: '为当前笔记生成对照笔记（缓存优先）',
+      name: this.t('cmdRun'),
       callback: () => this.runForActiveFile(false),
     });
 
     this.addCommand({
       id: 'parallel-reader-regen',
-      name: '强制重新生成（绕过缓存）',
+      name: this.t('cmdRegen'),
       callback: () => this.runForActiveFile(true),
     });
 
     this.addCommand({
       id: 'parallel-reader-open-view',
-      name: '打开对照笔记面板',
+      name: this.t('cmdOpenView'),
       callback: async () => {
         const active = this.getActiveView();
         await this.ensureView();
@@ -727,40 +591,40 @@ class ParallelReaderPlugin extends Plugin {
 
     this.addCommand({
       id: 'parallel-reader-export-current',
-      name: '导出当前对照笔记到 Vault',
+      name: this.t('cmdExport'),
       callback: () => this.exportCurrentView(),
     });
 
     this.addCommand({
       id: 'parallel-reader-copy-current-markdown',
-      name: '复制当前对照笔记 Markdown',
+      name: this.t('cmdCopyMarkdown'),
       callback: () => this.copyCurrentViewMarkdown(),
     });
 
     this.addCommand({
       id: 'parallel-reader-cancel-current',
-      name: '取消当前对照笔记生成',
+      name: this.t('cmdCancel'),
       callback: () => this.cancelActiveGeneration(),
     });
 
     this.addCommand({
       id: 'parallel-reader-clear-current',
-      name: '清除当前笔记的缓存',
+      name: this.t('cmdClearCurrent'),
       callback: async () => {
         const active = this.getActiveView();
-        if (!active?.file) return new Notice('没有当前笔记');
+        if (!active?.file) return new Notice(this.t('noCurrentNote'));
         await this.cacheDelete(active.file.path);
-        new Notice('已清除缓存：' + active.file.basename);
+        new Notice(this.t('cacheClearedFile', { name: active.file.basename }));
       },
     });
 
     this.addCommand({
       id: 'parallel-reader-clear-all',
-      name: '清除所有缓存',
+      name: this.t('cmdClearAll'),
       callback: async () => {
         const n = Object.keys(this.cache).length;
         await this.cacheClear();
-        new Notice(`已清除 ${n} 条缓存`);
+        new Notice(this.t('cacheClearedAll', { count: n }));
       },
     });
 
@@ -942,11 +806,11 @@ class ParallelReaderPlugin extends Plugin {
 
   cancelGenerationForFile(file) {
     if (!file || !file.path) {
-      new Notice('当前没有可取消的生成任务');
+      new Notice(this.t('noCancelableJob'));
       return false;
     }
     const cancelled = this.jobs.cancel(file.path);
-    new Notice(cancelled ? '已请求取消生成' : '当前没有可取消的生成任务');
+    new Notice(cancelled ? this.t('cancelRequested') : this.t('noCancelableJob'));
     return cancelled;
   }
 
@@ -964,27 +828,27 @@ class ParallelReaderPlugin extends Plugin {
     if (active?.file && this.cancelGenerationForFile(active.file)) return;
     const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL)[0]?.view as ParallelReaderView | undefined;
     if (view?.sourceFile) this.cancelGenerationForFile(view.sourceFile);
-    else new Notice('当前没有可取消的生成任务');
+    else new Notice(this.t('noCancelableJob'));
   }
 
   addFileMenuItems(menu, file) {
     if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
     menu.addSeparator();
     menu.addItem(it => it
-      .setTitle('生成对照笔记')
+      .setTitle(this.t('fileMenuGenerate'))
       .setIcon('book-open')
       .onClick(() => this.runForFile(file, false)));
     menu.addItem(it => it
-      .setTitle('强制重新生成对照笔记')
+      .setTitle(this.t('fileMenuRegen'))
       .setIcon('refresh-cw')
       .onClick(() => this.runForFile(file, true)));
     if (this.cacheGet(file.path)) {
       menu.addItem(it => it
-        .setTitle('清除对照笔记缓存')
+        .setTitle(this.t('fileMenuClear'))
         .setIcon('trash')
         .onClick(async () => {
           await this.cacheDelete(file.path);
-          new Notice('已清除缓存：' + file.basename);
+          new Notice(this.t('cacheClearedFile', { name: file.basename }));
         }));
     }
   }
@@ -1037,7 +901,7 @@ class ParallelReaderPlugin extends Plugin {
       if (active?.file) await this.syncViewToFile(active.file);
     }
     if (!view.sourceFile || !view.sections.length) {
-      new Notice('当前没有可导出的对照笔记');
+      new Notice(this.t('noExportContent'));
       return;
     }
     await view.exportToVault();
@@ -1050,19 +914,19 @@ class ParallelReaderPlugin extends Plugin {
       if (active?.file) await this.syncViewToFile(active.file);
     }
     if (!view.sourceFile || !view.sections.length) {
-      new Notice('当前没有可复制的对照笔记');
+      new Notice(this.t('noCopyContent'));
       return;
     }
     await copyToClipboard(
-      cardsToMarkdown(`${view.sourceFile.basename} · 对照笔记`, view.sections),
-      '已复制全部 Markdown'
+      cardsToMarkdown(`${view.sourceFile.basename} · ${this.t('displayName')}`, view.sections),
+      this.t('copiedAllMarkdown')
     );
   }
 
   async runForActiveFile(force) {
     const mdView = this.getActiveView();
     if (!mdView || !mdView.file) {
-      new Notice('先打开一篇笔记');
+      new Notice(this.t('openNoteFirst'));
       return;
     }
     return this.runForFile(mdView.file, force);
@@ -1070,12 +934,12 @@ class ParallelReaderPlugin extends Plugin {
 
   async runForFile(file, force) {
     if (!file) {
-      new Notice('先打开一篇笔记');
+      new Notice(this.t('openNoteFirst'));
       return;
     }
     const runningKey = file.path;
     if (this.jobs.isRunning(runningKey)) {
-      new Notice('该笔记正在生成对照笔记');
+      new Notice(this.t('alreadyGenerating'));
       return;
     }
 
@@ -1085,7 +949,7 @@ class ParallelReaderPlugin extends Plugin {
       const content = await this.app.vault.read(file);
       job.throwIfCancelled();
       if (!content.trim()) {
-        new Notice('笔记为空');
+        new Notice(this.t('emptyNote'));
         return;
       }
 
@@ -1104,18 +968,18 @@ class ParallelReaderPlugin extends Plugin {
         }
       }
 
-      await view.renderLoading(file, '对照阅读：让 LLM 读全文并自适应切段...');
+      await view.renderLoading(file, this.t('loadingGenerating'));
       const maxDocChars = Number(this.settings.maxDocChars) || DEFAULT_SETTINGS.maxDocChars;
       if (content.length > maxDocChars) {
-        new Notice(`笔记较长：仅发送前 ${maxDocChars} 个字符给模型`);
+        new Notice(this.t('longNoteTruncated', { count: maxDocChars }));
       }
-      new Notice(`对照阅读：让 LLM 读全文并自适应切段…`);
+      new Notice(this.t('generatingNotice'));
 
       job.setPhase('generating');
       const sections = await summarizeDocument(content, this.settings, job);
       job.throwIfCancelled();
       if (sections.length === 0) {
-        new Notice('LLM 未返回任何 card');
+        new Notice(this.t('noCardsReturned'));
         return;
       }
       // Persist raw cards (without computed startLine — re-resolve on load, in case source was renamed/edited)
@@ -1133,21 +997,27 @@ class ParallelReaderPlugin extends Plugin {
         await view.loadFor(file, sections, false);
       }
       const unanchored = sections.filter(s => s.startLine < 0).length;
-      new Notice(`对照笔记生成完成：${sections.length} 段${unanchored ? `（⚠ ${unanchored} 段 anchor 未匹配）` : ''}`);
+      new Notice(this.t('generationDone', {
+        count: sections.length,
+        suffix: unanchored ? this.t('unanchoredSuffix', { count: unanchored }) : '',
+      }));
     }).catch(async e => {
       if (e instanceof GenerationJobAlreadyRunningError) {
         new Notice(e.message);
         return;
       }
       if (e instanceof GenerationJobCancelledError) {
-        if (this.viewIsShowingFile(view, file)) await view.renderError(file, '生成已取消');
-        new Notice('已取消生成');
+        if (this.viewIsShowingFile(view, file)) await view.renderError(file, this.t('cancelledError'));
+        new Notice(this.t('cancelled'));
         return;
       }
       const kind = classifyGenerationError(e);
       console.error(e);
       if (this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
-      new Notice(`生成失败${kind === 'unknown' ? '' : `（${kind}）`}：` + (e.message || e));
+      new Notice(this.t('generationFailed', {
+        kind: kind === 'unknown' ? '' : ` (${kind})`,
+        error: e.message || e,
+      }));
     });
   }
 
@@ -1275,7 +1145,7 @@ class ParallelReaderPlugin extends Plugin {
       if (active) leaf = active.leaf;
     }
     if (!leaf) {
-      new Notice('找不到源笔记对应的编辑器窗口');
+      new Notice(this.t('noEditor'));
       return;
     }
 
@@ -1308,12 +1178,29 @@ class ParallelReaderSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
+    const tr = (key, vars?) => this.plugin.t(key, vars);
     containerEl.empty();
-    containerEl.createEl('h2', { text: 'Parallel Reader 设置' });
+    containerEl.createEl('h2', { text: tr('settingsTitle') });
 
     new Setting(containerEl)
-      .setName('Backend')
-      .setDesc('生成 bullet 的后端：CLI 复用本机登录；API 支持 OpenAI/Anthropic/Gemini 及兼容代理')
+      .setName(tr('settingUiLanguageName'))
+      .setDesc(tr('settingUiLanguageDesc'))
+      .addDropdown(d => {
+        for (const [id, label] of Object.entries(UI_LANGUAGES)) {
+          d.addOption(id, label);
+        }
+        return d
+          .setValue(this.plugin.settings.uiLanguage || DEFAULT_SETTINGS.uiLanguage)
+          .onChange(async v => {
+            this.plugin.settings.uiLanguage = v;
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(tr('settingBackendName'))
+      .setDesc(tr('settingBackendDesc'))
       .addDropdown(d => d
         .addOption('claude-code', 'Claude Code CLI')
         .addOption('codex', 'Codex CLI')
@@ -1333,10 +1220,10 @@ class ParallelReaderSettingTab extends PluginSettingTab {
 
     if (!apiBackend) {
       new Setting(containerEl)
-        .setName('CLI 路径（可选）')
-        .setDesc('留空则自动探测常见位置；Obsidian GUI 启动时不继承 shell PATH，必要时填绝对路径')
+        .setName(tr('settingCliPathName'))
+        .setDesc(tr('settingCliPathDesc'))
         .addText(t => t
-          .setPlaceholder('例：/Users/you/bin/codex')
+          .setPlaceholder(tr('settingCliPathPlaceholder'))
           .setValue(this.plugin.settings.cliPath)
           .onChange(async v => {
             this.plugin.settings.cliPath = v.trim();
@@ -1344,7 +1231,7 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
-        .setName('CLI 超时 (ms)')
+        .setName(tr('settingCliTimeoutName'))
         .addText(t => t
           .setValue(String(this.plugin.settings.cliTimeoutMs))
           .onChange(async v => {
@@ -1355,12 +1242,12 @@ class ParallelReaderSettingTab extends PluginSettingTab {
             }
           }));
     } else {
-      containerEl.createEl('h3', { text: 'API Provider' });
+      containerEl.createEl('h3', { text: tr('apiProviderHeader') });
 
       const preset = getApiPreset(this.plugin.settings);
       new Setting(containerEl)
-        .setName('Provider preset')
-        .setDesc('参考 OpenClaw 的 provider/model 思路：preset 只负责协议、base URL 和认证默认值')
+        .setName(tr('settingProviderPresetName'))
+        .setDesc(tr('settingProviderPresetDesc'))
         .addDropdown(d => {
           for (const [id, entry] of Object.entries(API_PROVIDER_PRESETS)) {
             d.addOption(id, (entry as any).label);
@@ -1375,8 +1262,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName('API format')
-        .setDesc('不同 provider 的 wire protocol；OpenAI-compatible 代理通常选 Chat Completions')
+        .setName(tr('settingApiFormatName'))
+        .setDesc(tr('settingApiFormatDesc'))
         .addDropdown(d => {
           for (const [id, entry] of Object.entries(API_FORMATS)) {
             d.addOption(id, (entry as any).label);
@@ -1391,8 +1278,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName('Base URL')
-        .setDesc('填 provider 根地址，不要附加 /chat/completions；留空时使用 preset 默认值')
+        .setName(tr('settingBaseUrlName'))
+        .setDesc(tr('settingBaseUrlDesc'))
         .addText(t => t
           .setPlaceholder(
             (this.plugin.settings.apiProvider || '').startsWith('custom-')
@@ -1406,8 +1293,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
-        .setName('API Key')
-        .setDesc('本地 Ollama/LM Studio 可留空；其他 provider 通常需要 key')
+        .setName(tr('settingApiKeyName'))
+        .setDesc(tr('settingApiKeyDesc'))
         .addText(t => {
           t.inputEl.type = 'password';
           return t
@@ -1420,8 +1307,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName('API Key 环境变量')
-        .setDesc('可选；Obsidian GUI 不一定继承 shell 环境，直接填 API Key 更稳定')
+        .setName(tr('settingApiKeyEnvName'))
+        .setDesc(tr('settingApiKeyEnvDesc'))
         .addText(t => t
           .setPlaceholder(preset.envVar || 'OPENAI_API_KEY')
           .setValue(this.plugin.settings.apiKeyEnvVar)
@@ -1431,8 +1318,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
-        .setName('认证方式')
-        .setDesc('Auto 使用 provider preset；自定义代理可按需要改成 Bearer、x-api-key 或 none')
+        .setName(tr('settingAuthTypeName'))
+        .setDesc(tr('settingAuthTypeDesc'))
         .addDropdown(d => {
           for (const [id, label] of Object.entries(API_AUTH_TYPES)) {
             d.addOption(id, label);
@@ -1446,8 +1333,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName('额外 headers')
-        .setDesc('可选。支持 JSON 对象或每行 `Header: value`，用于 Cloudflare AI Gateway 等代理')
+        .setName(tr('settingHeadersName'))
+        .setDesc(tr('settingHeadersDesc'))
         .addTextArea(t => t
           .setPlaceholder('cf-aig-authorization: Bearer ...')
           .setValue(this.plugin.settings.apiHeaders)
@@ -1457,7 +1344,7 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
-        .setName('最大输出 tokens')
+        .setName(tr('settingMaxTokensName'))
         .addText(t => t
           .setValue(String(this.plugin.settings.apiMaxTokens))
           .onChange(async v => {
@@ -1470,10 +1357,10 @@ class ParallelReaderSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName('Model')
+      .setName(tr('settingModelName'))
       .setDesc(apiBackend
-        ? 'API 调用的模型 ID；支持 OpenClaw 风格 provider/model，若 provider 前缀匹配当前 preset 会自动剥离'
-        : 'Claude Code 下会传 --model；Codex 下通常忽略（用 Codex 默认配置）')
+        ? tr('settingModelDescApi')
+        : tr('settingModelDescCli'))
       .addText(t => t
         .setPlaceholder(apiBackend ? (getApiPreset(this.plugin.settings).model || 'model-id') : DEFAULT_SETTINGS.model)
         .setValue(this.plugin.settings.model)
@@ -1483,8 +1370,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('最大输入字符数')
-      .setDesc('超过该长度会截断后再发送给模型；长上下文模型可适当调大')
+      .setName(tr('settingMaxInputName'))
+      .setDesc(tr('settingMaxInputDesc'))
       .addText(t => t
         .setValue(String(this.plugin.settings.maxDocChars || DEFAULT_SETTINGS.maxDocChars))
         .onChange(async v => {
@@ -1495,11 +1382,11 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           }
         }));
 
-    containerEl.createEl('h3', { text: 'Prompt' });
+    containerEl.createEl('h3', { text: tr('promptHeader') });
 
     new Setting(containerEl)
-      .setName('输出语言')
-      .setDesc('控制 title/gist/bullets 的语言；anchor 始终逐字复制原文')
+      .setName(tr('settingPromptLanguageName'))
+      .setDesc(tr('settingPromptLanguageDesc'))
       .addDropdown(d => {
         for (const [id, label] of Object.entries(PROMPT_LANGUAGES)) {
           d.addOption(id, label);
@@ -1513,8 +1400,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('卡片数量范围')
-      .setDesc('模型会在这个范围内自适应切段')
+      .setName(tr('settingCardRangeName'))
+      .setDesc(tr('settingCardRangeDesc'))
       .addText(t => t
         .setPlaceholder('min')
         .setValue(String(this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards))
@@ -1538,12 +1425,12 @@ class ParallelReaderSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('自定义 system prompt')
-      .setDesc('可选。支持变量：{minCards}、{maxCards}、{languageInstruction}、{schema}、{example}')
+      .setName(tr('settingCustomPromptName'))
+      .setDesc(tr('settingCustomPromptDesc'))
       .addTextArea(t => {
         t.inputEl.rows = 8;
         return t
-          .setPlaceholder('留空使用内置 prompt')
+          .setPlaceholder(tr('settingCustomPromptPlaceholder'))
           .setValue(this.plugin.settings.customSystemPrompt || '')
           .onChange(async v => {
             this.plugin.settings.customSystemPrompt = v;
@@ -1552,8 +1439,8 @@ class ParallelReaderSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('测试当前后端')
-      .setDesc(apiBackend ? '会发起一次最小 LLM 请求验证 API 设置' : '调用 `<cli> --version` 验证 spawn 能找到二进制')
+      .setName(tr('settingTestBackendName'))
+      .setDesc(apiBackend ? tr('settingTestBackendDescApi') : tr('settingTestBackendDescCli'))
       .addButton(b => b
         .setButtonText('Test')
         .onClick(async () => {
@@ -1561,13 +1448,13 @@ class ParallelReaderSettingTab extends PluginSettingTab {
             const result = await testBackend(this.plugin.settings);
             new Notice(`✓ ${result.slice(0, 180)}`, 8000);
           } catch (e) {
-            new Notice(`✗ 后端测试失败：${e.message}`, 10000);
+            new Notice(tr('backendTestFailed', { error: e.message }), 10000);
           }
         }));
 
     new Setting(containerEl)
-      .setName('导出文件夹')
-      .setDesc('对照笔记生成位置（相对 Vault 根）')
+      .setName(tr('settingExportFolderName'))
+      .setDesc(tr('settingExportFolderDesc'))
       .addText(t => t
         .setValue(this.plugin.settings.exportFolder)
         .onChange(async v => {
@@ -1575,11 +1462,11 @@ class ParallelReaderSettingTab extends PluginSettingTab {
           this.plugin.saveSettingsDebounced();
         }));
 
-    containerEl.createEl('h3', { text: '缓存' });
+    containerEl.createEl('h3', { text: tr('cacheHeader') });
 
     new Setting(containerEl)
-      .setName('最大缓存篇数')
-      .setDesc('超过上限后按最近访问时间淘汰最旧的笔记缓存；缓存保存在插件目录的 cache.json')
+      .setName(tr('settingMaxCacheName'))
+      .setDesc(tr('settingMaxCacheDesc'))
       .addText(t => {
         t.setValue(String(this.plugin.settings.maxCacheEntries || DEFAULT_MAX_CACHE_ENTRIES));
         const commit = async () => {
@@ -1588,7 +1475,7 @@ class ParallelReaderSettingTab extends PluginSettingTab {
             this.plugin.settings.maxCacheEntries = n;
             await this.plugin.saveSettings();
             const removed = await this.plugin.pruneCacheIfNeeded();
-            if (removed.length > 0) new Notice(`已淘汰 ${removed.length} 条旧缓存`);
+            if (removed.length > 0) new Notice(tr('cachePruned', { count: removed.length }));
             this.display();
           }
         };
@@ -1601,15 +1488,15 @@ class ParallelReaderSettingTab extends PluginSettingTab {
 
     const cacheCount = Object.keys(this.plugin.cache).length;
     new Setting(containerEl)
-      .setName(`已缓存笔记：${cacheCount} 篇`)
-      .setDesc('缓存以源笔记 SHA1 + 生成配置指纹作为失效键，源笔记或模型配置修改后会显示 stale 提示')
+      .setName(tr('cachedNotesName', { count: cacheCount }))
+      .setDesc(tr('cachedNotesDesc'))
       .addButton(b => b
-        .setButtonText('清除所有缓存')
+        .setButtonText(tr('clearAllCacheButton'))
         .setWarning()
         .onClick(async () => {
           const n = Object.keys(this.plugin.cache).length;
           await this.plugin.cacheClear();
-          new Notice(`已清除 ${n} 条缓存`);
+          new Notice(tr('cacheClearedAll', { count: n }));
           this.display();
         }));
   }
@@ -1635,5 +1522,6 @@ export const __test = {
   normalizeCardsPayload,
   pruneCacheEntries,
   summarizeViaApi,
+  translate,
   tokenLimitFieldForOpenAiChat,
 };

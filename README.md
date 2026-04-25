@@ -16,6 +16,7 @@ Inspired by the reading workflow demo in [this Bilibili video](https://www.bilib
 - **Vault lifecycle aware** — cached summaries follow Markdown file renames and are removed when the source note is deleted.
 - **Configurable input limit** — default 20,000 characters, adjustable for long-context models and included in the cache fingerprint.
 - **Prompt controls** — choose summary language, card count range, and an optional custom system prompt. Prompt settings are included in the cache fingerprint.
+- **Localized UI** — plugin commands, settings, pane text, and notices support Chinese and English.
 - **Multiple model access paths** — Claude Code CLI, Codex CLI, direct provider APIs, and OpenAI/Anthropic-compatible proxies. The API backend follows the same lightweight `provider/model + base URL + protocol` idea as OpenClaw.
 
 ## Installation
@@ -130,6 +131,9 @@ The plugin keeps `main.js` as the generated Obsidian runtime bundle. Edit `main.
 | File | Responsibility |
 |------|----------------|
 | `main.ts` | Obsidian lifecycle, commands, right-pane view, settings tab orchestration |
+| `src/anchor.ts` | Anchor-to-line matching and whitespace-normalized fallback |
+| `src/i18n.ts` | Chinese/English UI strings and translation helper |
+| `src/prompt.ts` | Prompt construction, language controls, and custom prompt templating |
 | `src/settings.ts` | Defaults, provider presets, settings normalization, cache fingerprinting and pruning |
 | `src/schema.ts` | JSON extraction, card payload normalization, structured-output schemas |
 | `src/providers.ts` | API provider request/response adapters |

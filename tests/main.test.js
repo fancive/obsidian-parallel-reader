@@ -47,6 +47,7 @@ assert.strictEqual(typeof t.findLineForAnchor, 'function');
 assert.strictEqual(typeof t.generationFingerprint, 'function');
 assert.strictEqual(typeof t.GenerationJobManager, 'function');
 assert.strictEqual(typeof t.pruneCacheEntries, 'function');
+assert.strictEqual(typeof t.translate, 'function');
 
 const baseSettings = {
   backend: 'api',
@@ -83,6 +84,11 @@ assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, customSystemPrompt: 'custom prompt' }),
   'cache fingerprint should change when custom prompt changes'
+);
+assert.strictEqual(
+  t.generationFingerprint(baseSettings),
+  t.generationFingerprint({ ...baseSettings, uiLanguage: 'en' }),
+  'cache fingerprint should not change when UI language changes'
 );
 
 const contentHash = crypto.createHash('sha1').update('hello', 'utf8').digest('hex');
@@ -151,6 +157,10 @@ const customPrompt = t.buildPrompts('Hello world', {
 assert.ok(customPrompt.system.includes('Make 1-2 cards.'));
 assert.ok(customPrompt.system.includes('不可覆盖的输出契约'));
 assert.ok(customPrompt.system.includes('JSON shape'));
+
+assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'cmdOpenView'), 'Open Parallel Reader pane');
+assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'cmdOpenView'), '打开对照笔记面板');
+assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'cacheClearedAll', { count: 3 }), 'Cleared 3 cache entries');
 
 const noisyJson = '说明文字 {"cards":[{"title":"A","anchor":"保留 { 花括号 } 字符","gist":"G","bullets":["B"]}]} trailing';
 const extracted = t.extractJson(noisyJson);
