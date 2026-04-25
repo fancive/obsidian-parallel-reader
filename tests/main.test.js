@@ -44,11 +44,12 @@ const t = plugin.__test;
 
 assert.ok(t, 'test helpers should be exported');
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.ts'), 'utf8');
-assert.ok(!/\basync\s+onOpen\s*\(/.test(mainSource), 'ParallelReaderView.onOpen should not be async without await');
-assert.ok(!/\basync\s+onClose\s*\(\)\s*\{\s*\}/.test(mainSource), 'empty onClose should not be async');
-assert.ok(/focusSummaryPane\s*\(\)/.test(mainSource), 'summary pane should expose a focus helper');
-assert.ok(/\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(mainSource), 'summary pane focus should not scroll the page');
-assert.ok(/moveActiveSection[\s\S]*focusSummaryPane/.test(mainSource), 'card navigation should focus the summary pane');
+const viewSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'view.ts'), 'utf8');
+assert.ok(!/\basync\s+onOpen\s*\(/.test(viewSource), 'ParallelReaderView.onOpen should not be async without await');
+assert.ok(!/\basync\s+onClose\s*\(\)\s*\{\s*\}/.test(viewSource), 'empty onClose should not be async');
+assert.ok(/focusSummaryPane\s*\(\)/.test(viewSource), 'summary pane should expose a focus helper');
+assert.ok(/\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(viewSource), 'summary pane focus should not scroll the page');
+assert.ok(/moveActiveSection[\s\S]*focusSummaryPane/.test(viewSource), 'card navigation should focus the summary pane');
 assert.ok(/scheduleCacheSave\s*\(/.test(mainSource), 'cache touch should use a debounced cache save path');
 assert.ok(/flushCacheSave\s*\(/.test(mainSource), 'pending cache touches should be flushable');
 assert.ok(/onunload[\s\S]*flushCacheSave/.test(mainSource), 'plugin unload should flush pending cache touches');

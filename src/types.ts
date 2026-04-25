@@ -112,3 +112,28 @@ export interface PromptPair {
   system: string;
   user: string;
 }
+
+/* ---------- Plugin host interface ---------- */
+
+/**
+ * Minimal interface that extracted UI classes (View, Modal, SettingsTab)
+ * use to call back into the plugin. Avoids circular imports between
+ * main.ts and the extracted modules.
+ */
+export interface PluginHost {
+  app: { vault: any; workspace: any };
+  settings: PluginSettings;
+  cache: Record<string, CacheEntry>;
+  manifest?: { id: string };
+  t(key: string, vars?: Record<string, string | number>): string;
+  isGeneratingFile(file: any): boolean;
+  cancelGenerationForFile(file: any): boolean;
+  runForFile(file: any, force: boolean): Promise<void>;
+  copyCurrentViewMarkdown(): Promise<void>;
+  scrollEditorToLine(line: number, file: any): Promise<void>;
+  cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;
+  saveSettings(): Promise<void>;
+  saveSettingsDebounced(delayMs?: number): void;
+  cacheClear(): Promise<void>;
+  pruneCacheIfNeeded(): Promise<string[]>;
+}
