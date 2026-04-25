@@ -1,18 +1,23 @@
 'use strict';
-import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, MarkdownRenderer, requestUrl, setIcon } from 'obsidian';
+import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal, MarkdownRenderer, requestUrl, setIcon } from 'obsidian';
 import { spawn } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { findLineForAnchor } from './src/anchor';
+import { serializeCacheFile, touchCacheEntry } from './src/cache';
+import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
 import { translate } from './src/i18n';
 import { cardToMarkdown, cardToPlain, cardsToMarkdown } from './src/markdown';
+import { activeSectionLine, nextCardIndex } from './src/navigation';
 import { buildPrompts } from './src/prompt';
+import { ensureVaultFolder, folderPathsForTarget, normalizeVaultPath } from './src/vault';
 import {
   extractJson,
   normalizeCardsPayload,
   parseCardsJson,
 } from './src/schema';
+import { createRafThrottledHandler } from './src/scroll';
 import {
   buildAnthropicMessagesBody,
   buildGeminiBody,
@@ -40,10 +45,12 @@ import {
   applyApiProviderPreset,
   cacheEntryMatches,
   generationFingerprint,
+  getApiBaseUrl,
   getApiFormat,
   getApiPreset,
   hashContent,
   isApiBackend,
+  modelForApi,
   normalizeSettings,
   pruneCacheEntries,
 } from './src/settings';
@@ -166,7 +173,7 @@ async function summarizeViaClaudeCode(system, user, settings, job) {
     throw new Error('claude CLI returned a non-JSON envelope:\n' + stdout.slice(0, 500));
   }
   const resultText = envelope.result || envelope.content || '';
-  return parseCardsJson(resultText);
+  return parseCardsJson(resultText, settings);
 }
 
 async function summarizeViaCodex(system, user, settings, job) {
@@ -174,7 +181,7 @@ async function summarizeViaCodex(system, user, settings, job) {
   const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
   const args = ['exec', '--skip-git-repo-check', '-'];
   const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job);
-  return parseCardsJson(stdout);
+  return parseCardsJson(stdout, settings);
 }
 
 async function testBackend(settings) {
@@ -283,6 +290,64 @@ async function copyToClipboard(text, successMsg) {
   }
 }
 
+function cancellationNoticeKey(settings, job) {
+  if (job?.phase === 'generating' && isApiBackend(settings?.backend)) {
+    return 'cancelRequestedApiInFlight';
+  }
+  return 'cancelRequested';
+}
+
+class CardEditModal extends Modal {
+  plugin: ParallelReaderPlugin;
+  card: any;
+  onSave: (patch: any) => void | Promise<void>;
+
+  constructor(app, plugin, card, onSave) {
+    super(app);
+    this.plugin = plugin;
+    this.card = card || {};
+    this.onSave = onSave;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl('h2', { text: this.plugin.t('editCardTitle') });
+
+    const titleInput = this.createLabeledInput(contentEl, this.plugin.t('editCardTitleField'), this.card.title || '');
+    const gistInput = this.createLabeledTextarea(contentEl, this.plugin.t('editCardGistField'), this.card.gist || '', 3);
+    const bulletsInput = this.createLabeledTextarea(contentEl, this.plugin.t('editCardBulletsField'), (this.card.bullets || []).join('\n'), 8);
+
+    const actions = contentEl.createDiv({ cls: 'parallel-reader-modal-actions' });
+    addTextButton(actions, null, this.plugin.t('editCardCancel'), () => this.close(), 'parallel-reader-text-button');
+    addTextButton(actions, null, this.plugin.t('editCardSave'), async () => {
+      await this.onSave({
+        title: titleInput.value.trim() || this.card.title || '',
+        gist: gistInput.value.trim(),
+        bullets: bulletsInput.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean),
+      });
+      this.close();
+    }, 'parallel-reader-text-button');
+  }
+
+  createLabeledInput(parent, label, value) {
+    const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
+    wrapper.createEl('label', { text: label });
+    const input = wrapper.createEl('input', { attr: { type: 'text' } });
+    input.value = value;
+    return input;
+  }
+
+  createLabeledTextarea(parent, label, value, rows) {
+    const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
+    wrapper.createEl('label', { text: label });
+    const textarea = wrapper.createEl('textarea');
+    textarea.rows = rows;
+    textarea.value = value;
+    return textarea;
+  }
+}
+
 /* ---------- Right-pane view ---------- */
 
 class ParallelReaderView extends ItemView {
@@ -310,14 +375,20 @@ class ParallelReaderView extends ItemView {
   getDisplayText() { return this.plugin.t('displayName'); }
   getIcon() { return 'book-open'; }
 
-  async onOpen() {
+  onOpen() {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass('parallel-reader-container');
+    container.setAttr('tabindex', '0');
+    container.addEventListener('keydown', e => this.handleKeydown(e as KeyboardEvent));
     this.renderEmpty();
+    this.focusSummaryPane();
+    return Promise.resolve();
   }
 
-  async onClose() {}
+  onClose() {
+    return Promise.resolve();
+  }
 
   renderEmpty() {
     this.sourceFile = null;
@@ -331,6 +402,13 @@ class ParallelReaderView extends ItemView {
     hint.createEl('h3', { text: this.plugin.t('appTitle') });
     hint.createEl('p', { text: this.plugin.t('emptyOpenNote') });
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
+  }
+
+  focusSummaryPane() {
+    const container = this.containerEl.children[1] as HTMLElement;
+    if (!container || typeof container.focus !== 'function') return false;
+    container.focus({ preventScroll: true });
+    return true;
   }
 
   async loadFor(file, sections, stale) {
@@ -489,11 +567,19 @@ class ParallelReaderView extends ItemView {
           menu.addItem(it => it.setTitle(this.plugin.t('menuJumpSource')).setIcon('arrow-right')
             .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)));
         }
+        menu.addSeparator();
+        menu.addItem(it => it.setTitle(this.plugin.t('menuEditCard')).setIcon('pencil')
+          .onClick(() => this.openEditCardModal(i)));
+        menu.addItem(it => it.setTitle(this.plugin.t('menuDeleteCard')).setIcon('trash')
+          .onClick(() => this.deleteCard(i)));
         menu.showAtMouseEvent(e);
       });
 
       this.cards.push(card);
     });
+    if (this.activeIdx >= 0 && this.cards[this.activeIdx]) {
+      this.cards[this.activeIdx].addClass('is-active');
+    }
   }
 
   setActiveSection(idx) {
@@ -508,9 +594,70 @@ class ParallelReaderView extends ItemView {
     }
   }
 
+  moveActiveSection(delta) {
+    const nextIdx = nextCardIndex(this.activeIdx, this.sections.length, delta);
+    this.setActiveSection(nextIdx);
+    this.focusSummaryPane();
+    return nextIdx;
+  }
+
+  jumpToActiveSection() {
+    const line = activeSectionLine(this.sections, this.activeIdx);
+    if (line < 0 || !this.sourceFile) return -1;
+    this.plugin.scrollEditorToLine(line, this.sourceFile);
+    return line;
+  }
+
+  handleKeydown(e: KeyboardEvent) {
+    if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.moveActiveSection(-1);
+      return;
+    }
+    if (e.altKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.moveActiveSection(1);
+      return;
+    }
+    if (!e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Enter') {
+      const line = this.jumpToActiveSection();
+      if (line >= 0) e.preventDefault();
+    }
+  }
+
+  async deleteCard(index) {
+    if (!this.sourceFile) return false;
+    const nextSections = removeCardAt(this.sections, index);
+    if (nextSections.length === this.sections.length) return false;
+    const previousLength = this.sections.length;
+    this.sections = nextSections;
+    this.activeIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
+    await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    this.render();
+    new Notice(this.plugin.t('cardDeleted'));
+    return true;
+  }
+
+  openEditCardModal(index) {
+    if (!this.sourceFile || !this.sections[index]) return false;
+    new CardEditModal(this.app, this.plugin, this.sections[index], patch => this.updateCard(index, patch)).open();
+    return true;
+  }
+
+  async updateCard(index, patch) {
+    if (!this.sourceFile) return false;
+    const nextSections = updateCardAt(this.sections, index, patch);
+    if (nextSections.length !== this.sections.length) return false;
+    this.sections = nextSections;
+    await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    this.render();
+    new Notice(this.plugin.t('cardSaved'));
+    return true;
+  }
+
   async exportToVault() {
     if (!this.sourceFile) return;
-    const folder = this.plugin.settings.exportFolder.replace(/\/$/, '');
+    const folder = normalizeVaultPath(this.plugin.settings.exportFolder);
     const name = `${this.sourceFile.basename} - ${this.plugin.t('displayName')}.md`;
     const targetPath = `${folder}/${name}`;
 
@@ -526,11 +673,7 @@ class ParallelReaderView extends ItemView {
     ].join('\n');
 
     const app = this.plugin.app;
-    // Ensure folder exists
-    const folderTF = app.vault.getAbstractFileByPath(folder);
-    if (!folderTF) {
-      try { await app.vault.createFolder(folder); } catch (e) { /* exists race */ }
-    }
+    await ensureVaultFolder(app, folder);
 
     const existing = app.vault.getAbstractFileByPath(targetPath);
     if (existing instanceof TFile) {
@@ -550,6 +693,8 @@ class ParallelReaderPlugin extends Plugin {
   jobs: GenerationJobManager;
   _scrollDispose: (() => void) | null;
   _settingsSaveTimer: ReturnType<typeof setTimeout> | null;
+  _cacheSaveTimer: ReturnType<typeof setTimeout> | null;
+  _cacheDirty: boolean;
 
   t(key, vars?) {
     return translate(this.settings || DEFAULT_SETTINGS, key, vars);
@@ -558,6 +703,8 @@ class ParallelReaderPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.jobs = new GenerationJobManager();
+    this._cacheSaveTimer = null;
+    this._cacheDirty = false;
 
     this.addRibbonIcon('book-open', this.t('ribbonOpen'), async () => {
       const active = this.getActiveView();
@@ -628,6 +775,26 @@ class ParallelReaderPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'parallel-reader-card-prev',
+      name: this.t('cmdCardPrev'),
+      hotkeys: [{ modifiers: ['Alt'], key: 'ArrowUp' }],
+      callback: () => this.moveActiveCard(-1),
+    });
+
+    this.addCommand({
+      id: 'parallel-reader-card-next',
+      name: this.t('cmdCardNext'),
+      hotkeys: [{ modifiers: ['Alt'], key: 'ArrowDown' }],
+      callback: () => this.moveActiveCard(1),
+    });
+
+    this.addCommand({
+      id: 'parallel-reader-card-jump',
+      name: this.t('cmdCardJump'),
+      callback: () => this.jumpActiveCard(),
+    });
+
     this.addSettingTab(new ParallelReaderSettingTab(this.app, this));
 
     this.registerEvent(
@@ -652,6 +819,7 @@ class ParallelReaderPlugin extends Plugin {
 
   async onunload() {
     await this.flushSettingsSave();
+    await this.flushCacheSave();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_PARALLEL);
   }
 
@@ -686,8 +854,32 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   async saveCache() {
+    if (this._cacheSaveTimer) {
+      clearTimeout(this._cacheSaveTimer);
+      this._cacheSaveTimer = null;
+    }
     this.pruneCache();
     await this.writeCacheFile();
+    this._cacheDirty = false;
+  }
+
+  scheduleCacheSave(delayMs = 5000) {
+    this._cacheDirty = true;
+    if (this._cacheSaveTimer) return;
+    this._cacheSaveTimer = setTimeout(() => {
+      this._cacheSaveTimer = null;
+      if (!this._cacheDirty) return;
+      this.saveCache().catch(e => console.error('[parallel-reader] failed to save cache', e));
+    }, delayMs);
+  }
+
+  async flushCacheSave() {
+    if (this._cacheSaveTimer) {
+      clearTimeout(this._cacheSaveTimer);
+      this._cacheSaveTimer = null;
+    }
+    if (!this._cacheDirty) return;
+    await this.saveCache();
   }
 
   cacheFilePath() {
@@ -730,10 +922,7 @@ class ParallelReaderPlugin extends Plugin {
     await this.ensurePluginDataDir();
     await this.app.vault.adapter.write(
       this.cacheFilePath(),
-      JSON.stringify({
-        version: 1,
-        entries: this.cache,
-      }, null, 2)
+      serializeCacheFile(this.cache)
     );
   }
 
@@ -750,13 +939,18 @@ class ParallelReaderPlugin extends Plugin {
 
   async pruneCacheIfNeeded() {
     const removed = this.pruneCache();
-    if (removed.length > 0) await this.writeCacheFile();
+    if (removed.length > 0) await this.saveCache();
     return removed;
   }
 
   cacheGet(filePath) {
-    const entry = this.cache[filePath] || null;
-    if (entry) entry.lastAccessedAt = new Date().toISOString();
+    return this.cache[filePath] || null;
+  }
+
+  async cacheTouch(filePath) {
+    const entry = touchCacheEntry(this.cache[filePath] || null);
+    if (!entry) return null;
+    this.scheduleCacheSave();
     return entry;
   }
 
@@ -771,6 +965,22 @@ class ParallelReaderPlugin extends Plugin {
       lastAccessedAt: now,
     };
     await this.saveCache();
+  }
+
+  async cacheReplaceCards(filePath, cards) {
+    const entry = this.cache[filePath];
+    if (!entry) return false;
+    const now = new Date().toISOString();
+    entry.cards = (cards || []).map(card => ({
+      title: card.title,
+      anchor: card.anchor,
+      gist: card.gist,
+      bullets: card.bullets || [],
+    }));
+    entry.updatedAt = now;
+    entry.lastAccessedAt = now;
+    await this.saveCache();
+    return true;
   }
 
   async cacheDelete(filePath) {
@@ -800,6 +1010,28 @@ class ParallelReaderPlugin extends Plugin {
     return this.app.workspace.getActiveViewOfType(MarkdownView);
   }
 
+  getParallelView() {
+    return this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL)[0]?.view as ParallelReaderView | undefined;
+  }
+
+  moveActiveCard(delta) {
+    const view = this.getParallelView();
+    if (!view || !view.sections.length) {
+      new Notice(this.t('noActiveCard'));
+      return -1;
+    }
+    return view.moveActiveSection(delta);
+  }
+
+  jumpActiveCard() {
+    const view = this.getParallelView();
+    if (!view || view.jumpToActiveSection() < 0) {
+      new Notice(this.t('noActiveCard'));
+      return false;
+    }
+    return true;
+  }
+
   isGeneratingFile(file) {
     return !!file && !!file.path && this.jobs.isRunning(file.path);
   }
@@ -809,8 +1041,10 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('noCancelableJob'));
       return false;
     }
+    const job = this.jobs.get(file.path);
+    const noticeKey = cancellationNoticeKey(this.settings, job);
     const cancelled = this.jobs.cancel(file.path);
-    new Notice(cancelled ? this.t('cancelRequested') : this.t('noCancelableJob'));
+    new Notice(cancelled ? this.t(noticeKey) : this.t('noCancelableJob'));
     return cancelled;
   }
 
@@ -961,6 +1195,7 @@ class ParallelReaderPlugin extends Plugin {
       if (!force) {
         const entry = this.cacheGet(file.path);
         if (cacheEntryMatches(entry, content, this.settings)) {
+          await this.cacheTouch(file.path);
           if (this.activeFileStillMatches(file)) {
             await view.loadFor(file, this.resolveCardAnchors(content, entry.cards), false);
           }
@@ -1059,6 +1294,7 @@ class ParallelReaderPlugin extends Plugin {
     const content = await this.app.vault.read(file);
     if (!this.activeFileStillMatches(file)) return;
     const stale = !cacheEntryMatches(entry, content, this.settings);
+    await this.cacheTouch(file.path);
     const resolved = this.resolveCardAnchors(content, entry.cards);
     await view.loadFor(file, resolved, stale);
   }
@@ -1079,9 +1315,12 @@ class ParallelReaderPlugin extends Plugin {
     const scrollDom = cm && cm.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector('.cm-scroller');
     if (!scrollDom) return;
 
-    const handler = () => this.handleEditorScroll(mdView);
+    const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
     scrollDom.addEventListener('scroll', handler, { passive: true });
-    this._scrollDispose = () => scrollDom.removeEventListener('scroll', handler);
+    this._scrollDispose = () => {
+      handler.cancel();
+      scrollDom.removeEventListener('scroll', handler);
+    };
   }
 
   handleEditorScroll(mdView) {
@@ -1508,6 +1747,8 @@ export const __test = {
   GenerationJobAlreadyRunningError,
   GenerationJobCancelledError,
   GenerationJobManager,
+  activeIndexAfterCardDelete,
+  activeSectionLine,
   buildAnthropicMessagesBody,
   buildGeminiBody,
   buildOpenAiChatBody,
@@ -1515,13 +1756,23 @@ export const __test = {
   buildPrompts,
   cardsToMarkdown,
   cacheEntryMatches,
+  cancellationNoticeKey,
   classifyGenerationError,
+  createRafThrottledHandler,
   extractJson,
   findLineForAnchor,
+  folderPathsForTarget,
   generationFingerprint,
+  getApiBaseUrl,
+  modelForApi,
   normalizeCardsPayload,
+  nextCardIndex,
   pruneCacheEntries,
+  removeCardAt,
+  serializeCacheFile,
   summarizeViaApi,
+  touchCacheEntry,
   translate,
   tokenLimitFieldForOpenAiChat,
+  updateCardAt,
 };

@@ -12,6 +12,7 @@ Module._load = function load(request, parent, isMain) {
     class MarkdownView {}
     class TFile {}
     class Menu {}
+    class Modal {}
     return {
       Plugin,
       ItemView,
@@ -21,6 +22,7 @@ Module._load = function load(request, parent, isMain) {
       MarkdownView,
       TFile,
       Menu,
+      Modal,
       MarkdownRenderer: { render: async () => {} },
       requestUrl: async () => ({ status: 200, json: {}, text: '{}' }),
       setIcon: () => {},

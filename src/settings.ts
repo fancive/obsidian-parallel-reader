@@ -1,6 +1,7 @@
 'use strict';
 
 import crypto from 'crypto';
+import { translate } from './i18n';
 
 export const MAX_DOC_CHARS = 20000;
 export const PROMPT_VERSION = 2;
@@ -254,11 +255,11 @@ export function getApiBaseUrl(settings) {
   const explicit = (settings.apiBaseUrl || '').trim();
   if (explicit) return explicit.replace(/\/+$/, '');
   if ((settings.apiProvider || '').startsWith('custom-')) {
-    throw new Error('自定义 provider 需要填写 API Base URL。');
+    throw new Error(translate(settings, 'errorCustomProviderBaseUrlRequired'));
   }
   const base = (preset.baseUrl || API_FORMATS[format].defaultBaseUrl || '').trim();
   if (!base) {
-    throw new Error('API Base URL 未设置。请在设置里选择 provider 或填写自定义 base URL。');
+    throw new Error(translate(settings, 'errorApiBaseUrlMissing'));
   }
   return base.replace(/\/+$/, '');
 }
@@ -284,7 +285,7 @@ export function getApiKey(settings) {
 export function modelForApi(settings) {
   const raw = (settings.model || '').trim();
   if (!raw) {
-    throw new Error('Model 未设置。请在设置里填写模型 ID。');
+    throw new Error(translate(settings, 'errorModelMissing'));
   }
   const preset = getApiPreset(settings);
   const prefixes = [settings.apiProvider, preset.modelPrefix]

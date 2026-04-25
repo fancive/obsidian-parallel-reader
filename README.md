@@ -100,16 +100,21 @@ Then in the plugin settings, paste `/Users/you/bin/codex` (or `~/bin/claude`) in
 | `取消当前对照笔记生成` | Mark the active generation job as cancelled |
 | `清除当前笔记的缓存` | Drop the cache entry for the active note |
 | `清除所有缓存` | Wipe all cached summaries |
+| `聚焦上一张摘要卡片` / `Focus previous summary card` | Move the active summary card upward |
+| `聚焦下一张摘要卡片` / `Focus next summary card` | Move the active summary card downward |
+| `跳转到当前摘要卡片原文` / `Jump current summary card to source` | Jump the source editor to the active card |
 
 ## Interaction
 
 | Action | Effect |
 |--------|--------|
 | Left-click a card body | Scroll source editor to that section |
-| Right-click a card | Context menu: Copy Markdown / Copy plain text / Copy anchor / Jump |
+| Right-click a card | Context menu: Copy Markdown / Copy plain text / Copy anchor / Jump / Edit / Delete card |
 | Header icon buttons | Regenerate or cancel / copy all Markdown / export to Vault |
 | File context menu | Generate / force regenerate / clear cache for a Markdown file |
 | Ribbon icon | Open the comparison pane for the active note |
+| `Alt+↑` / `Alt+↓` | Move between summary cards |
+| `Enter` in the summary pane | Jump to the active card's source line |
 | Drag to select text | Normal text selection (does not trigger jump) |
 | Scroll source editor | Active card gets highlighted on the right |
 
@@ -132,10 +137,15 @@ The plugin keeps `main.js` as the generated Obsidian runtime bundle. Edit `main.
 |------|----------------|
 | `main.ts` | Obsidian lifecycle, commands, right-pane view, settings tab orchestration |
 | `src/anchor.ts` | Anchor-to-line matching and whitespace-normalized fallback |
+| `src/cache.ts` | Cache entry touch semantics and compact cache-file serialization |
+| `src/cards.ts` | Card list edit/delete helpers |
 | `src/i18n.ts` | Chinese/English UI strings and translation helper |
+| `src/navigation.ts` | Summary-card keyboard navigation helpers |
 | `src/prompt.ts` | Prompt construction, language controls, and custom prompt templating |
 | `src/settings.ts` | Defaults, provider presets, settings normalization, cache fingerprinting and pruning |
+| `src/vault.ts` | Vault path normalization and recursive folder creation |
 | `src/schema.ts` | JSON extraction, card payload normalization, structured-output schemas |
+| `src/scroll.ts` | Scroll-sync requestAnimationFrame throttling helper |
 | `src/providers.ts` | API provider request/response adapters |
 | `src/generation-job-manager.ts` | Per-file generation state, cancellation, and error classification |
 | `src/markdown.ts` | Card-to-Markdown/plain-text serialization |

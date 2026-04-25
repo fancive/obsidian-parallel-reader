@@ -310,6 +310,31 @@
   to { transform: rotate(360deg); }
 }
 
+.parallel-reader-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.parallel-reader-modal-field label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.parallel-reader-modal-field input,
+.parallel-reader-modal-field textarea {
+  width: 100%;
+}
+
+.parallel-reader-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .parallel-reader-empty {
   padding: 20px;
   text-align: center;

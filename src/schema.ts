@@ -1,5 +1,7 @@
 'use strict';
 
+import { translate } from './i18n';
+
 export const ANTHROPIC_CARD_TOOL_NAME = 'record_parallel_reader_cards';
 
 export function collectJsonObjectCandidates(raw) {
@@ -58,13 +60,15 @@ export function extractJson(text) {
   return raw;
 }
 
-export function parseCardsJson(text) {
+export function parseCardsJson(text, settings?) {
   const jsonText = extractJson(text);
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
   } catch (e) {
-    throw new Error('LLM 返回非 JSON：\n' + (text || '').slice(0, 500));
+    throw new Error(translate(settings, 'errorLlmNonJson', {
+      excerpt: (text || '').slice(0, 500),
+    }));
   }
   return normalizeCardsPayload(parsed);
 }

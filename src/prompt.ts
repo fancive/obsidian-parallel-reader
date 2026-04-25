@@ -29,22 +29,37 @@ export function renderPromptTemplate(template, vars) {
   });
 }
 
-export function buildPrompts(content, settings) {
-  const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
-  const promptLanguage = PROMPT_LANGUAGES[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
-  const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
-  const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
-  const languageInstruction = promptLanguageInstruction(promptLanguage);
-  const doc = content.length > maxDocChars
-    ? content.slice(0, maxDocChars) + (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
-    : content;
+function defaultSystemPrompt(language, minCards, maxCards, languageInstruction, schema, example) {
+  if (language === 'en') {
+    return `You are a long-form reading summary assistant. After reading the full document, split it into ${minCards}-${maxCards} natural topic units. They do not need to match markdown headings; use a complete argument or topic as the unit, merging short sections and splitting long ones when needed.
 
-  const schema = '{"cards":[{"title":"...","anchor":"...","gist":"...","bullets":["...","..."]}]}';
-  const example = promptSchemaExample(promptLanguage);
-  const templateVars = { minCards, maxCards, languageInstruction, schema, example };
-  const customSystem = renderPromptTemplate(settings.customSystemPrompt, templateVars).trim();
+Each card has one guiding sentence plus several bullets. Bullets carry details; gist is the lead-in.
 
-  const defaultSystem = `你是一个长文阅读摘要助手。阅读全文后，把文章切成 ${minCards}-${maxCards} 个"自然主题单元"——不必对应 markdown heading，以"一个完整论点或话题"为单位自行判断粒度：短章节合并、长章节拆分。
+Language:
+- ${languageInstruction}
+
+For each unit, output:
+
+- title: a concise 3-10 word heading that clearly states what the section is about; avoid vague labels like "Background" or "Introduction"
+- anchor: a verbatim quote from the start of this unit, copied 1:1 from the source, 40-80 characters where possible, preserving punctuation, spaces, and line breaks; it is only used internally for positioning
+- gist: one guiding sentence, 20-40 words, stating the core claim or conclusion
+- bullets: 3-6 supporting bullets, each 20-50 words, carrying data, comparisons, mechanisms, examples, or counterintuitive observations. Gist and bullets must not repeat each other.
+
+Rules:
+- anchor must exact-substring-match the source. Never paraphrase, translate, summarize, or alter it.
+- Choose the earliest sufficiently distinctive quote for each unit; avoid generic phrases.
+- Every card must include both gist and bullets.
+- Each bullet must be a standalone assertion; avoid sequencing phrases such as "first" or "then".
+- Output strict JSON only: no markdown fence, no explanation, no tool call.
+
+Output shape:
+${schema}
+
+Example:
+${example}`;
+  }
+
+  return `你是一个长文阅读摘要助手。阅读全文后，把文章切成 ${minCards}-${maxCards} 个"自然主题单元"——不必对应 markdown heading，以"一个完整论点或话题"为单位自行判断粒度：短章节合并、长章节拆分。
 
 **每张卡片的结构：一句话领读 + 若干条 bullet。bullet 承载细节，gist 是一句话导读。**
 
@@ -70,16 +85,46 @@ ${schema}
 
 示例：
 ${example}`;
+}
 
-  const system = customSystem
-    ? `${customSystem}
-
-不可覆盖的输出契约：
+function systemPromptContract(language, minCards, maxCards, languageInstruction, schema) {
+  if (language === 'en') {
+    return `Non-overridable output contract:
+- Must output ${minCards}-${maxCards} cards.
+- ${languageInstruction}
+- anchor must be copied verbatim from the source and exact-substring-match the source.
+- Output strict JSON only: no markdown fence, no explanation, no tool call.
+- JSON shape: ${schema}`;
+  }
+  return `不可覆盖的输出契约：
 - 必须输出 ${minCards}-${maxCards} 张 cards。
 - ${languageInstruction}
 - anchor 必须从原文逐字复制，必须能在原文 exact substring match 找到。
 - 严格只输出 JSON，无 markdown fence、无解释、无 tool call。
-- JSON shape: ${schema}`
+- JSON shape: ${schema}`;
+}
+
+export function buildPrompts(content, settings) {
+  const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
+  const promptLanguage = PROMPT_LANGUAGES[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
+  const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
+  const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
+  const languageInstruction = promptLanguageInstruction(promptLanguage);
+  const doc = content.length > maxDocChars
+    ? content.slice(0, maxDocChars) + (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
+    : content;
+
+  const schema = '{"cards":[{"title":"...","anchor":"...","gist":"...","bullets":["...","..."]}]}';
+  const example = promptSchemaExample(promptLanguage);
+  const templateVars = { minCards, maxCards, languageInstruction, schema, example };
+  const customSystem = renderPromptTemplate(settings.customSystemPrompt, templateVars).trim();
+  const contract = systemPromptContract(promptLanguage, minCards, maxCards, languageInstruction, schema);
+  const defaultSystem = defaultSystemPrompt(promptLanguage, minCards, maxCards, languageInstruction, schema, example);
+
+  const system = customSystem
+    ? `${customSystem}
+
+${contract}`
     : defaultSystem;
 
   const user = promptLanguage === 'en'

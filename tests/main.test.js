@@ -1,5 +1,7 @@
 const assert = require('assert');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const Module = require('module');
 
 const originalLoad = Module._load;
@@ -18,6 +20,7 @@ Module._load = function load(request, parent, isMain) {
     class MarkdownView {}
     class TFile {}
     class Menu {}
+    class Modal {}
     return {
       Plugin,
       ItemView,
@@ -27,6 +30,7 @@ Module._load = function load(request, parent, isMain) {
       MarkdownView,
       TFile,
       Menu,
+      Modal,
       MarkdownRenderer: { render: async () => {} },
       requestUrl: async () => ({ status: 200, json: {}, text: '{}' }),
       setIcon: () => {},
@@ -39,15 +43,38 @@ const plugin = require('../main.js');
 const t = plugin.__test;
 
 assert.ok(t, 'test helpers should be exported');
+const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.ts'), 'utf8');
+assert.ok(!/\basync\s+onOpen\s*\(/.test(mainSource), 'ParallelReaderView.onOpen should not be async without await');
+assert.ok(!/\basync\s+onClose\s*\(\)\s*\{\s*\}/.test(mainSource), 'empty onClose should not be async');
+assert.ok(/focusSummaryPane\s*\(\)/.test(mainSource), 'summary pane should expose a focus helper');
+assert.ok(/\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(mainSource), 'summary pane focus should not scroll the page');
+assert.ok(/moveActiveSection[\s\S]*focusSummaryPane/.test(mainSource), 'card navigation should focus the summary pane');
+assert.ok(/scheduleCacheSave\s*\(/.test(mainSource), 'cache touch should use a debounced cache save path');
+assert.ok(/flushCacheSave\s*\(/.test(mainSource), 'pending cache touches should be flushable');
+assert.ok(/onunload[\s\S]*flushCacheSave/.test(mainSource), 'plugin unload should flush pending cache touches');
+assert.ok(/cacheTouch[\s\S]*scheduleCacheSave/.test(mainSource), 'cacheTouch should schedule a cache save');
+assert.ok(!/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource), 'cacheTouch should not synchronously write cache.json');
 assert.strictEqual(typeof t.cardsToMarkdown, 'function');
+assert.strictEqual(typeof t.cancellationNoticeKey, 'function');
 assert.strictEqual(typeof t.buildPrompts, 'function');
 assert.strictEqual(typeof t.buildOpenAiChatBody, 'function');
 assert.strictEqual(typeof t.extractJson, 'function');
 assert.strictEqual(typeof t.findLineForAnchor, 'function');
+assert.strictEqual(typeof t.folderPathsForTarget, 'function');
+assert.strictEqual(typeof t.getApiBaseUrl, 'function');
 assert.strictEqual(typeof t.generationFingerprint, 'function');
 assert.strictEqual(typeof t.GenerationJobManager, 'function');
+assert.strictEqual(typeof t.modelForApi, 'function');
+assert.strictEqual(typeof t.activeSectionLine, 'function');
+assert.strictEqual(typeof t.touchCacheEntry, 'function');
+assert.strictEqual(typeof t.nextCardIndex, 'function');
 assert.strictEqual(typeof t.pruneCacheEntries, 'function');
+assert.strictEqual(typeof t.removeCardAt, 'function');
+assert.strictEqual(typeof t.activeIndexAfterCardDelete, 'function');
+assert.strictEqual(typeof t.createRafThrottledHandler, 'function');
+assert.strictEqual(typeof t.serializeCacheFile, 'function');
 assert.strictEqual(typeof t.translate, 'function');
+assert.strictEqual(typeof t.updateCardAt, 'function');
 
 const baseSettings = {
   backend: 'api',
@@ -89,6 +116,36 @@ assert.strictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, uiLanguage: 'en' }),
   'cache fingerprint should not change when UI language changes'
+);
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
+  'cancelRequestedApiInFlight',
+  'API cancellation should explain that the in-flight network request cannot be aborted'
+);
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'claude-code' }, { phase: 'generating' }),
+  'cancelRequested',
+  'CLI cancellation can use the generic cancellation notice'
+);
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'api' }, { phase: 'reading' }),
+  'cancelRequested',
+  'API cancellation outside the request phase can use the generic notice'
+);
+assert.throws(
+  () => t.modelForApi({ ...baseSettings, model: '', uiLanguage: 'en' }),
+  /Model is not set/,
+  'settings errors should respect English UI mode'
+);
+assert.throws(
+  () => t.getApiBaseUrl({
+    ...baseSettings,
+    apiProvider: 'custom-openai-compatible',
+    apiBaseUrl: '',
+    uiLanguage: 'en',
+  }),
+  /Custom provider requires an API Base URL/,
+  'custom provider base URL errors should respect English UI mode'
 );
 
 const contentHash = crypto.createHash('sha1').update('hello', 'utf8').digest('hex');
@@ -145,6 +202,8 @@ const englishPrompt = t.buildPrompts('Hello world', {
 });
 assert.ok(englishPrompt.system.includes('2-4'));
 assert.ok(englishPrompt.system.includes('Write title, gist, and bullets in English.'));
+assert.ok(englishPrompt.system.includes('You are a long-form reading summary assistant.'));
+assert.ok(!englishPrompt.system.includes('你是一个长文阅读摘要助手'));
 assert.ok(englishPrompt.user.startsWith('Source document:'));
 
 const customPrompt = t.buildPrompts('Hello world', {
@@ -161,6 +220,61 @@ assert.ok(customPrompt.system.includes('JSON shape'));
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'cmdOpenView'), 'Open Parallel Reader pane');
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'cmdOpenView'), '打开对照笔记面板');
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'cacheClearedAll', { count: 3 }), 'Cleared 3 cache entries');
+assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'cmdCardNext'), 'Focus next summary card');
+
+assert.strictEqual(t.nextCardIndex(-1, 3, 1), 0);
+assert.strictEqual(t.nextCardIndex(-1, 3, -1), 2);
+assert.strictEqual(t.nextCardIndex(0, 3, 1), 1);
+assert.strictEqual(t.nextCardIndex(2, 3, 1), 2);
+assert.strictEqual(t.nextCardIndex(0, 3, -1), 0);
+assert.strictEqual(t.nextCardIndex(0, 0, 1), -1);
+assert.strictEqual(t.activeSectionLine([{ startLine: 3 }], 0), 3);
+assert.strictEqual(t.activeSectionLine([{ startLine: -1 }], 0), -1);
+assert.strictEqual(t.activeSectionLine([{ startLine: 3 }], 1), -1);
+const scheduledFrames = [];
+let throttledCalls = 0;
+const throttled = t.createRafThrottledHandler(() => { throttledCalls += 1; }, cb => {
+  scheduledFrames.push(cb);
+  return scheduledFrames.length;
+});
+throttled();
+throttled();
+throttled();
+assert.strictEqual(scheduledFrames.length, 1, 'scroll handler should be scheduled at most once per frame');
+assert.strictEqual(throttledCalls, 0, 'throttled handler should not run synchronously');
+scheduledFrames.shift()(0);
+assert.strictEqual(throttledCalls, 1);
+throttled();
+assert.strictEqual(scheduledFrames.length, 1, 'scroll handler should be schedulable after the frame runs');
+const cardList = [{ title: 'A' }, { title: 'B' }, { title: 'C' }];
+assert.deepStrictEqual(t.removeCardAt(cardList, 1), [{ title: 'A' }, { title: 'C' }]);
+assert.deepStrictEqual(t.removeCardAt(cardList, -1), cardList);
+assert.deepStrictEqual(t.removeCardAt(cardList, 3), cardList);
+assert.notStrictEqual(t.removeCardAt(cardList, 3), cardList);
+assert.strictEqual(t.activeIndexAfterCardDelete(1, 3, 1), 1, 'deleting active card should select the next card');
+assert.strictEqual(t.activeIndexAfterCardDelete(2, 3, 2), 1, 'deleting the last active card should select the previous card');
+assert.strictEqual(t.activeIndexAfterCardDelete(1, 3, 2), 1, 'deleting before active card should shift active index left');
+assert.strictEqual(t.activeIndexAfterCardDelete(2, 3, 0), 0, 'deleting after active card should keep active index');
+assert.deepStrictEqual(
+  t.updateCardAt(cardList, 1, { title: 'B2', gist: 'G', bullets: ['x'] }),
+  [{ title: 'A' }, { title: 'B2', gist: 'G', bullets: ['x'] }, { title: 'C' }]
+);
+assert.deepStrictEqual(t.updateCardAt(cardList, -1, { title: 'X' }), cardList);
+assert.deepStrictEqual(t.updateCardAt(cardList, 3, { title: 'X' }), cardList);
+assert.notStrictEqual(t.updateCardAt(cardList, 3, { title: 'X' }), cardList);
+assert.deepStrictEqual(t.folderPathsForTarget('Reading/Articles'), ['Reading', 'Reading/Articles']);
+assert.deepStrictEqual(t.folderPathsForTarget('/Reading//Articles/'), ['Reading', 'Reading/Articles']);
+assert.deepStrictEqual(t.folderPathsForTarget('Reading'), ['Reading']);
+assert.deepStrictEqual(t.folderPathsForTarget(''), []);
+const untouchedCacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z' };
+assert.strictEqual(t.touchCacheEntry(null), null);
+assert.strictEqual(t.touchCacheEntry(untouchedCacheEntry, '2024-01-05T00:00:00.000Z'), untouchedCacheEntry);
+assert.strictEqual(untouchedCacheEntry.lastAccessedAt, '2024-01-05T00:00:00.000Z');
+const serializedCache = t.serializeCacheFile({
+  'note.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [{ title: 'A' }] },
+});
+assert.strictEqual(serializedCache.includes('\n'), false, 'cache.json should be compact');
+assert.deepStrictEqual(JSON.parse(serializedCache).entries['note.md'].cards, [{ title: 'A' }]);
 
 const noisyJson = '说明文字 {"cards":[{"title":"A","anchor":"保留 { 花括号 } 字符","gist":"G","bullets":["B"]}]} trailing';
 const extracted = t.extractJson(noisyJson);
@@ -248,6 +362,90 @@ async function testOpenAiStructuredFallback() {
   assert.deepStrictEqual(cards, [{ title: 'T', anchor: 'A', gist: 'G', bullets: ['B'] }]);
 }
 
+async function testProviderMissingApiKeyUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => {
+      throw new Error('request should not be sent');
+    }, 'system JSON', 'user', {
+      ...baseSettings,
+      apiKey: '',
+      apiKeyEnvVar: '',
+      uiLanguage: 'en',
+    }),
+    /API key is not set/
+  );
+}
+
+async function testProviderHeaderJsonErrorUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => {
+      throw new Error('request should not be sent');
+    }, 'system JSON', 'user', {
+      ...baseSettings,
+      apiHeaders: '{"x":',
+      uiLanguage: 'en',
+    }),
+    /Custom headers JSON parse failed/
+  );
+}
+
+async function testProviderResponseNonJsonUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => ({
+      status: 200,
+      text: '<html>not json</html>',
+    }), 'system JSON', 'user', {
+      ...baseSettings,
+      uiLanguage: 'en',
+    }),
+    /OpenAI-compatible Chat returned non-JSON/
+  );
+}
+
+async function testProviderRequestFailureUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => {
+      throw new Error('network down');
+    }, 'system JSON', 'user', {
+      ...baseSettings,
+      uiLanguage: 'en',
+    }),
+    /OpenAI-compatible Chat request failed: network down/
+  );
+}
+
+async function testProviderApiStatusErrorUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => ({
+      status: 500,
+      text: 'upstream exploded',
+    }), 'system JSON', 'user', {
+      ...baseSettings,
+      uiLanguage: 'en',
+    }),
+    /OpenAI-compatible Chat API returned HTTP 500: upstream exploded/
+  );
+}
+
+async function testSchemaNonJsonErrorUsesEnglishUi() {
+  await assert.rejects(
+    () => t.summarizeViaApi(async () => ({
+      status: 200,
+      json: {
+        choices: [{
+          message: {
+            content: 'not json',
+          },
+        }],
+      },
+    }), 'system JSON', 'user', {
+      ...baseSettings,
+      uiLanguage: 'en',
+    }),
+    /LLM returned non-JSON/
+  );
+}
+
 async function testAnthropicToolUseParsing() {
   const requestUrlImpl = async req => {
     const body = JSON.parse(req.body);
@@ -280,6 +478,12 @@ async function testAnthropicToolUseParsing() {
 
 (async () => {
   await testOpenAiStructuredFallback();
+  await testProviderMissingApiKeyUsesEnglishUi();
+  await testProviderHeaderJsonErrorUsesEnglishUi();
+  await testProviderResponseNonJsonUsesEnglishUi();
+  await testProviderRequestFailureUsesEnglishUi();
+  await testProviderApiStatusErrorUsesEnglishUi();
+  await testSchemaNonJsonErrorUsesEnglishUi();
   await testAnthropicToolUseParsing();
   console.log('tests passed');
 })().catch(e => {

@@ -9,6 +9,7 @@ import {
   getApiPreset,
   modelForApi,
 } from './settings';
+import { translate } from './i18n';
 import {
   ANTHROPIC_CARD_TOOL_NAME,
   anthropicCardTool,
@@ -27,7 +28,7 @@ function endpointUrl(baseUrl, suffixes) {
   return base + suffixes[0];
 }
 
-function parseApiHeaders(raw) {
+function parseApiHeaders(raw, settings?) {
   const text = (raw || '').trim();
   if (!text) return {};
   if (text.startsWith('{')) {
@@ -35,10 +36,10 @@ function parseApiHeaders(raw) {
     try {
       parsed = JSON.parse(text);
     } catch (e) {
-      throw new Error('自定义 headers JSON 解析失败：' + e.message);
+      throw new Error(translate(settings, 'errorCustomHeadersJsonParse', { error: e.message }));
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('自定义 headers JSON 必须是对象');
+      throw new Error(translate(settings, 'errorCustomHeadersJsonObject'));
     }
     const headers = {};
     for (const [k, v] of Object.entries(parsed)) {
@@ -53,7 +54,7 @@ function parseApiHeaders(raw) {
     if (!trimmed || trimmed.startsWith('#')) continue;
     const idx = trimmed.indexOf(':');
     if (idx <= 0) {
-      throw new Error('自定义 headers 每行格式应为 `Header-Name: value`');
+      throw new Error(translate(settings, 'errorCustomHeadersLineFormat'));
     }
     const key = trimmed.slice(0, idx).trim();
     const value = trimmed.slice(idx + 1).trim();
@@ -68,8 +69,8 @@ function authHeaders(settings) {
   const key = getApiKey(settings);
   if (!key) {
     const envVar = (settings.apiKeyEnvVar || getApiPreset(settings).envVar || '').trim();
-    const hint = envVar ? ` 或环境变量 ${envVar}` : '';
-    throw new Error(`API key 未设置。请在设置里填写 API Key${hint}。`);
+    const hint = envVar ? translate(settings, 'errorApiKeyEnvHint', { envVar }) : '';
+    throw new Error(translate(settings, 'errorApiKeyMissing', { hint }));
   }
   if (authType === 'bearer') return { authorization: `Bearer ${key}` };
   if (authType === 'x-api-key') return { 'x-api-key': key };
@@ -83,20 +84,23 @@ function buildApiHeaders(settings, extra?) {
     'content-type': 'application/json',
     ...authHeaders(settings),
     ...(extra || {}),
-    ...parseApiHeaders(settings.apiHeaders),
+    ...parseApiHeaders(settings.apiHeaders, settings),
   };
 }
 
-function responseJson(resp, label) {
+function responseJson(resp, label, settings?) {
   if (resp.json && typeof resp.json === 'object') return resp.json;
   try {
     return JSON.parse(resp.text || '{}');
   } catch (_) {
-    throw new Error(`${label} 返回非 JSON：\n${(resp.text || '').slice(0, 500)}`);
+    throw new Error(translate(settings, 'errorProviderNonJson', {
+      label,
+      excerpt: (resp.text || '').slice(0, 500),
+    }));
   }
 }
 
-async function requestJsonBody(requestUrlImpl, label, url, headers, body) {
+async function requestJsonBody(requestUrlImpl, label, url, headers, body, settings?) {
   let resp;
   try {
     resp = await requestUrlImpl({
@@ -107,28 +111,35 @@ async function requestJsonBody(requestUrlImpl, label, url, headers, body) {
       throw: false,
     });
   } catch (e) {
-    throw new Error(`${label} 请求失败：` + (e.message || e));
+    throw new Error(translate(settings, 'errorProviderRequestFailed', {
+      label,
+      error: e.message || e,
+    }));
   }
 
   if (resp.status >= 400) {
-    throw new Error(`${label} API ${resp.status}: ${(resp.text || '').slice(0, 500)}`);
+    throw new Error(translate(settings, 'errorProviderApiStatus', {
+      label,
+      status: resp.status,
+      excerpt: (resp.text || '').slice(0, 500),
+    }));
   }
-  return responseJson(resp, label);
+  return responseJson(resp, label, settings);
 }
 
 function shouldRetryWithoutStructuredOutput(error) {
   const message = String(error && error.message ? error.message : error);
-  if (!/API (400|404|422):/.test(message)) return false;
+  if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message)) return false;
   return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(message);
 }
 
-async function requestJsonBodyWithStructuredFallback(requestUrlImpl, label, url, headers, structuredBody, fallbackBody) {
+async function requestJsonBodyWithStructuredFallback(requestUrlImpl, label, url, headers, structuredBody, fallbackBody, settings?) {
   try {
-    return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody);
+    return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody, settings);
   } catch (e) {
     if (!fallbackBody || !shouldRetryWithoutStructuredOutput(e)) throw e;
     console.warn(`[parallel-reader] ${label} structured output rejected; retrying without structured output`, e);
-    return requestJsonBody(requestUrlImpl, label + ' fallback', url, headers, fallbackBody);
+    return requestJsonBody(requestUrlImpl, label + ' fallback', url, headers, fallbackBody, settings);
   }
 }
 
@@ -237,11 +248,11 @@ export function buildGeminiBody(system, user, settings, options?) {
   };
 }
 
-function cardsFromAnthropicToolUse(json) {
+function cardsFromAnthropicToolUse(json, settings?) {
   const content = Array.isArray(json && json.content) ? json.content : [];
   const block = content.find(c => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
   if (!block) return null;
-  if (typeof block.input === 'string') return parseCardsJson(block.input);
+  if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
   if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input);
   return [];
 }
@@ -254,14 +265,15 @@ async function summarizeViaAnthropicMessages(requestUrlImpl, system, user, setti
     url,
     buildApiHeaders(settings, { 'anthropic-version': '2023-06-01' }),
     buildAnthropicMessagesBody(system, user, settings),
-    buildAnthropicMessagesBody(system, user, settings, { structured: false })
+    buildAnthropicMessagesBody(system, user, settings, { structured: false }),
+    settings
   );
 
-  const toolCards = cardsFromAnthropicToolUse(json);
+  const toolCards = cardsFromAnthropicToolUse(json, settings);
   if (toolCards) return toolCards;
 
   const text = (json.content || []).map(c => textFromContent(c)).join('').trim();
-  return parseCardsJson(text);
+  return parseCardsJson(text, settings);
 }
 
 async function summarizeViaOpenAiChat(requestUrlImpl, system, user, settings) {
@@ -272,11 +284,12 @@ async function summarizeViaOpenAiChat(requestUrlImpl, system, user, settings) {
     url,
     buildApiHeaders(settings),
     buildOpenAiChatBody(system, user, settings),
-    buildOpenAiChatBody(system, user, settings, { structured: false })
+    buildOpenAiChatBody(system, user, settings, { structured: false }),
+    settings
   );
   const choice = (json.choices || [])[0] || {};
   const text = textFromContent(choice.message?.content || choice.text || '').trim();
-  return parseCardsJson(text);
+  return parseCardsJson(text, settings);
 }
 
 async function summarizeViaOpenAiResponses(requestUrlImpl, system, user, settings) {
@@ -287,9 +300,10 @@ async function summarizeViaOpenAiResponses(requestUrlImpl, system, user, setting
     url,
     buildApiHeaders(settings),
     buildOpenAiResponsesBody(system, user, settings),
-    buildOpenAiResponsesBody(system, user, settings, { structured: false })
+    buildOpenAiResponsesBody(system, user, settings, { structured: false }),
+    settings
   );
-  return parseCardsJson(textFromOpenAiResponses(json).trim());
+  return parseCardsJson(textFromOpenAiResponses(json).trim(), settings);
 }
 
 async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, settings) {
@@ -305,12 +319,13 @@ async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, sett
     url,
     headers,
     buildGeminiBody(system, user, settings),
-    buildGeminiBody(system, user, settings, { structured: false })
+    buildGeminiBody(system, user, settings, { structured: false }),
+    settings
   );
   const candidate = (json.candidates || [])[0] || {};
   const parts = candidate.content?.parts || [];
   const text = parts.map(p => textFromContent(p)).join('').trim();
-  return parseCardsJson(text);
+  return parseCardsJson(text, settings);
 }
 
 export async function summarizeViaApi(requestUrlImpl, system, user, settings) {
