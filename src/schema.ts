@@ -1,10 +1,11 @@
 'use strict';
 
+import type { PluginSettings, RawCard } from './types';
 import { translate } from './i18n';
 
 export const ANTHROPIC_CARD_TOOL_NAME = 'record_parallel_reader_cards';
 
-export function collectJsonObjectCandidates(raw) {
+export function collectJsonObjectCandidates(raw: string): string[] {
   const candidates = [];
   let start = -1;
   let depth = 0;
@@ -40,7 +41,7 @@ export function collectJsonObjectCandidates(raw) {
   return candidates;
 }
 
-export function extractJson(text) {
+export function extractJson(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return raw;
 
@@ -60,7 +61,7 @@ export function extractJson(text) {
   return raw;
 }
 
-export function parseCardsJson(text, settings?) {
+export function parseCardsJson(text: string, settings?: PluginSettings): RawCard[] {
   const jsonText = extractJson(text);
   let parsed;
   try {
@@ -73,19 +74,19 @@ export function parseCardsJson(text, settings?) {
   return normalizeCardsPayload(parsed);
 }
 
-export function normalizeCardsPayload(parsed) {
+export function normalizeCardsPayload(parsed: { cards?: unknown[] }): RawCard[] {
   const raw = parsed && Array.isArray(parsed.cards) ? parsed.cards : [];
   return raw
-    .filter(c => c && typeof c === 'object')
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
     .map(c => ({
       title: typeof c.title === 'string' ? c.title : '(无标题)',
       anchor: typeof c.anchor === 'string' ? c.anchor : '',
       gist: typeof c.gist === 'string' ? c.gist : '',
-      bullets: Array.isArray(c.bullets) ? c.bullets.filter(b => typeof b === 'string') : [],
+      bullets: Array.isArray(c.bullets) ? (c.bullets as unknown[]).filter((b): b is string => typeof b === 'string') : [],
     }));
 }
 
-export function cardOutputSchema(strict) {
+export function cardOutputSchema(strict: boolean) {
   const cardSchema: any = {
     type: 'object',
     properties: {

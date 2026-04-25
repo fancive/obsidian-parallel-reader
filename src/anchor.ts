@@ -1,6 +1,6 @@
 'use strict';
 
-export function findLineForAnchor(content, anchor) {
+export function findLineForAnchor(content: string, anchor: string): number {
   if (!anchor) return -1;
   const normalize = s => s.replace(/\s+/g, ' ').trim();
   const normalizeWithMap = s => {

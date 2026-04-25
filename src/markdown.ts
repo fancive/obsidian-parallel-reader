@@ -1,6 +1,8 @@
 'use strict';
 
-export function cardToMarkdown(card) {
+import type { RawCard } from './types';
+
+export function cardToMarkdown(card: RawCard): string {
   const parts = [`## ${card.title}`];
   if (card.anchor) {
     const q = card.anchor.replace(/\s+/g, ' ').trim();
@@ -13,7 +15,7 @@ export function cardToMarkdown(card) {
   return parts.join('\n\n');
 }
 
-export function cardToPlain(card) {
+export function cardToPlain(card: RawCard): string {
   return [
     card.title,
     card.gist || '',
@@ -21,7 +23,7 @@ export function cardToPlain(card) {
   ].filter(Boolean).join('\n');
 }
 
-export function cardsToMarkdown(title, cards) {
+export function cardsToMarkdown(title: string, cards: RawCard[]): string {
   const parts = [`# ${title || '对照笔记'}`];
   for (const card of cards || []) {
     parts.push(cardToMarkdown(card));

@@ -1,5 +1,6 @@
 'use strict';
 
+import type { PluginSettings, RawCard } from './types';
 import {
   API_FORMATS,
   getApiAuthType,
@@ -180,13 +181,13 @@ function textFromOpenAiResponses(json) {
   return parts.join('');
 }
 
-export function tokenLimitFieldForOpenAiChat(settings) {
+export function tokenLimitFieldForOpenAiChat(settings: PluginSettings): string {
   const preset = getApiPreset(settings);
-  const format = API_FORMATS[getApiFormat(settings)] || {};
-  return preset.tokenLimitField || format.tokenLimitField || 'max_tokens';
+  const format = API_FORMATS[getApiFormat(settings)];
+  return preset.tokenLimitField || (format && format.tokenLimitField) || 'max_tokens';
 }
 
-export function buildAnthropicMessagesBody(system, user, settings, options?) {
+export function buildAnthropicMessagesBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -201,7 +202,7 @@ export function buildAnthropicMessagesBody(system, user, settings, options?) {
   return body;
 }
 
-export function buildOpenAiChatBody(system, user, settings, options?) {
+export function buildOpenAiChatBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -217,7 +218,7 @@ export function buildOpenAiChatBody(system, user, settings, options?) {
   return body;
 }
 
-export function buildOpenAiResponsesBody(system, user, settings, options?) {
+export function buildOpenAiResponsesBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -231,7 +232,7 @@ export function buildOpenAiResponsesBody(system, user, settings, options?) {
   return body;
 }
 
-export function buildGeminiBody(system, user, settings, options?) {
+export function buildGeminiBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
   const structured = !options || options.structured !== false;
   const generationConfig: any = {
     temperature: 0,
@@ -328,7 +329,8 @@ async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, sett
   return parseCardsJson(text, settings);
 }
 
-export async function summarizeViaApi(requestUrlImpl, system, user, settings) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
+export async function summarizeViaApi(requestUrlImpl: any, system: string, user: string, settings: PluginSettings): Promise<RawCard[]> {
   const format = getApiFormat(settings);
   switch (format) {
     case 'openai-chat':
@@ -343,7 +345,8 @@ export async function summarizeViaApi(requestUrlImpl, system, user, settings) {
   }
 }
 
-export async function testApiBackend(requestUrlImpl, settings) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
+export async function testApiBackend(requestUrlImpl: any, settings: PluginSettings): Promise<string> {
   await summarizeViaApi(
     requestUrlImpl,
     '只输出 JSON：{"cards":[]}',

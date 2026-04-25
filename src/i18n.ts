@@ -1,6 +1,8 @@
 'use strict';
 
-export const STRINGS = {
+import type { PluginSettings } from './types';
+
+export const STRINGS: Record<string, Record<string, string>> = {
   zh: {
     appTitle: '对照阅读笔记',
     settingsTitle: 'Parallel Reader 设置',
@@ -283,7 +285,7 @@ export const STRINGS = {
   },
 };
 
-export function resolveUiLanguage(settings) {
+export function resolveUiLanguage(settings: Pick<PluginSettings, 'uiLanguage'> | null): string {
   const configured = settings && settings.uiLanguage;
   if (configured === 'zh' || configured === 'en') return configured;
   const nav = typeof navigator !== 'undefined' ? navigator : null;
@@ -291,7 +293,7 @@ export function resolveUiLanguage(settings) {
   return language.startsWith('zh') ? 'zh' : 'en';
 }
 
-export function translate(settings, key, vars?) {
+export function translate(settings: Pick<PluginSettings, 'uiLanguage'> | null, key: string, vars?: Record<string, string | number>): string {
   const lang = resolveUiLanguage(settings);
   const table = STRINGS[lang] || STRINGS.en;
   const fallback = STRINGS.en[key] || STRINGS.zh[key] || key;

@@ -1,18 +1,19 @@
 'use strict';
 
+import type { PluginSettings, PromptPair } from './types';
 import {
   DEFAULT_SETTINGS,
   MAX_DOC_CHARS,
   PROMPT_LANGUAGES,
 } from './settings';
 
-export function promptLanguageInstruction(language) {
+export function promptLanguageInstruction(language: string): string {
   if (language === 'en') return 'Write title, gist, and bullets in English.';
   if (language === 'auto') return 'Write title, gist, and bullets in the main language of the source document.';
   return '用中文输出 title、gist 和 bullets。';
 }
 
-export function promptSchemaExample(language) {
+export function promptSchemaExample(language: string): string {
   if (language === 'en') {
     return `{"cards":[
   {"title":"U-shaped gains","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI productivity gains form a U shape, with both ends benefiting most","bullets":["Top-paid software managers benefit by accelerating existing work","Low-paid workers use AI to create new side income","Middle-layer specialists gain less because prompt precision is hard to trust","Average reported benefit is 5.1/7, with 42% describing gains as unclear"]}
@@ -23,13 +24,13 @@ export function promptSchemaExample(language) {
 ]}`;
 }
 
-export function renderPromptTemplate(template, vars) {
+export function renderPromptTemplate(template: string, vars: Record<string, string | number>): string {
   return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
     return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match;
   });
 }
 
-function defaultSystemPrompt(language, minCards, maxCards, languageInstruction, schema, example) {
+function defaultSystemPrompt(language: string, minCards: number, maxCards: number, languageInstruction: string, schema: string, example: string): string {
   if (language === 'en') {
     return `You are a long-form reading summary assistant. After reading the full document, split it into ${minCards}-${maxCards} natural topic units. They do not need to match markdown headings; use a complete argument or topic as the unit, merging short sections and splitting long ones when needed.
 
@@ -87,7 +88,7 @@ ${schema}
 ${example}`;
 }
 
-function systemPromptContract(language, minCards, maxCards, languageInstruction, schema) {
+function systemPromptContract(language: string, minCards: number, maxCards: number, languageInstruction: string, schema: string): string {
   if (language === 'en') {
     return `Non-overridable output contract:
 - Must output ${minCards}-${maxCards} cards.
@@ -104,7 +105,7 @@ function systemPromptContract(language, minCards, maxCards, languageInstruction,
 - JSON shape: ${schema}`;
 }
 
-export function buildPrompts(content, settings) {
+export function buildPrompts(content: string, settings: PluginSettings): PromptPair {
   const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
   const promptLanguage = PROMPT_LANGUAGES[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
   const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);

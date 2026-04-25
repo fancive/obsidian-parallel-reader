@@ -1,10 +1,12 @@
 'use strict';
 
+import type { GenerationPhase, ErrorKind } from './types';
+
 export class GenerationJobAlreadyRunningError extends Error {
   code: string;
   key: string;
 
-  constructor(key) {
+  constructor(key: string) {
     super('该笔记正在生成对照笔记');
     this.name = 'GenerationJobAlreadyRunningError';
     this.code = 'already-running';
@@ -16,7 +18,7 @@ export class GenerationJobCancelledError extends Error {
   code: string;
   key: string;
 
-  constructor(key) {
+  constructor(key: string) {
     super('生成已取消');
     this.name = 'GenerationJobCancelledError';
     this.code = 'cancelled';
@@ -26,13 +28,13 @@ export class GenerationJobCancelledError extends Error {
 
 export class GenerationJob {
   key: string;
-  phase: string;
+  phase: GenerationPhase;
   cancelled: boolean;
   startedAt: string;
   updatedAt: string;
   private _cancelHandlers: Array<() => void>;
 
-  constructor(key) {
+  constructor(key: string) {
     this.key = key;
     this.phase = 'queued';
     this.cancelled = false;
@@ -41,12 +43,12 @@ export class GenerationJob {
     this._cancelHandlers = [];
   }
 
-  setPhase(phase) {
+  setPhase(phase: GenerationPhase) {
     this.phase = phase;
     this.updatedAt = new Date().toISOString();
   }
 
-  onCancel(handler) {
+  onCancel(handler: () => void) {
     if (typeof handler !== 'function') return;
     if (this.cancelled) {
       handler();
@@ -55,7 +57,7 @@ export class GenerationJob {
     this._cancelHandlers.push(handler);
   }
 
-  cancel() {
+  cancel(): boolean {
     if (this.cancelled) return false;
     this.cancelled = true;
     this.setPhase('cancelled');
@@ -65,7 +67,7 @@ export class GenerationJob {
     return true;
   }
 
-  throwIfCancelled() {
+  throwIfCancelled(): void {
     if (this.cancelled) throw new GenerationJobCancelledError(this.key);
   }
 }
@@ -77,15 +79,15 @@ export class GenerationJobManager {
     this.jobs = new Map();
   }
 
-  get(key) {
+  get(key: string): GenerationJob | null {
     return this.jobs.get(key) || null;
   }
 
-  isRunning(key) {
+  isRunning(key: string): boolean {
     return this.jobs.has(key);
   }
 
-  async start(key, runner) {
+  async start<T>(key: string, runner: (job: GenerationJob) => Promise<T>): Promise<T> {
     if (this.jobs.has(key)) throw new GenerationJobAlreadyRunningError(key);
     const job = new GenerationJob(key);
     this.jobs.set(key, job);
@@ -104,16 +106,18 @@ export class GenerationJobManager {
     }
   }
 
-  cancel(key) {
+  cancel(key: string): boolean {
     const job = this.jobs.get(key);
     if (!job) return false;
     return job.cancel();
   }
 }
 
-export function classifyGenerationError(error) {
-  if (error instanceof GenerationJobCancelledError || error?.code === 'cancelled') return 'cancelled';
-  const message = String(error && error.message ? error.message : error);
+export function classifyGenerationError(error: unknown): ErrorKind {
+  if (error instanceof GenerationJobCancelledError) return 'cancelled';
+  const errObj = error as { code?: string; message?: string } | null;
+  if (errObj?.code === 'cancelled') return 'cancelled';
+  const message = String(errObj?.message || error);
   if (/api key|unauthorized|401|403|认证|权限/i.test(message)) return 'auth';
   if (/timeout|超时|timed out/i.test(message)) return 'timeout';
   if (/429|rate limit|too many requests/i.test(message)) return 'rate-limit';

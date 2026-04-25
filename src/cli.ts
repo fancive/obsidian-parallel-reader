@@ -4,11 +4,12 @@ import { spawn } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
-import { GenerationJobCancelledError } from './generation-job-manager';
+import type { PluginSettings, RawCard } from './types';
+import { GenerationJob, GenerationJobCancelledError } from './generation-job-manager';
 import { parseCardsJson } from './schema';
 
 /* Obsidian launched from GUI doesn't inherit shell PATH. */
-export function resolveCliPath(name, override) {
+export function resolveCliPath(name: string, override: string): string {
   if (override && override.trim()) return override.trim();
   const home = os.homedir();
   const candidates = [
@@ -32,7 +33,7 @@ export function resolveCliPath(name, override) {
   return name;
 }
 
-export function runCli(cmd, args, stdinText, timeoutMs, job?) {
+export function runCli(cmd: string, args: string[], stdinText: string, timeoutMs: number, job?: GenerationJob): Promise<{ stdout: string; stderr: string }> {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child;
     let settled = false;
@@ -106,7 +107,7 @@ export function runCli(cmd, args, stdinText, timeoutMs, job?) {
   });
 }
 
-export async function summarizeViaClaudeCode(system, user, settings, job) {
+export async function summarizeViaClaudeCode(system: string, user: string, settings: PluginSettings, job?: GenerationJob): Promise<RawCard[]> {
   const cmd = resolveCliPath('claude', settings.cliPath);
   const args = [
     '-p',
@@ -129,7 +130,7 @@ export async function summarizeViaClaudeCode(system, user, settings, job) {
   return parseCardsJson(resultText, settings);
 }
 
-export async function summarizeViaCodex(system, user, settings, job) {
+export async function summarizeViaCodex(system: string, user: string, settings: PluginSettings, job?: GenerationJob): Promise<RawCard[]> {
   const cmd = resolveCliPath('codex', settings.cliPath);
   const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
   const args = ['exec', '--skip-git-repo-check', '-'];

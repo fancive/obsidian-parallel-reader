@@ -1,5 +1,6 @@
 'use strict';
 import { Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal, MarkdownRenderer, requestUrl } from 'obsidian';
+import type { PluginSettings, RawCard, ResolvedCard, CardPatch, CacheEntry } from './src/types';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
@@ -116,8 +117,8 @@ function cancellationNoticeKey(settings, job) {
 
 class CardEditModal extends Modal {
   plugin: ParallelReaderPlugin;
-  card: any;
-  onSave: (patch: any) => void | Promise<void>;
+  card: ResolvedCard;
+  onSave: (patch: CardPatch) => void | Promise<void>;
 
   constructor(app, plugin, card, onSave) {
     super(app);
@@ -169,7 +170,7 @@ class CardEditModal extends Modal {
 
 class ParallelReaderView extends ItemView {
   plugin: ParallelReaderPlugin;
-  sections: any[];
+  sections: ResolvedCard[];
   sourceFile: TFile | null;
   cards: HTMLElement[];
   activeIdx: number;
@@ -505,8 +506,8 @@ class ParallelReaderView extends ItemView {
 /* ---------- Plugin ---------- */
 
 class ParallelReaderPlugin extends Plugin {
-  settings: any;
-  cache: Record<string, any>;
+  settings: PluginSettings;
+  cache: Record<string, CacheEntry>;
   jobs: GenerationJobManager;
   _scrollDispose: (() => void) | null;
   _settingsSaveTimer: ReturnType<typeof setTimeout> | null;

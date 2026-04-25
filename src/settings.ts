@@ -1,6 +1,7 @@
 'use strict';
 
 import crypto from 'crypto';
+import type { PluginSettings, ApiProviderPreset, ApiFormat, CacheEntry } from './types';
 import { translate } from './i18n';
 
 export const MAX_DOC_CHARS = 20000;
@@ -18,7 +19,7 @@ export const UI_LANGUAGES = {
   en: 'English',
 };
 
-export const DEFAULT_SETTINGS = {
+export const DEFAULT_SETTINGS: PluginSettings = {
   uiLanguage: 'auto',
   backend: 'claude-code',
   cliPath: '',
@@ -41,7 +42,7 @@ export const DEFAULT_SETTINGS = {
   cliTimeoutMs: 120000,
 };
 
-export const API_FORMATS = {
+export const API_FORMATS: Record<string, ApiFormat> = {
   'anthropic-messages': {
     label: 'Anthropic Messages',
     defaultBaseUrl: 'https://api.anthropic.com/v1',
@@ -74,7 +75,7 @@ export const API_AUTH_TYPES = {
   none: 'None',
 };
 
-export const API_PROVIDER_PRESETS = {
+export const API_PROVIDER_PRESETS: Record<string, ApiProviderPreset> = {
   anthropic: {
     label: 'Anthropic',
     format: 'anthropic-messages',
@@ -223,11 +224,11 @@ export const API_PROVIDER_PRESETS = {
   },
 };
 
-export function hashContent(text) {
+export function hashContent(text: string): string {
   return crypto.createHash('sha1').update(text, 'utf8').digest('hex');
 }
 
-export function stableStringify(value) {
+export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
   if (value && typeof value === 'object') {
     return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
@@ -235,21 +236,21 @@ export function stableStringify(value) {
   return JSON.stringify(value);
 }
 
-export function isApiBackend(backend) {
+export function isApiBackend(backend: string): boolean {
   return backend === 'api' || backend === 'anthropic-api';
 }
 
-export function getApiPreset(settings) {
+export function getApiPreset(settings: PluginSettings): ApiProviderPreset {
   return API_PROVIDER_PRESETS[settings.apiProvider] || API_PROVIDER_PRESETS.anthropic;
 }
 
-export function getApiFormat(settings) {
+export function getApiFormat(settings: PluginSettings): string {
   const preset = getApiPreset(settings);
   const format = (settings.apiFormat || preset.format || '').trim();
   return API_FORMATS[format] ? format : preset.format;
 }
 
-export function getApiBaseUrl(settings) {
+export function getApiBaseUrl(settings: PluginSettings): string {
   const format = getApiFormat(settings);
   const preset = getApiPreset(settings);
   const explicit = (settings.apiBaseUrl || '').trim();
@@ -264,7 +265,7 @@ export function getApiBaseUrl(settings) {
   return base.replace(/\/+$/, '');
 }
 
-export function getApiAuthType(settings) {
+export function getApiAuthType(settings: PluginSettings): string {
   const configured = (settings.apiAuthType || 'auto').trim();
   if (configured && configured !== 'auto') return configured;
   const preset = getApiPreset(settings);
@@ -272,7 +273,7 @@ export function getApiAuthType(settings) {
   return preset.authType || API_FORMATS[format].defaultAuthType || 'bearer';
 }
 
-export function getApiKey(settings) {
+export function getApiKey(settings: PluginSettings): string {
   const direct = (settings.apiKey || '').trim();
   if (direct) return direct;
   const envVar = (settings.apiKeyEnvVar || getApiPreset(settings).envVar || '').trim();
@@ -282,7 +283,7 @@ export function getApiKey(settings) {
   return '';
 }
 
-export function modelForApi(settings) {
+export function modelForApi(settings: PluginSettings): string {
   const raw = (settings.model || '').trim();
   if (!raw) {
     throw new Error(translate(settings, 'errorModelMissing'));
@@ -301,7 +302,7 @@ export function modelForApi(settings) {
   return raw;
 }
 
-export function applyApiProviderPreset(settings, providerId) {
+export function applyApiProviderPreset(settings: PluginSettings, providerId: string) {
   const previousPreset = getApiPreset(settings);
   const preset = API_PROVIDER_PRESETS[providerId] || API_PROVIDER_PRESETS.anthropic;
   const previousModel = (settings.model || '').trim();
@@ -318,7 +319,7 @@ export function applyApiProviderPreset(settings, providerId) {
   if (shouldSwapModel) settings.model = preset.model || '';
 }
 
-export function normalizeSettings(settings) {
+export function normalizeSettings(settings: PluginSettings): PluginSettings {
   if (!UI_LANGUAGES[settings.uiLanguage]) settings.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
   if (!settings.apiProvider || !API_PROVIDER_PRESETS[settings.apiProvider]) {
     settings.apiProvider = 'anthropic';
@@ -346,25 +347,25 @@ export function normalizeSettings(settings) {
   return settings;
 }
 
-export function normalizeCardCount(value, fallback) {
+export function normalizeCardCount(value: unknown, fallback: number): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(30, Math.max(1, n));
 }
 
-export function normalizeMaxCacheEntries(value) {
+export function normalizeMaxCacheEntries(value: unknown): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_MAX_CACHE_ENTRIES;
   return n;
 }
 
-function cacheEntryTime(entry) {
+function cacheEntryTime(entry: CacheEntry): number {
   const value = entry && (entry.lastAccessedAt || entry.generatedAt || entry.updatedAt);
   const timestamp = Date.parse(value || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-export function pruneCacheEntries(cache, maxEntries) {
+export function pruneCacheEntries(cache: Record<string, CacheEntry>, maxEntries: number): string[] {
   if (!cache || typeof cache !== 'object') return [];
   const max = normalizeMaxCacheEntries(maxEntries);
   const entries = Object.entries(cache);
@@ -382,7 +383,7 @@ export function pruneCacheEntries(cache, maxEntries) {
   return removed;
 }
 
-export function generationFingerprint(settings) {
+export function generationFingerprint(settings: PluginSettings): string {
   const normalized = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, settings || {}));
   const apiBackend = isApiBackend(normalized.backend);
   const preset = getApiPreset(normalized);
@@ -410,7 +411,7 @@ export function generationFingerprint(settings) {
   }));
 }
 
-export function cacheEntryMatches(entry, content, settings) {
+export function cacheEntryMatches(entry: CacheEntry | null, content: string, settings: PluginSettings): boolean {
   return !!entry &&
     entry.schemaVersion === CACHE_SCHEMA_VERSION &&
     entry.contentHash === hashContent(content) &&
