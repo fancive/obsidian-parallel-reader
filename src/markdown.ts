@@ -10,17 +10,13 @@ export function cardToMarkdown(card: RawCard): string {
   }
   if (card.gist) parts.push(card.gist);
   if (card.bullets && card.bullets.length > 0) {
-    parts.push(card.bullets.map(b => `- ${b}`).join('\n'));
+    parts.push(card.bullets.map((b) => `- ${b}`).join('\n'));
   }
   return parts.join('\n\n');
 }
 
 export function cardToPlain(card: RawCard): string {
-  return [
-    card.title,
-    card.gist || '',
-    ...(card.bullets || []).map(b => '• ' + b),
-  ].filter(Boolean).join('\n');
+  return [card.title, card.gist || '', ...(card.bullets || []).map((b) => '• ' + b)].filter(Boolean).join('\n');
 }
 
 export function cardsToMarkdown(title: string, cards: RawCard[]): string {

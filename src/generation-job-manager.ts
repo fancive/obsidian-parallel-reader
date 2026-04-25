@@ -1,6 +1,6 @@
 'use strict';
 
-import type { GenerationPhase, ErrorKind } from './types';
+import type { ErrorKind, GenerationPhase } from './types';
 
 export class GenerationJobAlreadyRunningError extends Error {
   code: string;
@@ -62,7 +62,9 @@ export class GenerationJob {
     this.cancelled = true;
     this.setPhase('cancelled');
     for (const handler of this._cancelHandlers.splice(0)) {
-      try { handler(); } catch (_) {}
+      try {
+        handler();
+      } catch (_) {}
     }
     return true;
   }

@@ -117,7 +117,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingHeadersDesc: '可选。支持 JSON 对象或每行 `Header: value`，用于 Cloudflare AI Gateway 等代理',
     settingMaxTokensName: '最大输出 tokens',
     settingModelName: 'Model',
-    settingModelDescApi: 'API 调用的模型 ID；支持 OpenClaw 风格 provider/model，若 provider 前缀匹配当前 preset 会自动剥离',
+    settingModelDescApi:
+      'API 调用的模型 ID；支持 OpenClaw 风格 provider/model，若 provider 前缀匹配当前 preset 会自动剥离',
     settingModelDescCli: 'Claude Code 下会传 --model；Codex 下通常忽略（用 Codex 默认配置）',
     settingMaxInputName: '最大输入字符数',
     settingMaxInputDesc: '超过该长度会截断后再发送给模型；长上下文模型可适当调大',
@@ -191,14 +192,16 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cacheClearedAll: 'Cleared {count} cache entries',
     noCancelableJob: 'No cancellable generation job',
     cancelRequested: 'Cancel requested',
-    cancelRequestedApiInFlight: 'Cancel requested. The in-flight API request cannot be aborted immediately; its result will be ignored.',
+    cancelRequestedApiInFlight:
+      'Cancel requested. The in-flight API request cannot be aborted immediately; its result will be ignored.',
     fileMenuGenerate: 'Generate parallel notes',
     fileMenuRegen: 'Regenerate parallel notes',
     fileMenuClear: 'Clear parallel-note cache',
     noExportContent: 'No parallel notes to export',
     noCopyContent: 'No parallel notes to copy',
     noActiveCard: 'No active summary card to jump',
-    confirmRegenerateEditedCards: 'These parallel-reader cards were edited manually. Regenerating will overwrite those edits. Continue?',
+    confirmRegenerateEditedCards:
+      'These parallel-reader cards were edited manually. Regenerating will overwrite those edits. Continue?',
     regenerateCancelled: 'Regeneration cancelled',
     cardDeleted: 'Deleted this card',
     cardSaved: 'Saved this card',
@@ -235,14 +238,17 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingUiLanguageName: 'UI language',
     settingUiLanguageDesc: 'Controls plugin UI, commands, and notices. Auto follows Obsidian/system language.',
     settingBackendName: 'Backend',
-    settingBackendDesc: 'Backend for generating bullets: CLI reuses local login; API supports OpenAI, Anthropic, Gemini, and compatible proxies.',
+    settingBackendDesc:
+      'Backend for generating bullets: CLI reuses local login; API supports OpenAI, Anthropic, Gemini, and compatible proxies.',
     settingCliPathName: 'CLI path (optional)',
-    settingCliPathDesc: 'Leave blank to auto-detect common paths. Obsidian launched from the GUI may not inherit shell PATH.',
+    settingCliPathDesc:
+      'Leave blank to auto-detect common paths. Obsidian launched from the GUI may not inherit shell PATH.',
     settingCliPathPlaceholder: 'Example: /Users/you/bin/codex',
     settingCliTimeoutName: 'CLI timeout (ms)',
     apiProviderHeader: 'API Provider',
     settingProviderPresetName: 'Provider preset',
-    settingProviderPresetDesc: 'OpenClaw-style provider/model setup: presets define protocol, base URL, and auth defaults.',
+    settingProviderPresetDesc:
+      'OpenClaw-style provider/model setup: presets define protocol, base URL, and auth defaults.',
     settingApiFormatName: 'API format',
     settingApiFormatDesc: 'Wire protocol for the provider. OpenAI-compatible proxies usually use Chat Completions.',
     settingBaseUrlName: 'Base URL',
@@ -257,7 +263,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingHeadersDesc: 'Optional. JSON object or one `Header: value` per line, useful for Cloudflare AI Gateway.',
     settingMaxTokensName: 'Max output tokens',
     settingModelName: 'Model',
-    settingModelDescApi: 'Model ID for API calls. Supports OpenClaw-style provider/model; matching provider prefixes are stripped.',
+    settingModelDescApi:
+      'Model ID for API calls. Supports OpenClaw-style provider/model; matching provider prefixes are stripped.',
     settingModelDescCli: 'Passed as --model for Claude Code. Usually ignored by Codex, which uses its default config.',
     settingMaxInputName: 'Max input characters',
     settingMaxInputDesc: 'Longer notes are truncated before sending to the model. Raise this for long-context models.',
@@ -277,7 +284,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingExportFolderDesc: 'Parallel-note output location, relative to the Vault root.',
     cacheHeader: 'Cache',
     settingMaxCacheName: 'Max cached notes',
-    settingMaxCacheDesc: 'Prunes least-recently accessed note caches above this limit. Cache is stored in plugin cache.json.',
+    settingMaxCacheDesc:
+      'Prunes least-recently accessed note caches above this limit. Cache is stored in plugin cache.json.',
     cachePruned: 'Pruned {count} old cache entries',
     cachedNotesName: 'Cached notes: {count}',
     cachedNotesDesc: 'Cache is invalidated by source SHA1 and generation settings fingerprint.',
@@ -286,19 +294,23 @@ export const STRINGS: Record<string, Record<string, string>> = {
 };
 
 export function resolveUiLanguage(settings: Pick<PluginSettings, 'uiLanguage'> | null): string {
-  const configured = settings && settings.uiLanguage;
+  const configured = settings?.uiLanguage;
   if (configured === 'zh' || configured === 'en') return configured;
   const nav = typeof navigator !== 'undefined' ? navigator : null;
   const language = String(nav?.language || '').toLowerCase();
   return language.startsWith('zh') ? 'zh' : 'en';
 }
 
-export function translate(settings: Pick<PluginSettings, 'uiLanguage'> | null, key: string, vars?: Record<string, string | number>): string {
+export function translate(
+  settings: Pick<PluginSettings, 'uiLanguage'> | null,
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
   const lang = resolveUiLanguage(settings);
   const table = STRINGS[lang] || STRINGS.en;
   const fallback = STRINGS.en[key] || STRINGS.zh[key] || key;
   const template = table[key] || fallback;
   return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
-    return vars && Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match;
+    return vars && Object.hasOwn(vars, name) ? String(vars[name]) : match;
   });
 }

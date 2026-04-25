@@ -1,8 +1,8 @@
 'use strict';
 
 import crypto from 'crypto';
-import type { PluginSettings, ApiProviderPreset, ApiFormat, CacheEntry } from './types';
 import { translate } from './i18n';
+import type { ApiFormat, ApiProviderPreset, CacheEntry, PluginSettings } from './types';
 
 export const MAX_DOC_CHARS = 20000;
 export const PROMPT_VERSION = 2;
@@ -231,7 +231,14 @@ export function hashContent(text: string): string {
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
   if (value && typeof value === 'object') {
-    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+    return (
+      '{' +
+      Object.keys(value)
+        .sort()
+        .map((k) => JSON.stringify(k) + ':' + stableStringify(value[k]))
+        .join(',') +
+      '}'
+    );
   }
   return JSON.stringify(value);
 }
@@ -277,7 +284,7 @@ export function getApiKey(settings: PluginSettings): string {
   const direct = (settings.apiKey || '').trim();
   if (direct) return direct;
   const envVar = (settings.apiKeyEnvVar || getApiPreset(settings).envVar || '').trim();
-  if (envVar && process.env && process.env[envVar]) {
+  if (envVar && process.env?.[envVar]) {
     return String(process.env[envVar]).trim();
   }
   return '';
@@ -289,9 +296,7 @@ export function modelForApi(settings: PluginSettings): string {
     throw new Error(translate(settings, 'errorModelMissing'));
   }
   const preset = getApiPreset(settings);
-  const prefixes = [settings.apiProvider, preset.modelPrefix]
-    .map(p => (p || '').trim())
-    .filter(Boolean);
+  const prefixes = [settings.apiProvider, preset.modelPrefix].map((p) => (p || '').trim()).filter(Boolean);
   const lowerRaw = raw.toLowerCase();
   for (const provider of prefixes) {
     const normalized = provider.toLowerCase();
@@ -389,31 +394,35 @@ export function generationFingerprint(settings: PluginSettings): string {
   const preset = getApiPreset(normalized);
   const format = getApiFormat(normalized);
   const apiBaseUrl = apiBackend
-    ? ((normalized.apiBaseUrl || preset.baseUrl || API_FORMATS[format]?.defaultBaseUrl || '').trim().replace(/\/+$/, ''))
+    ? (normalized.apiBaseUrl || preset.baseUrl || API_FORMATS[format]?.defaultBaseUrl || '').trim().replace(/\/+$/, '')
     : '';
-  return hashContent(stableStringify({
-    cacheSchemaVersion: CACHE_SCHEMA_VERSION,
-    promptVersion: PROMPT_VERSION,
-    maxDocChars: Number(normalized.maxDocChars) || DEFAULT_SETTINGS.maxDocChars,
-    promptLanguage: normalized.promptLanguage,
-    minCards: normalized.minCards,
-    maxCards: normalized.maxCards,
-    customSystemPromptHash: hashContent(normalized.customSystemPrompt || ''),
-    backend: normalized.backend,
-    model: normalized.model,
-    apiProvider: apiBackend ? normalized.apiProvider : '',
-    apiFormat: apiBackend ? format : '',
-    apiBaseUrl,
-    apiAuthType: apiBackend ? getApiAuthType(normalized) : '',
-    apiHeadersHash: apiBackend ? hashContent(normalized.apiHeaders || '') : '',
-    apiMaxTokens: apiBackend ? Number(normalized.apiMaxTokens) || DEFAULT_SETTINGS.apiMaxTokens : 0,
-    structuredOutputVersion: 1,
-  }));
+  return hashContent(
+    stableStringify({
+      cacheSchemaVersion: CACHE_SCHEMA_VERSION,
+      promptVersion: PROMPT_VERSION,
+      maxDocChars: Number(normalized.maxDocChars) || DEFAULT_SETTINGS.maxDocChars,
+      promptLanguage: normalized.promptLanguage,
+      minCards: normalized.minCards,
+      maxCards: normalized.maxCards,
+      customSystemPromptHash: hashContent(normalized.customSystemPrompt || ''),
+      backend: normalized.backend,
+      model: normalized.model,
+      apiProvider: apiBackend ? normalized.apiProvider : '',
+      apiFormat: apiBackend ? format : '',
+      apiBaseUrl,
+      apiAuthType: apiBackend ? getApiAuthType(normalized) : '',
+      apiHeadersHash: apiBackend ? hashContent(normalized.apiHeaders || '') : '',
+      apiMaxTokens: apiBackend ? Number(normalized.apiMaxTokens) || DEFAULT_SETTINGS.apiMaxTokens : 0,
+      structuredOutputVersion: 1,
+    }),
+  );
 }
 
 export function cacheEntryMatches(entry: CacheEntry | null, content: string, settings: PluginSettings): boolean {
-  return !!entry &&
+  return (
+    !!entry &&
     entry.schemaVersion === CACHE_SCHEMA_VERSION &&
     entry.contentHash === hashContent(content) &&
-    entry.settingsHash === generationFingerprint(settings);
+    entry.settingsHash === generationFingerprint(settings)
+  );
 }

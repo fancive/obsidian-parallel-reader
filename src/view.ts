@@ -1,14 +1,13 @@
 'use strict';
 
-import { ItemView, Notice, TFile, Menu, MarkdownRenderer } from 'obsidian';
-import type { ResolvedCard, CardPatch, PluginHost } from './types';
+import { ItemView, MarkdownRenderer, Menu, Notice, TFile } from 'obsidian';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
-import { cardToMarkdown, cardToPlain, cardsToMarkdown } from './markdown';
-import { activeSectionLine, nextCardIndex } from './navigation';
-import { normalizeVaultPath } from './vault';
-import { ensureVaultFolder } from './vault';
-import { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
+import { cardsToMarkdown, cardToMarkdown, cardToPlain } from './markdown';
 import { CardEditModal } from './modal';
+import { activeSectionLine, nextCardIndex } from './navigation';
+import type { CardPatch, PluginHost, ResolvedCard } from './types';
+import { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
+import { ensureVaultFolder, normalizeVaultPath } from './vault';
 
 export const VIEW_TYPE_PARALLEL = 'parallel-reader-view';
 
@@ -33,16 +32,22 @@ export class ParallelReaderView extends ItemView {
     this.errorMessage = '';
   }
 
-  getViewType() { return VIEW_TYPE_PARALLEL; }
-  getDisplayText() { return this.plugin.t('displayName'); }
-  getIcon() { return 'book-open'; }
+  getViewType() {
+    return VIEW_TYPE_PARALLEL;
+  }
+  getDisplayText() {
+    return this.plugin.t('displayName');
+  }
+  getIcon() {
+    return 'book-open';
+  }
 
   onOpen() {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass('parallel-reader-container');
     container.setAttr('tabindex', '0');
-    container.addEventListener('keydown', e => this.handleKeydown(e as KeyboardEvent));
+    container.addEventListener('keydown', (e) => this.handleKeydown(e as KeyboardEvent));
     this.renderEmpty();
     this.focusSummaryPane();
     return Promise.resolve();
@@ -124,9 +129,13 @@ export class ParallelReaderView extends ItemView {
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     if (this.sourceFile) {
       if (this.plugin.isGeneratingFile(this.sourceFile)) {
-        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => this.plugin.cancelGenerationForFile(this.sourceFile));
+        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () =>
+          this.plugin.cancelGenerationForFile(this.sourceFile),
+        );
       } else {
-        addIconButton(actions, 'refresh-cw', this.plugin.t('actionRegenerate'), () => this.plugin.runForFile(this.sourceFile, true));
+        addIconButton(actions, 'refresh-cw', this.plugin.t('actionRegenerate'), () =>
+          this.plugin.runForFile(this.sourceFile, true),
+        );
       }
       addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => this.plugin.copyCurrentViewMarkdown());
       addIconButton(actions, 'download', this.plugin.t('actionExport'), () => this.exportToVault());
@@ -140,7 +149,7 @@ export class ParallelReaderView extends ItemView {
         'refresh-cw',
         this.plugin.t('actionRegenerate'),
         () => this.plugin.runForFile(this.sourceFile, true),
-        'parallel-reader-stale-button'
+        'parallel-reader-stale-button',
       );
     }
 
@@ -161,7 +170,7 @@ export class ParallelReaderView extends ItemView {
         'refresh-cw',
         this.plugin.t('actionRegenerate'),
         () => this.plugin.runForFile(this.sourceFile, true),
-        'parallel-reader-text-button'
+        'parallel-reader-text-button',
       );
       return;
     }
@@ -190,7 +199,7 @@ export class ParallelReaderView extends ItemView {
       const bs = s.bullets || [];
       if (bs.length > 0) {
         const bulletsEl = card.createEl('div', { cls: 'parallel-reader-bullets-md' });
-        const md = bs.map(b => `- ${b}`).join('\n');
+        const md = bs.map((b) => `- ${b}`).join('\n');
         MarkdownRenderer.render(this.app, md, bulletsEl, sourcePath, this).catch(() => {
           bulletsEl.setText(md);
         });
@@ -209,24 +218,48 @@ export class ParallelReaderView extends ItemView {
       card.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const menu = new Menu();
-        menu.addItem(it => it.setTitle(this.plugin.t('menuCopyMarkdown')).setIcon('copy')
-          .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))));
-        menu.addItem(it => it.setTitle(this.plugin.t('menuCopyPlain')).setIcon('clipboard-copy')
-          .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))));
+        menu.addItem((it) =>
+          it
+            .setTitle(this.plugin.t('menuCopyMarkdown'))
+            .setIcon('copy')
+            .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
+        );
+        menu.addItem((it) =>
+          it
+            .setTitle(this.plugin.t('menuCopyPlain'))
+            .setIcon('clipboard-copy')
+            .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
+        );
         if (s.anchor) {
-          menu.addItem(it => it.setTitle(this.plugin.t('menuCopyAnchor')).setIcon('quote-glyph')
-            .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))));
+          menu.addItem((it) =>
+            it
+              .setTitle(this.plugin.t('menuCopyAnchor'))
+              .setIcon('quote-glyph')
+              .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
+          );
         }
         menu.addSeparator();
         if (s.startLine >= 0) {
-          menu.addItem(it => it.setTitle(this.plugin.t('menuJumpSource')).setIcon('arrow-right')
-            .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)));
+          menu.addItem((it) =>
+            it
+              .setTitle(this.plugin.t('menuJumpSource'))
+              .setIcon('arrow-right')
+              .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)),
+          );
         }
         menu.addSeparator();
-        menu.addItem(it => it.setTitle(this.plugin.t('menuEditCard')).setIcon('pencil')
-          .onClick(() => this.openEditCardModal(i)));
-        menu.addItem(it => it.setTitle(this.plugin.t('menuDeleteCard')).setIcon('trash')
-          .onClick(() => this.deleteCard(i)));
+        menu.addItem((it) =>
+          it
+            .setTitle(this.plugin.t('menuEditCard'))
+            .setIcon('pencil')
+            .onClick(() => this.openEditCardModal(i)),
+        );
+        menu.addItem((it) =>
+          it
+            .setTitle(this.plugin.t('menuDeleteCard'))
+            .setIcon('trash')
+            .onClick(() => this.deleteCard(i)),
+        );
         menu.showAtMouseEvent(e);
       });
 
@@ -295,7 +328,9 @@ export class ParallelReaderView extends ItemView {
 
   openEditCardModal(index) {
     if (!this.sourceFile || !this.sections[index]) return false;
-    new CardEditModal(this.app, this.plugin, this.sections[index], async patch => { await this.updateCard(index, patch); }).open();
+    new CardEditModal(this.app, this.plugin, this.sections[index], async (patch) => {
+      await this.updateCard(index, patch);
+    }).open();
     return true;
   }
 

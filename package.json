@@ -7,9 +7,12 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check main.ts src/",
+    "lint:fix": "biome check --write main.ts src/",
     "test": "npm run build && npm run typecheck && node tests/main.test.js && node tests/generation-job-manager.test.js"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
     "@types/node": "^22.10.2",
     "esbuild": "^0.24.2",
     "obsidian": "^1.7.2",

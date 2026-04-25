@@ -97,14 +97,7 @@ export type GenerationPhase =
   | 'done'
   | 'cancelled';
 
-export type ErrorKind =
-  | 'auth'
-  | 'timeout'
-  | 'rate-limit'
-  | 'schema'
-  | 'config'
-  | 'cancelled'
-  | 'unknown';
+export type ErrorKind = 'auth' | 'timeout' | 'rate-limit' | 'schema' | 'config' | 'cancelled' | 'unknown';
 
 /* ---------- Prompt types ---------- */
 

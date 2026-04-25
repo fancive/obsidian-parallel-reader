@@ -1,16 +1,16 @@
 'use strict';
 
 import { spawn } from 'child_process';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import fs from 'fs';
-import type { PluginSettings, RawCard } from './types';
-import { GenerationJob, GenerationJobCancelledError } from './generation-job-manager';
+import { type GenerationJob, GenerationJobCancelledError } from './generation-job-manager';
 import { parseCardsJson } from './schema';
+import type { PluginSettings, RawCard } from './types';
 
 /* Obsidian launched from GUI doesn't inherit shell PATH. */
 export function resolveCliPath(name: string, override: string): string {
-  if (override && override.trim()) return override.trim();
+  if (override?.trim()) return override.trim();
   const home = os.homedir();
   const candidates = [
     path.join(home, 'bin', name),
@@ -33,18 +33,24 @@ export function resolveCliPath(name: string, override: string): string {
   return name;
 }
 
-export function runCli(cmd: string, args: string[], stdinText: string, timeoutMs: number, job?: GenerationJob): Promise<{ stdout: string; stderr: string }> {
+export function runCli(
+  cmd: string,
+  args: string[],
+  stdinText: string,
+  timeoutMs: number,
+  job?: GenerationJob,
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child;
     let settled = false;
     let timer;
-    const fail = err => {
+    const fail = (err) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       reject(err);
     };
-    const succeed = value => {
+    const succeed = (value) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -61,7 +67,9 @@ export function runCli(cmd: string, args: string[], stdinText: string, timeoutMs
             '/opt/homebrew/bin',
             path.join(os.homedir(), '.local/bin'),
             path.join(os.homedir(), '.claude/local'),
-          ].filter(Boolean).join(':'),
+          ]
+            .filter(Boolean)
+            .join(':'),
         },
       });
     } catch (e) {
@@ -71,22 +79,34 @@ export function runCli(cmd: string, args: string[], stdinText: string, timeoutMs
     let stdout = '';
     let stderr = '';
     timer = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      try {
+        child.kill('SIGKILL');
+      } catch (_) {
+        /* ignore */
+      }
       fail(new Error(`CLI timed out (${timeoutMs}ms)`));
     }, timeoutMs);
     if (job) {
       job.onCancel(() => {
-        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+        try {
+          child.kill('SIGKILL');
+        } catch (_) {
+          /* ignore */
+        }
         fail(new GenerationJobCancelledError(job.key));
       });
     }
 
-    child.stdout.on('data', d => { stdout += d.toString('utf8'); });
-    child.stderr.on('data', d => { stderr += d.toString('utf8'); });
-    child.on('error', e => {
+    child.stdout.on('data', (d) => {
+      stdout += d.toString('utf8');
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d.toString('utf8');
+    });
+    child.on('error', (e) => {
       fail(new Error(`CLI startup error: ${e.message}. Try setting an absolute CLI path.`));
     });
-    child.on('close', code => {
+    child.on('close', (code) => {
       if (settled) return;
       if (code !== 0) {
         return fail(new Error(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`));
@@ -98,22 +118,34 @@ export function runCli(cmd: string, args: string[], stdinText: string, timeoutMs
       try {
         child.stdin.write(stdinText);
         child.stdin.end();
-      } catch (e) {
+      } catch (_e) {
         // Child may have exited before stdin was written.
       }
     } else {
-      try { child.stdin.end(); } catch (_) { /* ignore */ }
+      try {
+        child.stdin.end();
+      } catch (_) {
+        /* ignore */
+      }
     }
   });
 }
 
-export async function summarizeViaClaudeCode(system: string, user: string, settings: PluginSettings, job?: GenerationJob): Promise<RawCard[]> {
+export async function summarizeViaClaudeCode(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  job?: GenerationJob,
+): Promise<RawCard[]> {
   const cmd = resolveCliPath('claude', settings.cliPath);
   const args = [
     '-p',
-    '--output-format', 'json',
-    '--append-system-prompt', system,
-    '--disallowed-tools', 'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
+    '--output-format',
+    'json',
+    '--append-system-prompt',
+    system,
+    '--disallowed-tools',
+    'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
   ];
   if (settings.model) {
     args.push('--model', settings.model);
@@ -123,14 +155,19 @@ export async function summarizeViaClaudeCode(system: string, user: string, setti
   let envelope;
   try {
     envelope = JSON.parse(stdout);
-  } catch (e) {
+  } catch (_e) {
     throw new Error('claude CLI returned a non-JSON envelope:\n' + stdout.slice(0, 500));
   }
   const resultText = envelope.result || envelope.content || '';
   return parseCardsJson(resultText, settings);
 }
 
-export async function summarizeViaCodex(system: string, user: string, settings: PluginSettings, job?: GenerationJob): Promise<RawCard[]> {
+export async function summarizeViaCodex(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  job?: GenerationJob,
+): Promise<RawCard[]> {
   const cmd = resolveCliPath('codex', settings.cliPath);
   const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
   const args = ['exec', '--skip-git-repo-check', '-'];

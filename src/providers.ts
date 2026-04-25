@@ -1,15 +1,5 @@
 'use strict';
 
-import type { PluginSettings, RawCard } from './types';
-import {
-  API_FORMATS,
-  getApiAuthType,
-  getApiBaseUrl,
-  getApiFormat,
-  getApiKey,
-  getApiPreset,
-  modelForApi,
-} from './settings';
 import { translate } from './i18n';
 import {
   ANTHROPIC_CARD_TOOL_NAME,
@@ -20,6 +10,16 @@ import {
   openAiResponsesTextFormat,
   parseCardsJson,
 } from './schema';
+import {
+  API_FORMATS,
+  getApiAuthType,
+  getApiBaseUrl,
+  getApiFormat,
+  getApiKey,
+  getApiPreset,
+  modelForApi,
+} from './settings';
+import type { PluginSettings, RawCard } from './types';
 
 function endpointUrl(baseUrl, suffixes) {
   const base = baseUrl.replace(/\/+$/, '');
@@ -94,10 +94,12 @@ function responseJson(resp, label, settings?) {
   try {
     return JSON.parse(resp.text || '{}');
   } catch (_) {
-    throw new Error(translate(settings, 'errorProviderNonJson', {
-      label,
-      excerpt: (resp.text || '').slice(0, 500),
-    }));
+    throw new Error(
+      translate(settings, 'errorProviderNonJson', {
+        label,
+        excerpt: (resp.text || '').slice(0, 500),
+      }),
+    );
   }
 }
 
@@ -112,29 +114,44 @@ async function requestJsonBody(requestUrlImpl, label, url, headers, body, settin
       throw: false,
     });
   } catch (e) {
-    throw new Error(translate(settings, 'errorProviderRequestFailed', {
-      label,
-      error: e.message || e,
-    }));
+    throw new Error(
+      translate(settings, 'errorProviderRequestFailed', {
+        label,
+        error: e.message || e,
+      }),
+    );
   }
 
   if (resp.status >= 400) {
-    throw new Error(translate(settings, 'errorProviderApiStatus', {
-      label,
-      status: resp.status,
-      excerpt: (resp.text || '').slice(0, 500),
-    }));
+    throw new Error(
+      translate(settings, 'errorProviderApiStatus', {
+        label,
+        status: resp.status,
+        excerpt: (resp.text || '').slice(0, 500),
+      }),
+    );
   }
   return responseJson(resp, label, settings);
 }
 
 function shouldRetryWithoutStructuredOutput(error) {
-  const message = String(error && error.message ? error.message : error);
-  if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message)) return false;
-  return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(message);
+  const message = String(error?.message ? error.message : error);
+  if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message))
+    return false;
+  return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(
+    message,
+  );
 }
 
-async function requestJsonBodyWithStructuredFallback(requestUrlImpl, label, url, headers, structuredBody, fallbackBody, settings?) {
+async function requestJsonBodyWithStructuredFallback(
+  requestUrlImpl,
+  label,
+  url,
+  headers,
+  structuredBody,
+  fallbackBody,
+  settings?,
+) {
   try {
     return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody, settings);
   } catch (e) {
@@ -147,11 +164,13 @@ async function requestJsonBodyWithStructuredFallback(requestUrlImpl, label, url,
 function textFromContent(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    return content.map(part => {
-      if (typeof part === 'string') return part;
-      if (part && typeof part === 'object') return part.text || part.output_text || '';
-      return '';
-    }).join('');
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object') return part.text || part.output_text || '';
+        return '';
+      })
+      .join('');
   }
   if (content && typeof content === 'object') {
     return content.text || content.output_text || '';
@@ -184,10 +203,15 @@ function textFromOpenAiResponses(json) {
 export function tokenLimitFieldForOpenAiChat(settings: PluginSettings): string {
   const preset = getApiPreset(settings);
   const format = API_FORMATS[getApiFormat(settings)];
-  return preset.tokenLimitField || (format && format.tokenLimitField) || 'max_tokens';
+  return preset.tokenLimitField || format?.tokenLimitField || 'max_tokens';
 }
 
-export function buildAnthropicMessagesBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
+export function buildAnthropicMessagesBody(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  options?: { structured?: boolean },
+) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -202,7 +226,12 @@ export function buildAnthropicMessagesBody(system: string, user: string, setting
   return body;
 }
 
-export function buildOpenAiChatBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
+export function buildOpenAiChatBody(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  options?: { structured?: boolean },
+) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -218,7 +247,12 @@ export function buildOpenAiChatBody(system: string, user: string, settings: Plug
   return body;
 }
 
-export function buildOpenAiResponsesBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
+export function buildOpenAiResponsesBody(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  options?: { structured?: boolean },
+) {
   const structured = !options || options.structured !== false;
   const body: any = {
     model: modelForApi(settings),
@@ -232,7 +266,12 @@ export function buildOpenAiResponsesBody(system: string, user: string, settings:
   return body;
 }
 
-export function buildGeminiBody(system: string, user: string, settings: PluginSettings, options?: { structured?: boolean }) {
+export function buildGeminiBody(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  options?: { structured?: boolean },
+) {
   const structured = !options || options.structured !== false;
   const generationConfig: any = {
     temperature: 0,
@@ -250,8 +289,8 @@ export function buildGeminiBody(system: string, user: string, settings: PluginSe
 }
 
 function cardsFromAnthropicToolUse(json, settings?) {
-  const content = Array.isArray(json && json.content) ? json.content : [];
-  const block = content.find(c => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
+  const content = Array.isArray(json?.content) ? json.content : [];
+  const block = content.find((c) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
   if (!block) return null;
   if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
   if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input);
@@ -267,13 +306,16 @@ async function summarizeViaAnthropicMessages(requestUrlImpl, system, user, setti
     buildApiHeaders(settings, { 'anthropic-version': '2023-06-01' }),
     buildAnthropicMessagesBody(system, user, settings),
     buildAnthropicMessagesBody(system, user, settings, { structured: false }),
-    settings
+    settings,
   );
 
   const toolCards = cardsFromAnthropicToolUse(json, settings);
   if (toolCards) return toolCards;
 
-  const text = (json.content || []).map(c => textFromContent(c)).join('').trim();
+  const text = (json.content || [])
+    .map((c) => textFromContent(c))
+    .join('')
+    .trim();
   return parseCardsJson(text, settings);
 }
 
@@ -286,7 +328,7 @@ async function summarizeViaOpenAiChat(requestUrlImpl, system, user, settings) {
     buildApiHeaders(settings),
     buildOpenAiChatBody(system, user, settings),
     buildOpenAiChatBody(system, user, settings, { structured: false }),
-    settings
+    settings,
   );
   const choice = (json.choices || [])[0] || {};
   const text = textFromContent(choice.message?.content || choice.text || '').trim();
@@ -302,7 +344,7 @@ async function summarizeViaOpenAiResponses(requestUrlImpl, system, user, setting
     buildApiHeaders(settings),
     buildOpenAiResponsesBody(system, user, settings),
     buildOpenAiResponsesBody(system, user, settings, { structured: false }),
-    settings
+    settings,
   );
   return parseCardsJson(textFromOpenAiResponses(json).trim(), settings);
 }
@@ -321,16 +363,24 @@ async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, sett
     headers,
     buildGeminiBody(system, user, settings),
     buildGeminiBody(system, user, settings, { structured: false }),
-    settings
+    settings,
   );
   const candidate = (json.candidates || [])[0] || {};
   const parts = candidate.content?.parts || [];
-  const text = parts.map(p => textFromContent(p)).join('').trim();
+  const text = parts
+    .map((p) => textFromContent(p))
+    .join('')
+    .trim();
   return parseCardsJson(text, settings);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
-export async function summarizeViaApi(requestUrlImpl: any, system: string, user: string, settings: PluginSettings): Promise<RawCard[]> {
+export async function summarizeViaApi(
+  requestUrlImpl: any,
+  system: string,
+  user: string,
+  settings: PluginSettings,
+): Promise<RawCard[]> {
   const format = getApiFormat(settings);
   switch (format) {
     case 'openai-chat':
@@ -339,7 +389,6 @@ export async function summarizeViaApi(requestUrlImpl: any, system: string, user:
       return summarizeViaOpenAiResponses(requestUrlImpl, system, user, settings);
     case 'google-generative-ai':
       return summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, settings);
-    case 'anthropic-messages':
     default:
       return summarizeViaAnthropicMessages(requestUrlImpl, system, user, settings);
   }
@@ -347,12 +396,7 @@ export async function summarizeViaApi(requestUrlImpl: any, system: string, user:
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
 export async function testApiBackend(requestUrlImpl: any, settings: PluginSettings): Promise<string> {
-  await summarizeViaApi(
-    requestUrlImpl,
-    '只输出 JSON：{"cards":[]}',
-    '连通性测试：请原样输出 {"cards":[]}',
-    settings
-  );
+  await summarizeViaApi(requestUrlImpl, '只输出 JSON：{"cards":[]}', '连通性测试：请原样输出 {"cards":[]}', settings);
   const format = getApiFormat(settings);
   return `${getApiPreset(settings).label} / ${API_FORMATS[format].label}`;
 }

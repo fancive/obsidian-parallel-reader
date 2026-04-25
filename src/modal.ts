@@ -1,7 +1,7 @@
 'use strict';
 
 import { Modal } from 'obsidian';
-import type { ResolvedCard, CardPatch, PluginHost } from './types';
+import type { CardPatch, PluginHost, ResolvedCard } from './types';
 import { addTextButton } from './ui-helpers';
 
 export class CardEditModal extends Modal {
@@ -22,19 +22,38 @@ export class CardEditModal extends Modal {
     contentEl.createEl('h2', { text: this.plugin.t('editCardTitle') });
 
     const titleInput = this.createLabeledInput(contentEl, this.plugin.t('editCardTitleField'), this.card.title || '');
-    const gistInput = this.createLabeledTextarea(contentEl, this.plugin.t('editCardGistField'), this.card.gist || '', 3);
-    const bulletsInput = this.createLabeledTextarea(contentEl, this.plugin.t('editCardBulletsField'), (this.card.bullets || []).join('\n'), 8);
+    const gistInput = this.createLabeledTextarea(
+      contentEl,
+      this.plugin.t('editCardGistField'),
+      this.card.gist || '',
+      3,
+    );
+    const bulletsInput = this.createLabeledTextarea(
+      contentEl,
+      this.plugin.t('editCardBulletsField'),
+      (this.card.bullets || []).join('\n'),
+      8,
+    );
 
     const actions = contentEl.createDiv({ cls: 'parallel-reader-modal-actions' });
     addTextButton(actions, null, this.plugin.t('editCardCancel'), () => this.close(), 'parallel-reader-text-button');
-    addTextButton(actions, null, this.plugin.t('editCardSave'), async () => {
-      await this.onSave({
-        title: titleInput.value.trim() || this.card.title || '',
-        gist: gistInput.value.trim(),
-        bullets: bulletsInput.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean),
-      });
-      this.close();
-    }, 'parallel-reader-text-button');
+    addTextButton(
+      actions,
+      null,
+      this.plugin.t('editCardSave'),
+      async () => {
+        await this.onSave({
+          title: titleInput.value.trim() || this.card.title || '',
+          gist: gistInput.value.trim(),
+          bullets: bulletsInput.value
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+        });
+        this.close();
+      },
+      'parallel-reader-text-button',
+    );
   }
 
   createLabeledInput(parent, label: string, value: string) {

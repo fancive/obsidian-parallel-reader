@@ -1,7 +1,7 @@
 'use strict';
 
-import type { PluginSettings, RawCard } from './types';
 import { translate } from './i18n';
+import type { PluginSettings, RawCard } from './types';
 
 export const ANTHROPIC_CARD_TOOL_NAME = 'record_parallel_reader_cards';
 
@@ -45,18 +45,33 @@ export function extractJson(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return raw;
 
-  try { JSON.parse(raw); return raw; } catch (_) { /* continue */ }
+  try {
+    JSON.parse(raw);
+    return raw;
+  } catch (_) {
+    /* continue */
+  }
 
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) {
     const fenced = fence[1].trim();
-    try { JSON.parse(fenced); return fenced; } catch (_) { /* continue */ }
+    try {
+      JSON.parse(fenced);
+      return fenced;
+    } catch (_) {
+      /* continue */
+    }
   }
 
   const candidates = collectJsonObjectCandidates(raw);
   candidates.sort((a, b) => b.length - a.length);
   for (const c of candidates) {
-    try { JSON.parse(c); return c; } catch (_) { /* skip */ }
+    try {
+      JSON.parse(c);
+      return c;
+    } catch (_) {
+      /* skip */
+    }
   }
   return raw;
 }
@@ -66,10 +81,12 @@ export function parseCardsJson(text: string, settings?: PluginSettings | null): 
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
-  } catch (e) {
-    throw new Error(translate(settings || null, 'errorLlmNonJson', {
-      excerpt: (text || '').slice(0, 500),
-    }));
+  } catch (_e) {
+    throw new Error(
+      translate(settings || null, 'errorLlmNonJson', {
+        excerpt: (text || '').slice(0, 500),
+      }),
+    );
   }
   return normalizeCardsPayload(parsed);
 }
@@ -78,11 +95,13 @@ export function normalizeCardsPayload(parsed: { cards?: unknown[] }): RawCard[] 
   const raw = parsed && Array.isArray(parsed.cards) ? parsed.cards : [];
   return raw
     .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
-    .map(c => ({
+    .map((c) => ({
       title: typeof c.title === 'string' ? c.title : '(无标题)',
       anchor: typeof c.anchor === 'string' ? c.anchor : '',
       gist: typeof c.gist === 'string' ? c.gist : '',
-      bullets: Array.isArray(c.bullets) ? (c.bullets as unknown[]).filter((b): b is string => typeof b === 'string') : [],
+      bullets: Array.isArray(c.bullets)
+        ? (c.bullets as unknown[]).filter((b): b is string => typeof b === 'string')
+        : [],
     }));
 }
 

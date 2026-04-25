@@ -1,22 +1,22 @@
 'use strict';
 
-import { PluginSettingTab, Setting, Notice, requestUrl } from 'obsidian';
-import type { PluginHost } from './types';
+import { Notice, PluginSettingTab, requestUrl, Setting } from 'obsidian';
 import { resolveCliPath, runCli } from './cli';
 import { testApiBackend } from './providers';
 import {
   API_AUTH_TYPES,
   API_FORMATS,
   API_PROVIDER_PRESETS,
-  DEFAULT_SETTINGS,
-  DEFAULT_MAX_CACHE_ENTRIES,
-  PROMPT_LANGUAGES,
-  UI_LANGUAGES,
   applyApiProviderPreset,
+  DEFAULT_MAX_CACHE_ENTRIES,
+  DEFAULT_SETTINGS,
   getApiFormat,
   getApiPreset,
   isApiBackend,
+  PROMPT_LANGUAGES,
+  UI_LANGUAGES,
 } from './settings';
+import type { PluginHost } from './types';
 
 async function testBackend(settings) {
   if (settings.backend === 'codex') {
@@ -52,36 +52,36 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(tr('settingUiLanguageName'))
       .setDesc(tr('settingUiLanguageDesc'))
-      .addDropdown(d => {
+      .addDropdown((d) => {
         for (const [id, label] of Object.entries(UI_LANGUAGES)) {
           d.addOption(id, label);
         }
-        return d
-          .setValue(this.plugin.settings.uiLanguage || DEFAULT_SETTINGS.uiLanguage)
-          .onChange(async v => {
-            this.plugin.settings.uiLanguage = v;
-            await this.plugin.saveSettings();
-            this.display();
-          });
+        return d.setValue(this.plugin.settings.uiLanguage || DEFAULT_SETTINGS.uiLanguage).onChange(async (v) => {
+          this.plugin.settings.uiLanguage = v;
+          await this.plugin.saveSettings();
+          this.display();
+        });
       });
 
     new Setting(containerEl)
       .setName(tr('settingBackendName'))
       .setDesc(tr('settingBackendDesc'))
-      .addDropdown(d => d
-        .addOption('claude-code', 'Claude Code CLI')
-        .addOption('codex', 'Codex CLI')
-        .addOption('api', 'API / Provider')
-        .addOption('anthropic-api', 'Anthropic API (legacy)')
-        .setValue(this.plugin.settings.backend)
-        .onChange(async v => {
-          this.plugin.settings.backend = v;
-          if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
-            applyApiProviderPreset(this.plugin.settings, this.plugin.settings.apiProvider || 'anthropic');
-          }
-          await this.plugin.saveSettings();
-          this.display();
-        }));
+      .addDropdown((d) =>
+        d
+          .addOption('claude-code', 'Claude Code CLI')
+          .addOption('codex', 'Codex CLI')
+          .addOption('api', 'API / Provider')
+          .addOption('anthropic-api', 'Anthropic API (legacy)')
+          .setValue(this.plugin.settings.backend)
+          .onChange(async (v) => {
+            this.plugin.settings.backend = v;
+            if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
+              applyApiProviderPreset(this.plugin.settings, this.plugin.settings.apiProvider || 'anthropic');
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }),
+      );
 
     const apiBackend = isApiBackend(this.plugin.settings.backend);
 
@@ -89,25 +89,25 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName(tr('settingCliPathName'))
         .setDesc(tr('settingCliPathDesc'))
-        .addText(t => t
-          .setPlaceholder(tr('settingCliPathPlaceholder'))
-          .setValue(this.plugin.settings.cliPath)
-          .onChange(async v => {
-            this.plugin.settings.cliPath = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }));
-
-      new Setting(containerEl)
-        .setName(tr('settingCliTimeoutName'))
-        .addText(t => t
-          .setValue(String(this.plugin.settings.cliTimeoutMs))
-          .onChange(async v => {
-            const n = parseInt(v, 10);
-            if (!isNaN(n) && n > 0) {
-              this.plugin.settings.cliTimeoutMs = n;
+        .addText((t) =>
+          t
+            .setPlaceholder(tr('settingCliPathPlaceholder'))
+            .setValue(this.plugin.settings.cliPath)
+            .onChange(async (v) => {
+              this.plugin.settings.cliPath = v.trim();
               this.plugin.saveSettingsDebounced();
-            }
-          }));
+            }),
+        );
+
+      new Setting(containerEl).setName(tr('settingCliTimeoutName')).addText((t) =>
+        t.setValue(String(this.plugin.settings.cliTimeoutMs)).onChange(async (v) => {
+          const n = parseInt(v, 10);
+          if (!Number.isNaN(n) && n > 0) {
+            this.plugin.settings.cliTimeoutMs = n;
+            this.plugin.saveSettingsDebounced();
+          }
+        }),
+      );
     } else {
       containerEl.createEl('h3', { text: tr('apiProviderHeader') });
 
@@ -115,59 +115,57 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName(tr('settingProviderPresetName'))
         .setDesc(tr('settingProviderPresetDesc'))
-        .addDropdown(d => {
+        .addDropdown((d) => {
           for (const [id, entry] of Object.entries(API_PROVIDER_PRESETS)) {
             d.addOption(id, entry.label);
           }
-          return d
-            .setValue(this.plugin.settings.apiProvider)
-            .onChange(async v => {
-              applyApiProviderPreset(this.plugin.settings, v);
-              await this.plugin.saveSettings();
-              this.display();
-            });
+          return d.setValue(this.plugin.settings.apiProvider).onChange(async (v) => {
+            applyApiProviderPreset(this.plugin.settings, v);
+            await this.plugin.saveSettings();
+            this.display();
+          });
         });
 
       new Setting(containerEl)
         .setName(tr('settingApiFormatName'))
         .setDesc(tr('settingApiFormatDesc'))
-        .addDropdown(d => {
+        .addDropdown((d) => {
           for (const [id, entry] of Object.entries(API_FORMATS)) {
             d.addOption(id, entry.label);
           }
-          return d
-            .setValue(getApiFormat(this.plugin.settings))
-            .onChange(async v => {
-              this.plugin.settings.apiFormat = v;
-              await this.plugin.saveSettings();
-              this.display();
-            });
+          return d.setValue(getApiFormat(this.plugin.settings)).onChange(async (v) => {
+            this.plugin.settings.apiFormat = v;
+            await this.plugin.saveSettings();
+            this.display();
+          });
         });
 
       new Setting(containerEl)
         .setName(tr('settingBaseUrlName'))
         .setDesc(tr('settingBaseUrlDesc'))
-        .addText(t => t
-          .setPlaceholder(
-            (this.plugin.settings.apiProvider || '').startsWith('custom-')
-              ? 'https://your-provider.example/v1'
-              : (preset.baseUrl || API_FORMATS[getApiFormat(this.plugin.settings)].defaultBaseUrl)
-          )
-          .setValue(this.plugin.settings.apiBaseUrl)
-          .onChange(async v => {
-            this.plugin.settings.apiBaseUrl = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }));
+        .addText((t) =>
+          t
+            .setPlaceholder(
+              (this.plugin.settings.apiProvider || '').startsWith('custom-')
+                ? 'https://your-provider.example/v1'
+                : preset.baseUrl || API_FORMATS[getApiFormat(this.plugin.settings)].defaultBaseUrl,
+            )
+            .setValue(this.plugin.settings.apiBaseUrl)
+            .onChange(async (v) => {
+              this.plugin.settings.apiBaseUrl = v.trim();
+              this.plugin.saveSettingsDebounced();
+            }),
+        );
 
       new Setting(containerEl)
         .setName(tr('settingApiKeyName'))
         .setDesc(tr('settingApiKeyDesc'))
-        .addText(t => {
+        .addText((t) => {
           t.inputEl.type = 'password';
           return t
             .setPlaceholder('sk-...')
             .setValue(this.plugin.settings.apiKey)
-            .onChange(async v => {
+            .onChange(async (v) => {
               this.plugin.settings.apiKey = v.trim();
               this.plugin.saveSettingsDebounced();
             });
@@ -176,91 +174,91 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName(tr('settingApiKeyEnvName'))
         .setDesc(tr('settingApiKeyEnvDesc'))
-        .addText(t => t
-          .setPlaceholder(preset.envVar || 'OPENAI_API_KEY')
-          .setValue(this.plugin.settings.apiKeyEnvVar)
-          .onChange(async v => {
-            this.plugin.settings.apiKeyEnvVar = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }));
+        .addText((t) =>
+          t
+            .setPlaceholder(preset.envVar || 'OPENAI_API_KEY')
+            .setValue(this.plugin.settings.apiKeyEnvVar)
+            .onChange(async (v) => {
+              this.plugin.settings.apiKeyEnvVar = v.trim();
+              this.plugin.saveSettingsDebounced();
+            }),
+        );
 
       new Setting(containerEl)
         .setName(tr('settingAuthTypeName'))
         .setDesc(tr('settingAuthTypeDesc'))
-        .addDropdown(d => {
+        .addDropdown((d) => {
           for (const [id, label] of Object.entries(API_AUTH_TYPES)) {
             d.addOption(id, label);
           }
-          return d
-            .setValue(this.plugin.settings.apiAuthType || 'auto')
-            .onChange(async v => {
-              this.plugin.settings.apiAuthType = v;
-              await this.plugin.saveSettings();
-            });
+          return d.setValue(this.plugin.settings.apiAuthType || 'auto').onChange(async (v) => {
+            this.plugin.settings.apiAuthType = v;
+            await this.plugin.saveSettings();
+          });
         });
 
       new Setting(containerEl)
         .setName(tr('settingHeadersName'))
         .setDesc(tr('settingHeadersDesc'))
-        .addTextArea(t => t
-          .setPlaceholder('cf-aig-authorization: Bearer ...')
-          .setValue(this.plugin.settings.apiHeaders)
-          .onChange(async v => {
-            this.plugin.settings.apiHeaders = v;
-            this.plugin.saveSettingsDebounced();
-          }));
-
-      new Setting(containerEl)
-        .setName(tr('settingMaxTokensName'))
-        .addText(t => t
-          .setValue(String(this.plugin.settings.apiMaxTokens))
-          .onChange(async v => {
-            const n = parseInt(v, 10);
-            if (!isNaN(n) && n > 0) {
-              this.plugin.settings.apiMaxTokens = n;
+        .addTextArea((t) =>
+          t
+            .setPlaceholder('cf-aig-authorization: Bearer ...')
+            .setValue(this.plugin.settings.apiHeaders)
+            .onChange(async (v) => {
+              this.plugin.settings.apiHeaders = v;
               this.plugin.saveSettingsDebounced();
-            }
-          }));
+            }),
+        );
+
+      new Setting(containerEl).setName(tr('settingMaxTokensName')).addText((t) =>
+        t.setValue(String(this.plugin.settings.apiMaxTokens)).onChange(async (v) => {
+          const n = parseInt(v, 10);
+          if (!Number.isNaN(n) && n > 0) {
+            this.plugin.settings.apiMaxTokens = n;
+            this.plugin.saveSettingsDebounced();
+          }
+        }),
+      );
     }
 
     new Setting(containerEl)
       .setName(tr('settingModelName'))
-      .setDesc(apiBackend
-        ? tr('settingModelDescApi')
-        : tr('settingModelDescCli'))
-      .addText(t => t
-        .setPlaceholder(apiBackend ? (getApiPreset(this.plugin.settings).model || 'model-id') : DEFAULT_SETTINGS.model)
-        .setValue(this.plugin.settings.model)
-        .onChange(async v => {
-          this.plugin.settings.model = v.trim() || (apiBackend ? '' : DEFAULT_SETTINGS.model);
-          this.plugin.saveSettingsDebounced();
-        }));
+      .setDesc(apiBackend ? tr('settingModelDescApi') : tr('settingModelDescCli'))
+      .addText((t) =>
+        t
+          .setPlaceholder(apiBackend ? getApiPreset(this.plugin.settings).model || 'model-id' : DEFAULT_SETTINGS.model)
+          .setValue(this.plugin.settings.model)
+          .onChange(async (v) => {
+            this.plugin.settings.model = v.trim() || (apiBackend ? '' : DEFAULT_SETTINGS.model);
+            this.plugin.saveSettingsDebounced();
+          }),
+      );
 
     new Setting(containerEl)
       .setName(tr('settingMaxInputName'))
       .setDesc(tr('settingMaxInputDesc'))
-      .addText(t => t
-        .setValue(String(this.plugin.settings.maxDocChars || DEFAULT_SETTINGS.maxDocChars))
-        .onChange(async v => {
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.maxDocChars || DEFAULT_SETTINGS.maxDocChars)).onChange(async (v) => {
           const n = parseInt(v, 10);
-          if (!isNaN(n) && n >= 1000) {
+          if (!Number.isNaN(n) && n >= 1000) {
             this.plugin.settings.maxDocChars = n;
             this.plugin.saveSettingsDebounced();
           }
-        }));
+        }),
+      );
 
     containerEl.createEl('h3', { text: tr('promptHeader') });
 
     new Setting(containerEl)
       .setName(tr('settingPromptLanguageName'))
       .setDesc(tr('settingPromptLanguageDesc'))
-      .addDropdown(d => {
+      .addDropdown((d) => {
         for (const [id, label] of Object.entries(PROMPT_LANGUAGES)) {
           d.addOption(id, label);
         }
         return d
           .setValue(this.plugin.settings.promptLanguage || DEFAULT_SETTINGS.promptLanguage)
-          .onChange(async v => {
+          .onChange(async (v) => {
             this.plugin.settings.promptLanguage = v;
             await this.plugin.saveSettings();
           });
@@ -269,37 +267,41 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(tr('settingCardRangeName'))
       .setDesc(tr('settingCardRangeDesc'))
-      .addText(t => t
-        .setPlaceholder('min')
-        .setValue(String(this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards))
-        .onChange(async v => {
-          const n = parseInt(v, 10);
-          if (!isNaN(n) && n > 0) {
-            this.plugin.settings.minCards = n;
-            if (this.plugin.settings.maxCards < n) this.plugin.settings.maxCards = n;
-            this.plugin.saveSettingsDebounced();
-          }
-        }))
-      .addText(t => t
-        .setPlaceholder('max')
-        .setValue(String(this.plugin.settings.maxCards || DEFAULT_SETTINGS.maxCards))
-        .onChange(async v => {
-          const n = parseInt(v, 10);
-          if (!isNaN(n) && n > 0) {
-            this.plugin.settings.maxCards = Math.max(n, this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards);
-            this.plugin.saveSettingsDebounced();
-          }
-        }));
+      .addText((t) =>
+        t
+          .setPlaceholder('min')
+          .setValue(String(this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards))
+          .onChange(async (v) => {
+            const n = parseInt(v, 10);
+            if (!Number.isNaN(n) && n > 0) {
+              this.plugin.settings.minCards = n;
+              if (this.plugin.settings.maxCards < n) this.plugin.settings.maxCards = n;
+              this.plugin.saveSettingsDebounced();
+            }
+          }),
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder('max')
+          .setValue(String(this.plugin.settings.maxCards || DEFAULT_SETTINGS.maxCards))
+          .onChange(async (v) => {
+            const n = parseInt(v, 10);
+            if (!Number.isNaN(n) && n > 0) {
+              this.plugin.settings.maxCards = Math.max(n, this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards);
+              this.plugin.saveSettingsDebounced();
+            }
+          }),
+      );
 
     new Setting(containerEl)
       .setName(tr('settingCustomPromptName'))
       .setDesc(tr('settingCustomPromptDesc'))
-      .addTextArea(t => {
+      .addTextArea((t) => {
         t.inputEl.rows = 8;
         return t
           .setPlaceholder(tr('settingCustomPromptPlaceholder'))
           .setValue(this.plugin.settings.customSystemPrompt || '')
-          .onChange(async v => {
+          .onChange(async (v) => {
             this.plugin.settings.customSystemPrompt = v;
             this.plugin.saveSettingsDebounced();
           });
@@ -308,33 +310,33 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(tr('settingTestBackendName'))
       .setDesc(apiBackend ? tr('settingTestBackendDescApi') : tr('settingTestBackendDescCli'))
-      .addButton(b => b
-        .setButtonText('Test')
-        .onClick(async () => {
+      .addButton((b) =>
+        b.setButtonText('Test').onClick(async () => {
           try {
             const result = await testBackend(this.plugin.settings);
             new Notice(`✓ ${result.slice(0, 180)}`, 8000);
           } catch (e) {
             new Notice(tr('backendTestFailed', { error: e.message }), 10000);
           }
-        }));
+        }),
+      );
 
     new Setting(containerEl)
       .setName(tr('settingExportFolderName'))
       .setDesc(tr('settingExportFolderDesc'))
-      .addText(t => t
-        .setValue(this.plugin.settings.exportFolder)
-        .onChange(async v => {
+      .addText((t) =>
+        t.setValue(this.plugin.settings.exportFolder).onChange(async (v) => {
           this.plugin.settings.exportFolder = v.trim() || DEFAULT_SETTINGS.exportFolder;
           this.plugin.saveSettingsDebounced();
-        }));
+        }),
+      );
 
     containerEl.createEl('h3', { text: tr('cacheHeader') });
 
     new Setting(containerEl)
       .setName(tr('settingMaxCacheName'))
       .setDesc(tr('settingMaxCacheDesc'))
-      .addText(t => {
+      .addText((t) => {
         t.setValue(String(this.plugin.settings.maxCacheEntries || DEFAULT_MAX_CACHE_ENTRIES));
         const commit = async () => {
           const n = parseInt(t.getValue(), 10);
@@ -347,7 +349,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           }
         };
         t.inputEl.addEventListener('change', commit);
-        t.inputEl.addEventListener('keydown', e => {
+        t.inputEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') t.inputEl.blur();
         });
         return t;
@@ -357,14 +359,16 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(tr('cachedNotesName', { count: cacheCount }))
       .setDesc(tr('cachedNotesDesc'))
-      .addButton(b => b
-        .setButtonText(tr('clearAllCacheButton'))
-        .setWarning()
-        .onClick(async () => {
-          const n = Object.keys(this.plugin.cache).length;
-          await this.plugin.cacheClear();
-          new Notice(tr('cacheClearedAll', { count: n }));
-          this.display();
-        }));
+      .addButton((b) =>
+        b
+          .setButtonText(tr('clearAllCacheButton'))
+          .setWarning()
+          .onClick(async () => {
+            const n = Object.keys(this.plugin.cache).length;
+            await this.plugin.cacheClear();
+            new Notice(tr('cacheClearedAll', { count: n }));
+            this.display();
+          }),
+      );
   }
 }

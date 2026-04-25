@@ -1,11 +1,7 @@
 'use strict';
 
+import { DEFAULT_SETTINGS, MAX_DOC_CHARS, PROMPT_LANGUAGES } from './settings';
 import type { PluginSettings, PromptPair } from './types';
-import {
-  DEFAULT_SETTINGS,
-  MAX_DOC_CHARS,
-  PROMPT_LANGUAGES,
-} from './settings';
 
 export function promptLanguageInstruction(language: string): string {
   if (language === 'en') return 'Write title, gist, and bullets in English.';
@@ -26,11 +22,18 @@ export function promptSchemaExample(language: string): string {
 
 export function renderPromptTemplate(template: string, vars: Record<string, string | number>): string {
   return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-    return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match;
+    return Object.hasOwn(vars, key) ? String(vars[key]) : match;
   });
 }
 
-function defaultSystemPrompt(language: string, minCards: number, maxCards: number, languageInstruction: string, schema: string, example: string): string {
+function defaultSystemPrompt(
+  language: string,
+  minCards: number,
+  maxCards: number,
+  languageInstruction: string,
+  schema: string,
+  example: string,
+): string {
   if (language === 'en') {
     return `You are a long-form reading summary assistant. After reading the full document, split it into ${minCards}-${maxCards} natural topic units. They do not need to match markdown headings; use a complete argument or topic as the unit, merging short sections and splitting long ones when needed.
 
@@ -88,7 +91,13 @@ ${schema}
 ${example}`;
 }
 
-function systemPromptContract(language: string, minCards: number, maxCards: number, languageInstruction: string, schema: string): string {
+function systemPromptContract(
+  language: string,
+  minCards: number,
+  maxCards: number,
+  languageInstruction: string,
+  schema: string,
+): string {
   if (language === 'en') {
     return `Non-overridable output contract:
 - Must output ${minCards}-${maxCards} cards.
@@ -107,13 +116,17 @@ function systemPromptContract(language: string, minCards: number, maxCards: numb
 
 export function buildPrompts(content: string, settings: PluginSettings): PromptPair {
   const maxDocChars = Number(settings.maxDocChars) || MAX_DOC_CHARS;
-  const promptLanguage = (PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage] ? settings.promptLanguage : DEFAULT_SETTINGS.promptLanguage;
+  const promptLanguage = (PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage]
+    ? settings.promptLanguage
+    : DEFAULT_SETTINGS.promptLanguage;
   const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
   const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
   const languageInstruction = promptLanguageInstruction(promptLanguage);
-  const doc = content.length > maxDocChars
-    ? content.slice(0, maxDocChars) + (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
-    : content;
+  const doc =
+    content.length > maxDocChars
+      ? content.slice(0, maxDocChars) +
+        (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
+      : content;
 
   const schema = '{"cards":[{"title":"...","anchor":"...","gist":"...","bullets":["...","..."]}]}';
   const example = promptSchemaExample(promptLanguage);
@@ -128,8 +141,6 @@ export function buildPrompts(content: string, settings: PluginSettings): PromptP
 ${contract}`
     : defaultSystem;
 
-  const user = promptLanguage === 'en'
-    ? `Source document:\n\n${doc}`
-    : `以下是需要处理的文档全文：\n\n${doc}`;
+  const user = promptLanguage === 'en' ? `Source document:\n\n${doc}` : `以下是需要处理的文档全文：\n\n${doc}`;
   return { system, user };
 }

@@ -1,6 +1,6 @@
 'use strict';
 
-import type { RawCard, CardPatch } from './types';
+import type { CardPatch, RawCard } from './types';
 
 export function removeCardAt<T extends RawCard>(cards: T[], index: number): T[] {
   const next = Array.isArray(cards) ? cards.slice() : [];

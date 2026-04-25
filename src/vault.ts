@@ -3,7 +3,7 @@
 export function normalizeVaultPath(path) {
   return String(path || '')
     .split('/')
-    .map(part => part.trim())
+    .map((part) => part.trim())
     .filter(Boolean)
     .join('/');
 }
