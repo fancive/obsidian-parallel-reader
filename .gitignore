@@ -1,5 +1,6 @@
 # Plugin runtime data (user cache + settings, not source)
 data.json
+cache.json
 
 # Editor / OS
 .DS_Store

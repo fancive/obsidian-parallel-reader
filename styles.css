@@ -13,14 +13,83 @@
   flex-shrink: 0;
 }
 
+.parallel-reader-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .parallel-reader-title {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   font-size: 13px;
   color: var(--text-normal);
-  margin-bottom: 8px;
+  margin-bottom: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.parallel-reader-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.parallel-reader-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.parallel-reader-icon-button:hover,
+.parallel-reader-icon-button:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.parallel-reader-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.parallel-reader-text-button,
+.parallel-reader-stale-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.parallel-reader-text-button:hover,
+.parallel-reader-stale-button:hover,
+.parallel-reader-text-button:focus-visible,
+.parallel-reader-stale-button:focus-visible {
+  background: var(--background-modifier-hover);
+}
+
+.parallel-reader-text-button svg,
+.parallel-reader-stale-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .parallel-reader-cards {
@@ -173,6 +242,11 @@
 }
 
 .parallel-reader-stale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 10px 12px 0;
   padding: 8px 12px;
   background: var(--background-modifier-error, rgba(224, 175, 104, 0.1));
@@ -180,6 +254,60 @@
   border-radius: 4px;
   font-size: 12px;
   border: 1px solid var(--text-warning, #e0af68);
+}
+
+.parallel-reader-stale-banner > span {
+  flex: 1;
+  min-width: 160px;
+}
+
+.parallel-reader-stale-button {
+  flex-shrink: 0;
+  color: var(--text-warning, #e0af68);
+}
+
+.parallel-reader-state {
+  margin: 12px;
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+}
+
+.parallel-reader-state-title {
+  color: var(--text-normal);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.parallel-reader-state-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.parallel-reader-error {
+  border-color: var(--text-error, #e06c75);
+}
+
+.parallel-reader-error .parallel-reader-state-title {
+  color: var(--text-error, #e06c75);
+}
+
+.parallel-reader-spinner {
+  width: 18px;
+  height: 18px;
+  margin-bottom: 10px;
+  border: 2px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: parallel-reader-spin 0.9s linear infinite;
+}
+
+@keyframes parallel-reader-spin {
+  to { transform: rotate(360deg); }
 }
 
 .parallel-reader-empty {
