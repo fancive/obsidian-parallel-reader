@@ -27,35 +27,45 @@ Obsidian 对照阅读插件 — 左边原文、右边 AI 摘要卡片，滚动�
 
 ## 快速开始
 
-### 安装
+### 第一步：安装插件
 
-**手动安装** — 从 [最新 Release](https://github.com/fancive/obsidian-parallel-reader/releases) 下载 `main.js`、`manifest.json`、`styles.css`，放入 `.obsidian/plugins/parallel-reader/`，然后在 Obsidian 设置中启用。
+1. 打开 [Release 页面](https://github.com/fancive/obsidian-parallel-reader/releases)，下载最新版的三个文件：**main.js**、**manifest.json**、**styles.css**
+2. 打开你的 Vault 文件夹，进入 `.obsidian/plugins/`（没有就新建），再创建一个叫 `parallel-reader` 的文件夹
+3. 把下载的三个文件放进去
+4. 打开 Obsidian → **设置** → **第三方插件** → 找到 **Parallel Reader** → 打开开关
 
-### 配置 Provider
+> **找不到 `.obsidian` 文件夹？** macOS 在 Finder 里按 `Cmd+Shift+.` 显示隐藏文件；Windows 在文件资源管理器里勾选「显示隐藏的项目」。
 
-打开插件设置，选择 Provider preset，填入 API Key 和模型 ID 即可。
+### 第二步：配置 AI 服务
 
-| Provider | 格式 | 说明 |
-|----------|------|------|
-| Anthropic | `anthropic-messages` | 默认，推荐 |
-| OpenAI | `openai-chat` | Chat Completions |
-| Google Gemini | `google-generative-ai` | generateContent |
-| OpenRouter / Groq / DeepSeek / Moonshot 等 | `openai-chat` | OpenAI 兼容格式 |
-| Ollama / LM Studio | `openai-chat` | 本地模型，无需 API Key |
-| 自定义端点 | 任意 | 填写 Base URL 即可 |
+1. 在 Obsidian 中打开 **设置** → **Parallel Reader**
+2. 选择一个 **Provider**（比如 Anthropic、OpenAI、DeepSeek 等）
+3. 粘贴你的 **API Key**
+4. （可选）修改 **模型**
+5. 点击 **Test** 验证连接
 
-Model ID 支持 `provider/model` 写法（如 `anthropic/claude-sonnet-4-6`），匹配当前 preset 时自动剥离前缀。
+搞定！打开任意笔记，按 `Cmd/Ctrl+P` 调出命令面板，运行 **「Parallel Reader: 为当前笔记生成对照笔记」** 即可。
 
-### CLI 模式（可选）
+<details>
+<summary><b>支持的 Provider 一览</b></summary>
 
-切换后端为 **Claude Code CLI** 或 **Codex CLI**，通过本地 CLI 调用 LLM。
+| Provider | 说明 |
+|----------|------|
+| **Anthropic** | 默认推荐 |
+| **OpenAI** | GPT 系列 |
+| **Google Gemini** | Gemini 系列 |
+| **OpenRouter / Groq / DeepSeek / Moonshot 等** | OpenAI 兼容格式 |
+| **Ollama / LM Studio** | 本地模型，无需 API Key |
+| **自定义端点** | 任何 OpenAI 或 Anthropic 兼容的 API |
 
-Obsidian GUI 不继承 shell `PATH`，需要在设置中填写绝对路径：
+</details>
 
-```bash
-which claude    # Claude Code
-which codex     # Codex
-```
+<details>
+<summary><b>CLI 模式（进阶）</b></summary>
+
+如果你本地装了 **Claude Code** 或 **Codex**，可以在设置里切换后端直接使用。插件会自动探测常见安装位置，如果找不到，在终端运行 `which claude` 或 `which codex` 获取完整路径，粘贴到设置里即可。
+
+</details>
 
 ## 使用
 

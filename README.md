@@ -27,35 +27,45 @@ Inspired by [this reading workflow demo](https://www.bilibili.com/video/BV1FxoGB
 
 ## Quick Start
 
-### Install
+### Step 1: Install the Plugin
 
-**Manual** — Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/fancive/obsidian-parallel-reader/releases), place them in `.obsidian/plugins/parallel-reader/`, and enable the plugin in Obsidian settings.
+1. Go to the [Releases page](https://github.com/fancive/obsidian-parallel-reader/releases) and download three files from the latest release: **main.js**, **manifest.json**, **styles.css**
+2. Open your vault folder, navigate to `.obsidian/plugins/` (create it if it doesn't exist), and create a new folder called `parallel-reader`
+3. Put the three downloaded files into that folder
+4. Open Obsidian → **Settings** → **Community plugins** → find **Parallel Reader** → toggle it **on**
 
-### Configure a Provider
+> **Tip**: Can't see the `.obsidian` folder? On macOS press `Cmd+Shift+.` in Finder; on Windows enable "Show hidden files" in File Explorer.
 
-Open plugin settings, pick a provider preset, enter your API key and model ID. Done.
+### Step 2: Set Up Your AI Provider
 
-| Provider | Format | Notes |
-|----------|--------|-------|
-| Anthropic | `anthropic-messages` | Default, recommended |
-| OpenAI | `openai-chat` | Chat Completions |
-| Google Gemini | `google-generative-ai` | generateContent |
-| OpenRouter / Groq / DeepSeek / Moonshot / ... | `openai-chat` | OpenAI-compatible |
-| Ollama / LM Studio | `openai-chat` | Local, no API key needed |
-| Custom endpoint | Any | Just fill in Base URL |
+1. In Obsidian, go to **Settings** → **Parallel Reader**
+2. Choose a **Provider preset** (e.g. Anthropic, OpenAI, DeepSeek, etc.)
+3. Paste your **API Key**
+4. (Optional) Change the **Model** if you prefer a different one
+5. Click **Test** to verify the connection
 
-Model IDs support `provider/model` notation (e.g. `anthropic/claude-sonnet-4-6`) — the matching prefix is stripped automatically.
+That's it! Open any note and run the command **"Parallel Reader: Generate"** from the command palette (`Cmd/Ctrl+P`).
 
-### CLI Backends (Optional)
+<details>
+<summary><b>Supported providers</b></summary>
 
-Switch backend to **Claude Code CLI** or **Codex CLI** to use your local CLI installation.
+| Provider | Notes |
+|----------|-------|
+| **Anthropic** | Default, recommended |
+| **OpenAI** | GPT models |
+| **Google Gemini** | Gemini models |
+| **OpenRouter / Groq / DeepSeek / Moonshot / ...** | OpenAI-compatible |
+| **Ollama / LM Studio** | Local models, no API key needed |
+| **Custom endpoint** | Any OpenAI or Anthropic compatible API |
 
-Since Obsidian's GUI doesn't inherit your shell `PATH`, enter the absolute CLI path in settings:
+</details>
 
-```bash
-which claude    # Claude Code
-which codex     # Codex
-```
+<details>
+<summary><b>CLI backends (advanced)</b></summary>
+
+If you have **Claude Code** or **Codex** installed locally, you can use them as backends instead of API keys. Switch the backend in settings and enter the CLI path. The plugin auto-detects common install locations, but Obsidian's GUI may not find it — in that case, paste the full path (run `which claude` or `which codex` in your terminal to find it).
+
+</details>
 
 ## Usage
 
