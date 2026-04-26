@@ -539,7 +539,7 @@ class ParallelReaderPlugin extends Plugin {
           }),
         );
       })
-      .catch(async (e) => {
+      .catch((e) => {
         if (e instanceof GenerationJobAlreadyRunningError) {
           new Notice(e.message);
           return;
