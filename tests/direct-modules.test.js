@@ -38,6 +38,7 @@ async function requireBundledModule(relativePath) {
     const generation = await requireBundledModule('src/generation.ts');
     const providerParsers = await requireBundledModule('src/provider-parsers.ts');
     const settings = await requireBundledModule('src/settings.ts');
+    const streaming = await requireBundledModule('src/streaming.ts');
 
   const cacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z' };
   const touched = cache.touchCacheEntry(cacheEntry, '2024-06-01T00:00:00.000Z');
@@ -94,6 +95,92 @@ async function requireBundledModule(relativePath) {
     settings.generationFingerprint({ ...settings.DEFAULT_SETTINGS, model: 'b' }),
     'direct settings import exposes generation fingerprinting',
   );
+
+  function trackedSignal() {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    let activeListeners = 0;
+    const addEventListener = signal.addEventListener.bind(signal);
+    const removeEventListener = signal.removeEventListener.bind(signal);
+    signal.addEventListener = (type, listener, options) => {
+      if (type === 'abort') activeListeners++;
+      return addEventListener(type, listener, options);
+    };
+    signal.removeEventListener = (type, listener, options) => {
+      if (type === 'abort') activeListeners--;
+      return removeEventListener(type, listener, options);
+    };
+    return { controller, signal, activeListeners: () => activeListeners };
+  }
+
+  function streamingBody(text) {
+    const encoder = new TextEncoder();
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      },
+    });
+  }
+
+  const originalFetch = globalThis.fetch;
+  try {
+    const success = trackedSignal();
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      body: streamingBody('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
+      text: async () => '',
+    });
+    await streaming.streamingFetch(
+      'https://example.test',
+      {},
+      {},
+      streaming.deltaExtractorForFormat('openai-chat'),
+      undefined,
+      success.signal,
+      { streamingTimeoutMs: 1000 },
+    );
+    assert.strictEqual(success.activeListeners(), 0, 'streamingFetch removes abort listener after success');
+
+    const httpError = trackedSignal();
+    globalThis.fetch = async () => ({ ok: false, status: 500, body: null, text: async () => 'bad' });
+    await assert.rejects(
+      () =>
+        streaming.streamingFetch(
+          'https://example.test',
+          {},
+          {},
+          streaming.deltaExtractorForFormat('openai-chat'),
+          undefined,
+          httpError.signal,
+          { streamingTimeoutMs: 1000 },
+        ),
+      /HTTP 500|API returned HTTP 500/,
+      'streamingFetch rejects HTTP errors',
+    );
+    assert.strictEqual(httpError.activeListeners(), 0, 'streamingFetch removes abort listener after HTTP error');
+
+    const timeout = trackedSignal();
+    globalThis.fetch = async () => new Promise(() => {});
+    await assert.rejects(
+      () =>
+        streaming.streamingFetch(
+          'https://example.test',
+          {},
+          {},
+          streaming.deltaExtractorForFormat('openai-chat'),
+          undefined,
+          timeout.signal,
+          { streamingTimeoutMs: 1 },
+        ),
+      /Streaming timed out after 1ms/,
+      'streamingFetch rejects on timeout',
+    );
+    assert.strictEqual(timeout.activeListeners(), 0, 'streamingFetch removes abort listener after timeout');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
     console.log('direct module tests passed');
   } finally {

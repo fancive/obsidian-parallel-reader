@@ -156,12 +156,14 @@ export async function streamingFetch(
 
   const timeoutMs = settings?.streamingTimeoutMs ?? 120000;
   const timeoutController = new AbortController();
+  let abortListener: (() => void) | null = null;
 
   if (signal) {
     if (signal.aborted) {
       timeoutController.abort();
     } else {
-      signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+      abortListener = () => timeoutController.abort();
+      signal.addEventListener('abort', abortListener, { once: true });
     }
   }
 
@@ -180,5 +182,6 @@ export async function streamingFetch(
     ]);
   } finally {
     if (timeoutId !== null) clearTimeout(timeoutId);
+    if (signal && abortListener) signal.removeEventListener('abort', abortListener);
   }
 }
