@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   exportFolder: 'Reading/Articles',
   cliTimeoutMs: 120000,
   streaming: true,
+  streamingTimeoutMs: 120000,
 };
 
 export const API_FORMATS: Record<string, ApiFormat> = {
