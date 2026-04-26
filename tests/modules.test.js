@@ -178,6 +178,27 @@ assert.deepStrictEqual(t.folderPathsForTarget('../../etc/passwd'), ['etc', 'etc/
 assert.deepStrictEqual(t.folderPathsForTarget('./a/../b'), ['a', 'a/b'], 'strips . and .. segments');
 assert.deepStrictEqual(t.folderPathsForTarget('a/../../b'), ['a', 'a/b'], 'strips mid-path ..');
 
+// ── batch.ts ──
+
+assert.strictEqual(t.normalizeBatchFolderInput('/Reading//Articles/'), 'Reading/Articles', 'normalizes folder input');
+assert.strictEqual(t.normalizeBatchFolderInput('../Inbox/./Daily'), 'Inbox/Daily', 'strips unsafe folder segments');
+const batchFiles = [
+  { path: 'root.md', parent: null },
+  { path: 'Reading/note.md', parent: { path: 'Reading' } },
+  { path: 'Reading/Deep/nested.md', parent: { path: 'Reading/Deep' } },
+];
+assert.deepStrictEqual(t.selectBatchFiles(batchFiles, '').map((file) => file.path), ['root.md'], 'root folder only');
+assert.deepStrictEqual(
+  t.selectBatchFiles(batchFiles, '/Reading/').map((file) => file.path),
+  ['Reading/note.md'],
+  'selected folder is non-recursive',
+);
+assert.deepStrictEqual(t.batchProgressVars(1, 3), { current: 2, total: 3 }, 'progress vars are one-based');
+const batchStats = t.createBatchStats(3);
+const skippedStats = t.recordBatchSkip(batchStats);
+assert.deepStrictEqual(batchStats, { total: 3, skipped: 0 }, 'batch stats are immutable');
+assert.deepStrictEqual(skippedStats, { total: 3, skipped: 1 }, 'batch stats accumulate');
+
 // ── i18n.ts ──
 
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'appTitle'), '对照阅读笔记', 'zh translation');
@@ -266,6 +287,16 @@ assert.strictEqual(
   true, 'matching entry returns true'
 );
 assert.strictEqual(t.cacheEntryMatches(null, 'test', baseSettings), false, 'null entry returns false');
+assert.strictEqual(
+  t.shouldSkipBatchFile({
+    schemaVersion: t.CACHE_SCHEMA_VERSION,
+    contentHash: hash,
+    settingsHash: t.generationFingerprint(baseSettings),
+  }, 'test', baseSettings),
+  true,
+  'fresh cache entry is skipped during batch',
+);
+assert.strictEqual(t.shouldSkipBatchFile(null, 'test', baseSettings), false, 'missing cache entry is not skipped');
 
 // pruneCacheEntries
 const cache = {

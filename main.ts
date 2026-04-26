@@ -1,6 +1,14 @@
 'use strict';
 import { MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
+import {
+  batchProgressVars,
+  createBatchStats,
+  normalizeBatchFolderInput,
+  recordBatchSkip,
+  selectBatchFiles,
+  shouldSkipBatchFile,
+} from './src/batch';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
@@ -560,27 +568,24 @@ class ParallelReaderPlugin extends Plugin {
       new FolderPromptModal(plugin.app).open();
     });
     if (folderPath === null) return;
-    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => {
-      if (folderPath === '') return !f.path.includes('/');
-      return f.parent?.path === folderPath;
-    });
+    const allFiles = selectBatchFiles(this.app.vault.getMarkdownFiles(), folderPath);
     if (allFiles.length === 0) {
       new Notice(this.t('batchNoMarkdown'));
       return;
     }
-    let skipped = 0;
+    let stats = createBatchStats(allFiles.length);
     for (let i = 0; i < allFiles.length; i++) {
       const file = allFiles[i];
-      new Notice(this.t('batchProgress', { current: i + 1, total: allFiles.length }));
+      new Notice(this.t('batchProgress', batchProgressVars(i, allFiles.length)));
       const content = await this.app.vault.read(file);
       const entry = this.cacheManager.get(file.path);
-      if (entry && cacheEntryMatches(entry, content, this.settings)) {
-        skipped++;
+      if (shouldSkipBatchFile(entry, content, this.settings)) {
+        stats = recordBatchSkip(stats);
         continue;
       }
       await this.runForFile(file, false);
     }
-    new Notice(this.t('batchDone', { total: allFiles.length, skipped }));
+    new Notice(this.t('batchDone', { total: stats.total, skipped: stats.skipped }));
   }
 
   resolveCardAnchors(content: string, rawCards: RawCard[]) {
@@ -718,6 +723,7 @@ export const __test = {
   buildGeminiBody,
   buildOpenAiChatBody,
   buildOpenAiResponsesBody,
+  batchProgressVars,
   buildPrompts,
   cardsToMarkdown,
   cacheEntryMatches,
@@ -728,16 +734,21 @@ export const __test = {
   extractJson,
   findLineForAnchor,
   folderPathsForTarget,
+  createBatchStats,
   generationFingerprint,
   getApiBaseUrl,
   modelForApi,
+  normalizeBatchFolderInput,
   normalizeCardsPayload,
   nextCardIndex,
   pruneCacheEntries,
+  recordBatchSkip,
   removeCardAt,
   resolveCliPath,
   serializeCacheFile,
   shouldConfirmRegenerate,
+  shouldSkipBatchFile,
+  selectBatchFiles,
   summarizeViaApi,
   touchCacheEntry,
   translate,
