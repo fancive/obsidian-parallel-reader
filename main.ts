@@ -1,13 +1,13 @@
 'use strict';
-import { MarkdownView, Modal, Notice, Plugin, requestUrl, TFile } from 'obsidian';
+import { MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
-import { resolveCliPath, summarizeViaClaudeCode, summarizeViaCodex } from './src/cli';
+import { resolveCliPath } from './src/cli';
+import { cancellationNoticeKey, summarizeDocument } from './src/generation';
 import {
   classifyGenerationError,
-  type GenerationJob,
   GenerationJobAlreadyRunningError,
   GenerationJobCancelledError,
   GenerationJobManager,
@@ -22,7 +22,6 @@ import {
   buildOpenAiChatBody,
   buildOpenAiResponsesBody,
   summarizeViaApi,
-  summarizeViaApiStreaming,
   supportsStreaming,
   tokenLimitFieldForOpenAiChat,
 } from './src/providers';
@@ -34,7 +33,6 @@ import {
   DEFAULT_SETTINGS,
   generationFingerprint,
   getApiBaseUrl,
-  isApiBackend,
   modelForApi,
   normalizeSettings,
   pruneCacheEntries,
@@ -53,59 +51,6 @@ import type {
 import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
 import { folderPathsForTarget } from './src/vault';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
-
-/* ---------- Helpers ---------- */
-
-async function summarizeDocument(
-  content: string,
-  settings: PluginSettings,
-  job: GenerationJob,
-  onStreamProgress?: (progress: StreamProgress) => void,
-) {
-  const { system, user } = buildPrompts(content, settings);
-  let cards: RawCard[];
-  switch (settings.backend) {
-    case 'claude-code':
-      cards = await summarizeViaClaudeCode(system, user, settings, job);
-      break;
-    case 'codex':
-      cards = await summarizeViaCodex(system, user, settings, job);
-      break;
-    default: {
-      const useStreaming = supportsStreaming(settings);
-      if (useStreaming) {
-        const abortController = new AbortController();
-        job.onCancel(() => abortController.abort());
-        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController.signal);
-      } else {
-        cards = await summarizeViaApi(requestUrl, system, user, settings);
-      }
-      break;
-    }
-  }
-  const resolved: ResolvedCard[] = cards.map((c) => ({
-    title: c.title,
-    level: 2,
-    anchor: c.anchor,
-    gist: c.gist,
-    startLine: findLineForAnchor(content, c.anchor),
-    bullets: c.bullets,
-  }));
-  resolved.sort((a, b) => {
-    if (a.startLine < 0 && b.startLine < 0) return 0;
-    if (a.startLine < 0) return 1;
-    if (b.startLine < 0) return -1;
-    return a.startLine - b.startLine;
-  });
-  return resolved;
-}
-
-function cancellationNoticeKey(settings: PluginSettings | null, job: GenerationJob | null) {
-  if (job?.phase === 'generating' && settings && isApiBackend(settings.backend)) {
-    return 'cancelRequestedApiInFlight';
-  }
-  return 'cancelRequested';
-}
 
 /* ---------- Plugin ---------- */
 
