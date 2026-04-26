@@ -19,6 +19,14 @@ export interface BatchRunState {
   currentPath: string;
 }
 
+export type BatchFolderValidationReason = 'ok' | 'unsafe' | 'missing';
+
+export interface BatchFolderValidation {
+  valid: boolean;
+  reason: BatchFolderValidationReason;
+  folderPath: string;
+}
+
 export function normalizeBatchFolderInput(input: string): string {
   return (input || '')
     .trim()
@@ -26,6 +34,23 @@ export function normalizeBatchFolderInput(input: string): string {
     .map((part) => part.trim())
     .filter((part) => part && part !== '.' && part !== '..')
     .join('/');
+}
+
+export function hasUnsafeBatchFolderSegments(input: string): boolean {
+  return (input || '')
+    .split('/')
+    .map((part) => part.trim())
+    .some((part) => part === '.' || part === '..');
+}
+
+export function validateBatchFolderInput(
+  input: string,
+  folderExists: (folderPath: string) => boolean,
+): BatchFolderValidation {
+  const folderPath = normalizeBatchFolderInput(input);
+  if (hasUnsafeBatchFolderSegments(input)) return { valid: false, reason: 'unsafe', folderPath };
+  if (folderPath && !folderExists(folderPath)) return { valid: false, reason: 'missing', folderPath };
+  return { valid: true, reason: 'ok', folderPath };
 }
 
 export function isFileInBatchFolder(file: BatchFileLike, folderPath: string): boolean {

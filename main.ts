@@ -6,6 +6,7 @@ import {
   batchProgressVars,
   createBatchRunState,
   createBatchStats,
+  hasUnsafeBatchFolderSegments,
   markBatchFileRunning,
   normalizeBatchFolderInput,
   recordBatchProcessed,
@@ -13,6 +14,7 @@ import {
   requestBatchCancel,
   selectBatchFiles,
   shouldSkipBatchFile,
+  validateBatchFolderInput,
 } from './src/batch';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
@@ -585,7 +587,16 @@ class ParallelReaderPlugin extends Plugin {
       new FolderPromptModal(plugin.app).open();
     });
     if (folderPath === null) return;
-    const allFiles = selectBatchFiles(this.app.vault.getMarkdownFiles(), folderPath);
+    const validation = validateBatchFolderInput(folderPath, (path) => {
+      const target = this.app.vault.getAbstractFileByPath(path);
+      return !!target && !(target instanceof TFile);
+    });
+    if (!validation.valid) {
+      const noticeKey = validation.reason === 'unsafe' ? 'batchInvalidFolderInput' : 'batchFolderNotFound';
+      new Notice(this.t(noticeKey, { path: validation.folderPath || folderPath }));
+      return;
+    }
+    const allFiles = selectBatchFiles(this.app.vault.getMarkdownFiles(), validation.folderPath);
     if (allFiles.length === 0) {
       new Notice(this.t('batchNoMarkdown'));
       return;
@@ -772,6 +783,7 @@ export const __test = {
   createBatchStats,
   generationFingerprint,
   getApiBaseUrl,
+  hasUnsafeBatchFolderSegments,
   markBatchFileRunning,
   modelForApi,
   normalizeBatchFolderInput,
@@ -793,6 +805,7 @@ export const __test = {
   translate,
   tokenLimitFieldForOpenAiChat,
   updateCardAt,
+  validateBatchFolderInput,
   visibleTopProbeY,
   supportsStreaming,
   deltaExtractorForFormat,

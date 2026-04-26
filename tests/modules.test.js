@@ -226,6 +226,28 @@ assert.deepStrictEqual(t.folderPathsForTarget('a/../../b'), ['a', 'a/b'], 'strip
 
 assert.strictEqual(t.normalizeBatchFolderInput('/Reading//Articles/'), 'Reading/Articles', 'normalizes folder input');
 assert.strictEqual(t.normalizeBatchFolderInput('../Inbox/./Daily'), 'Inbox/Daily', 'strips unsafe folder segments');
+assert.strictEqual(t.hasUnsafeBatchFolderSegments('../Inbox/./Daily'), true, 'unsafe folder segments are detected');
+assert.strictEqual(t.hasUnsafeBatchFolderSegments('/Reading//Articles/'), false, 'normal folder paths are safe');
+assert.deepStrictEqual(
+  t.validateBatchFolderInput('', () => false),
+  { valid: true, reason: 'ok', folderPath: '' },
+  'empty batch folder targets vault root',
+);
+assert.deepStrictEqual(
+  t.validateBatchFolderInput('Reading', (path) => path === 'Reading'),
+  { valid: true, reason: 'ok', folderPath: 'Reading' },
+  'existing folder input is valid',
+);
+assert.deepStrictEqual(
+  t.validateBatchFolderInput('../Reading', () => true),
+  { valid: false, reason: 'unsafe', folderPath: 'Reading' },
+  'unsafe folder input is invalid even if normalized target exists',
+);
+assert.deepStrictEqual(
+  t.validateBatchFolderInput('Missing', () => false),
+  { valid: false, reason: 'missing', folderPath: 'Missing' },
+  'missing folder input is invalid',
+);
 const batchFiles = [
   { path: 'root.md', parent: null },
   { path: 'Reading/note.md', parent: { path: 'Reading' } },

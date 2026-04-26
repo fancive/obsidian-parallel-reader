@@ -74,6 +74,7 @@ assert.strictEqual(typeof t.findLineForAnchor, 'function');
 assert.strictEqual(typeof t.folderPathsForTarget, 'function');
 assert.strictEqual(typeof t.getApiBaseUrl, 'function');
 assert.strictEqual(typeof t.generationFingerprint, 'function');
+assert.strictEqual(typeof t.hasUnsafeBatchFolderSegments, 'function');
 assert.strictEqual(typeof t.CacheManager, 'function');
 assert.strictEqual(typeof t.GenerationJobManager, 'function');
 assert.strictEqual(typeof t.createBatchRunState, 'function');
@@ -90,6 +91,7 @@ assert.strictEqual(typeof t.serializeCacheFile, 'function');
 assert.strictEqual(typeof t.shouldConfirmRegenerate, 'function');
 assert.strictEqual(typeof t.translate, 'function');
 assert.strictEqual(typeof t.updateCardAt, 'function');
+assert.strictEqual(typeof t.validateBatchFolderInput, 'function');
 
 const baseSettings = {
   backend: 'api',
