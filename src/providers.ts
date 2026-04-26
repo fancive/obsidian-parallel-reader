@@ -19,6 +19,7 @@ import {
   getApiPreset,
   modelForApi,
 } from './settings';
+import { deltaExtractorForFormat, type StreamProgress, streamingFetch } from './streaming';
 import type { PluginSettings, RawCard } from './types';
 
 function endpointUrl(baseUrl: string, suffixes: string[]) {
@@ -413,6 +414,62 @@ export async function summarizeViaApi(
       return summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, settings);
     default:
       return summarizeViaAnthropicMessages(requestUrlImpl, system, user, settings);
+  }
+}
+
+export function supportsStreaming(settings: PluginSettings): boolean {
+  if (!settings.streaming) return false;
+  const format = getApiFormat(settings);
+  return !!deltaExtractorForFormat(format);
+}
+
+async function streamSummarizeViaOpenAiChat(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  onProgress?: (progress: StreamProgress) => void,
+  signal?: AbortSignal,
+) {
+  const url = endpointUrl(getApiBaseUrl(settings), ['/chat/completions']);
+  const headers = buildApiHeaders(settings);
+  const body = buildOpenAiChatBody(system, user, settings, { structured: false });
+  body.stream = true;
+  const extractor = deltaExtractorForFormat('openai-chat')!;
+  const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
+  return parseCardsJson(text.trim(), settings);
+}
+
+async function streamSummarizeViaAnthropicMessages(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  onProgress?: (progress: StreamProgress) => void,
+  signal?: AbortSignal,
+) {
+  const url = endpointUrl(getApiBaseUrl(settings), ['/messages']);
+  const headers = buildApiHeaders(settings, { 'anthropic-version': '2023-06-01' });
+  const body = buildAnthropicMessagesBody(system, user, settings, { structured: false });
+  body.stream = true;
+  const extractor = deltaExtractorForFormat('anthropic-messages')!;
+  const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
+  return parseCardsJson(text.trim(), settings);
+}
+
+export async function summarizeViaApiStreaming(
+  system: string,
+  user: string,
+  settings: PluginSettings,
+  onProgress?: (progress: StreamProgress) => void,
+  signal?: AbortSignal,
+): Promise<RawCard[]> {
+  const format = getApiFormat(settings);
+  switch (format) {
+    case 'openai-chat':
+      return streamSummarizeViaOpenAiChat(system, user, settings, onProgress, signal);
+    case 'anthropic-messages':
+      return streamSummarizeViaAnthropicMessages(system, user, settings, onProgress, signal);
+    default:
+      throw new Error(`Streaming not supported for format: ${format}`);
   }
 }
 

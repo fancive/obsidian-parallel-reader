@@ -94,6 +94,39 @@ export class ParallelReaderView extends ItemView {
     this.render();
   }
 
+  renderStreamingPreview(file: TFile, text: string) {
+    if (this.sourceFile?.path !== file.path) {
+      this.sourceFile = file;
+    }
+    const container = this.containerEl.children[1];
+    const existing = container.querySelector('.parallel-reader-streaming-preview');
+    if (existing) {
+      const pre = existing.querySelector('pre');
+      if (pre) pre.textContent = text.slice(-2000);
+      const counter = existing.querySelector('.parallel-reader-stream-counter');
+      if (counter) counter.textContent = `${text.length} chars`;
+      return;
+    }
+    container.empty();
+    const header = container.createDiv({ cls: 'parallel-reader-header' });
+    const headerRow = header.createDiv({ cls: 'parallel-reader-header-row' });
+    headerRow.createEl('div', { text: file.basename, cls: 'parallel-reader-title' });
+    const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
+    addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => {
+      this.plugin.cancelGenerationForFile(file);
+    });
+
+    const state = container.createDiv({
+      cls: 'parallel-reader-state parallel-reader-loading parallel-reader-streaming-preview',
+    });
+    state.createDiv({ cls: 'parallel-reader-spinner' });
+    const titleEl = state.createEl('div', { cls: 'parallel-reader-state-title' });
+    titleEl.createSpan({ text: this.plugin.t('loadingGenerating') + ' ' });
+    titleEl.createSpan({ cls: 'parallel-reader-stream-counter', text: `${text.length} chars` });
+    const pre = state.createEl('pre', { cls: 'parallel-reader-stream-text' });
+    pre.textContent = text.slice(-2000);
+  }
+
   async renderError(file: TFile, message: string) {
     this.sourceFile = file;
     this.sections = [];

@@ -390,4 +390,66 @@ assert.strictEqual(t.classifyGenerationError(new Error('random error')), 'unknow
 assert.strictEqual(t.classifyGenerationError(null), 'unknown', 'null error');
 assert.strictEqual(t.classifyGenerationError('string error'), 'unknown', 'string error');
 
+// ── streaming.ts ──
+
+// supportsStreaming
+assert.strictEqual(
+  t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'openai-chat' }),
+  true, 'OpenAI Chat supports streaming'
+);
+assert.strictEqual(
+  t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'anthropic-messages', apiProvider: 'anthropic' }),
+  true, 'Anthropic Messages supports streaming'
+);
+assert.strictEqual(
+  t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'google-generative-ai', apiProvider: 'google' }),
+  false, 'Gemini does not support streaming'
+);
+assert.strictEqual(
+  t.supportsStreaming({ ...baseSettings, streaming: false, apiFormat: 'openai-chat' }),
+  false, 'streaming disabled returns false'
+);
+
+// deltaExtractorForFormat
+const openaiExtract = t.deltaExtractorForFormat('openai-chat');
+assert.ok(openaiExtract, 'openai-chat extractor exists');
+assert.strictEqual(
+  openaiExtract({ choices: [{ delta: { content: 'hello' } }] }),
+  'hello', 'extracts OpenAI delta'
+);
+assert.strictEqual(openaiExtract({ choices: [{ delta: {} }] }), '', 'empty delta');
+assert.strictEqual(openaiExtract({}), '', 'missing choices');
+
+const anthropicExtract = t.deltaExtractorForFormat('anthropic-messages');
+assert.ok(anthropicExtract, 'anthropic extractor exists');
+assert.strictEqual(
+  anthropicExtract({ type: 'content_block_delta', delta: { text: 'world' } }),
+  'world', 'extracts Anthropic delta'
+);
+assert.strictEqual(
+  anthropicExtract({ type: 'message_start' }),
+  '', 'non-delta event returns empty'
+);
+
+assert.strictEqual(t.deltaExtractorForFormat('google-generative-ai'), null, 'no extractor for gemini');
+
+// parseSseBuffer
+const sseResult = t.parseSseBuffer(
+  'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: {"choices":[{"delta":{"content":" there"}}]}\ndata: [DONE]\npartial',
+  openaiExtract,
+);
+assert.deepStrictEqual(sseResult.deltas, ['hi', ' there'], 'SSE parser extracts deltas');
+assert.strictEqual(sseResult.rest, 'partial', 'SSE parser keeps partial line');
+
+const sseEmpty = t.parseSseBuffer('', openaiExtract);
+assert.deepStrictEqual(sseEmpty.deltas, []);
+assert.strictEqual(sseEmpty.rest, '');
+
+// Anthropic SSE format
+const anthSse = t.parseSseBuffer(
+  'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"token"}}\n\nevent: message_stop\ndata: {"type":"message_stop"}\n\n',
+  anthropicExtract,
+);
+assert.deepStrictEqual(anthSse.deltas, ['token'], 'Anthropic SSE extracts text delta');
+
 console.log('modules tests passed');

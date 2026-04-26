@@ -143,6 +143,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cachedNotesName: '已缓存笔记：{count} 篇',
     cachedNotesDesc: '缓存以源笔记 SHA1 + 生成配置指纹作为失效键，源笔记或模型配置修改后会显示 stale 提示',
     clearAllCacheButton: '清除所有缓存',
+    settingStreamingName: '流式输出',
+    settingStreamingDesc: '启用后生成时实时显示 LLM 输出进度（仅 OpenAI Chat 和 Anthropic 格式支持）',
   },
   en: {
     appTitle: 'Parallel Reader',
@@ -290,6 +292,9 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cachedNotesName: 'Cached notes: {count}',
     cachedNotesDesc: 'Cache is invalidated by source SHA1 and generation settings fingerprint.',
     clearAllCacheButton: 'Clear all caches',
+    settingStreamingName: 'Streaming output',
+    settingStreamingDesc:
+      'Show real-time LLM output progress during generation (OpenAI Chat and Anthropic formats only)',
   },
 };
 

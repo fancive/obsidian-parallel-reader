@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   model: 'claude-sonnet-4-6',
   exportFolder: 'Reading/Articles',
   cliTimeoutMs: 120000,
+  streaming: true,
 };
 
 export const API_FORMATS: Record<string, ApiFormat> = {

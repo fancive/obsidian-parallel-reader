@@ -65,6 +65,7 @@ export interface PluginSettings {
   model: string;
   exportFolder: string;
   cliTimeoutMs: number;
+  streaming: boolean;
 }
 
 /* ---------- Provider types ---------- */

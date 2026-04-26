@@ -219,6 +219,16 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           }
         }),
       );
+
+      new Setting(containerEl)
+        .setName(tr('settingStreamingName'))
+        .setDesc(tr('settingStreamingDesc'))
+        .addToggle((toggle) =>
+          toggle.setValue(this.plugin.settings.streaming ?? true).onChange(async (v) => {
+            this.plugin.settings.streaming = v;
+            await this.plugin.saveSettings();
+          }),
+        );
     }
 
     new Setting(containerEl)

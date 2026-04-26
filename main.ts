@@ -21,6 +21,8 @@ import {
   buildOpenAiChatBody,
   buildOpenAiResponsesBody,
   summarizeViaApi,
+  summarizeViaApiStreaming,
+  supportsStreaming,
   tokenLimitFieldForOpenAiChat,
 } from './src/providers';
 import { extractJson, normalizeCardsPayload } from './src/schema';
@@ -39,6 +41,7 @@ import {
   pruneCacheEntries,
 } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
+import { deltaExtractorForFormat, parseSseBuffer, type StreamProgress } from './src/streaming';
 import type { CacheEntry, PluginSettings, RawCard, ResolvedCard } from './src/types';
 import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
 import { folderPathsForTarget } from './src/vault';
@@ -46,18 +49,30 @@ import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
 
 /* ---------- Helpers ---------- */
 
-async function summarizeDocument(content: string, settings: PluginSettings, job: GenerationJob) {
+async function summarizeDocument(
+  content: string,
+  settings: PluginSettings,
+  job: GenerationJob,
+  onStreamProgress?: (progress: StreamProgress) => void,
+) {
   const { system, user } = buildPrompts(content, settings);
   let cards: RawCard[];
+  const useStreaming = isApiBackend(settings.backend) && supportsStreaming(settings);
+  const abortController = useStreaming ? new AbortController() : null;
+  if (abortController) {
+    job.onCancel(() => abortController.abort());
+  }
   switch (settings.backend) {
     case 'codex':
       cards = await summarizeViaCodex(system, user, settings, job);
       break;
     case 'api':
-      cards = await summarizeViaApi(requestUrl, system, user, settings);
-      break;
     case 'anthropic-api':
-      cards = await summarizeViaApi(requestUrl, system, user, settings);
+      if (useStreaming) {
+        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
+      } else {
+        cards = await summarizeViaApi(requestUrl, system, user, settings);
+      }
       break;
     default:
       cards = await summarizeViaClaudeCode(system, user, settings, job);
@@ -600,7 +615,14 @@ class ParallelReaderPlugin extends Plugin {
         new Notice(this.t('generatingNotice'));
 
         job.setPhase('generating');
-        const sections = await summarizeDocument(content, this.settings, job);
+        const streamProgress = view
+          ? (progress: StreamProgress) => {
+              if (!progress.done && this.viewIsShowingFile(view, file)) {
+                view!.renderStreamingPreview(file, progress.accumulated);
+              }
+            }
+          : undefined;
+        const sections = await summarizeDocument(content, this.settings, job, streamProgress);
         job.throwIfCancelled();
         if (sections.length === 0) {
           new Notice(this.t('noCardsReturned'));
@@ -797,4 +819,7 @@ export const __test = {
   tokenLimitFieldForOpenAiChat,
   updateCardAt,
   visibleTopProbeY,
+  supportsStreaming,
+  deltaExtractorForFormat,
+  parseSseBuffer,
 };

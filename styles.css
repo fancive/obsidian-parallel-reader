@@ -349,3 +349,23 @@
   border-radius: 3px;
   font-size: 11px;
 }
+
+.parallel-reader-stream-text {
+  margin-top: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.parallel-reader-stream-counter {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: normal;
+}
