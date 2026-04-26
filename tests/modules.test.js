@@ -90,8 +90,9 @@ assert.deepStrictEqual(
 
 assert.strictEqual(t.touchCacheEntry(null), null, 'touchCacheEntry on null returns null');
 const entry = { generatedAt: '2024-01-01T00:00:00.000Z' };
-t.touchCacheEntry(entry, '2024-06-01T00:00:00.000Z');
-assert.strictEqual(entry.lastAccessedAt, '2024-06-01T00:00:00.000Z', 'touchCacheEntry sets lastAccessedAt');
+const touched = t.touchCacheEntry(entry, '2024-06-01T00:00:00.000Z');
+assert.strictEqual(touched.lastAccessedAt, '2024-06-01T00:00:00.000Z', 'touchCacheEntry sets lastAccessedAt on returned entry');
+assert.strictEqual(entry.lastAccessedAt, undefined, 'touchCacheEntry does not mutate original entry');
 
 const serialized = t.serializeCacheFile({ 'a.md': { cards: [] } });
 const parsed = JSON.parse(serialized);

@@ -131,14 +131,17 @@ export class CacheManager {
     const entry = this.cache[filePath];
     if (!entry) return false;
     const now = new Date().toISOString();
-    entry.cards = (cards || []).map((card: ResolvedCard) => ({
-      title: card.title,
-      anchor: card.anchor,
-      gist: card.gist,
-      bullets: card.bullets || [],
-    }));
-    entry.updatedAt = now;
-    entry.lastAccessedAt = now;
+    this.cache[filePath] = {
+      ...entry,
+      cards: (cards || []).map((card: ResolvedCard) => ({
+        title: card.title,
+        anchor: card.anchor,
+        gist: card.gist,
+        bullets: card.bullets || [],
+      })),
+      updatedAt: now,
+      lastAccessedAt: now,
+    };
     await this.save();
     return true;
   }
