@@ -79,7 +79,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .addDropdown((d) =>
         d
           .addOption('api', 'API / provider')
-          .addOption('claude-code', 'Claude Code CLI')
+          .addOption('claude-code', 'Claude code CLI')
           .addOption('codex', 'Codex CLI')
           .setValue(this.plugin.settings.backend)
           .onChange(async (v) => {
@@ -163,13 +163,10 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setDesc(this.tr('settingApiKeyDesc'))
       .addText((t) => {
         t.inputEl.type = 'password';
-        return t
-          .setPlaceholder('sk-...')
-          .setValue(this.plugin.settings.apiKey)
-          .onChange((v) => {
-            this.plugin.settings.apiKey = v.trim();
-            this.plugin.saveSettingsDebounced();
-          });
+        return t.setValue(this.plugin.settings.apiKey).onChange((v) => {
+          this.plugin.settings.apiKey = v.trim();
+          this.plugin.saveSettingsDebounced();
+        });
       });
 
     new Setting(containerEl)
@@ -202,13 +199,10 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setName(this.tr('settingHeadersName'))
       .setDesc(this.tr('settingHeadersDesc'))
       .addTextArea((t) =>
-        t
-          .setPlaceholder('cf-aig-authorization: Bearer ...')
-          .setValue(this.plugin.settings.apiHeaders)
-          .onChange((v) => {
-            this.plugin.settings.apiHeaders = v;
-            this.plugin.saveSettingsDebounced();
-          }),
+        t.setValue(this.plugin.settings.apiHeaders).onChange((v) => {
+          this.plugin.settings.apiHeaders = v;
+          this.plugin.saveSettingsDebounced();
+        }),
       );
 
     new Setting(containerEl).setName(this.tr('settingMaxTokensName')).addText((t) =>
@@ -251,7 +245,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setDesc(isCliBacked ? this.tr('settingModelDescCli') : this.tr('settingModelDescApi'))
       .addText((t) =>
         t
-          .setPlaceholder(isCliBacked ? DEFAULT_SETTINGS.model : getApiPreset(this.plugin.settings).model || 'model-id')
+          .setPlaceholder(isCliBacked ? DEFAULT_SETTINGS.model : getApiPreset(this.plugin.settings).model || 'Model-id')
           .setValue(this.plugin.settings.model)
           .onChange((v) => {
             this.plugin.settings.model = v.trim() || (isCliBacked ? DEFAULT_SETTINGS.model : '');
@@ -294,7 +288,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setDesc(this.tr('settingCardRangeDesc'))
       .addText((t) =>
         t
-          .setPlaceholder('min')
+          .setPlaceholder('Min')
           .setValue(String(this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards))
           .onChange((v) => {
             const n = parseInt(v, 10);
@@ -307,7 +301,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       )
       .addText((t) =>
         t
-          .setPlaceholder('max')
+          .setPlaceholder('Max')
           .setValue(String(this.plugin.settings.maxCards || DEFAULT_SETTINGS.maxCards))
           .onChange((v) => {
             const n = parseInt(v, 10);

@@ -106,7 +106,7 @@ export class CacheManager {
     return this.cache[filePath] || null;
   }
 
-  async touch(filePath: string): Promise<CacheEntry | null> {
+  touch(filePath: string): CacheEntry | null {
     const entry = touchCacheEntry(this.cache[filePath] || null);
     if (!entry) return null;
     this.cache[filePath] = entry;

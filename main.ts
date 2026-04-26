@@ -388,7 +388,7 @@ class ParallelReaderPlugin extends Plugin {
           .setIcon('trash')
           .onClick(async () => {
             await this.cacheManager.delete(file.path);
-            new Notice(this.t('cacheClearedFile', { name: (file as TFile).basename }));
+            new Notice(this.t('cacheClearedFile', { name: file.basename }));
           }),
       );
     }
@@ -499,14 +499,14 @@ class ParallelReaderPlugin extends Plugin {
         if (!force) {
           const entry = this.cacheManager.get(file.path);
           if (entry && cacheEntryMatches(entry, content, this.settings)) {
-            await this.cacheTouch(file.path);
+            this.cacheTouch(file.path);
             if (this.activeFileStillMatches(file))
-              await view.loadFor(file, this.resolveCardAnchors(content, entry.cards), false);
+              view.loadFor(file, this.resolveCardAnchors(content, entry.cards), false);
             return;
           }
         }
 
-        await view.renderLoading(file, this.t('loadingGenerating'));
+        view.renderLoading(file, this.t('loadingGenerating'));
         const maxDocChars = Number(this.settings.maxDocChars) || DEFAULT_SETTINGS.maxDocChars;
         if (content.length > maxDocChars) new Notice(this.t('longNoteTruncated', { count: maxDocChars }));
         new Notice(this.t('generatingNotice'));
@@ -530,7 +530,7 @@ class ParallelReaderPlugin extends Plugin {
         job.setPhase('saving');
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
-        if (this.viewIsShowingFile(view, file)) await view.loadFor(file, sections, false);
+        if (this.viewIsShowingFile(view, file)) view.loadFor(file, sections, false);
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
           this.t('generationDone', {
@@ -545,13 +545,13 @@ class ParallelReaderPlugin extends Plugin {
           return;
         }
         if (e instanceof GenerationJobCancelledError) {
-          if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, this.t('cancelledError'));
+          if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('cancelledError'));
           new Notice(this.t('cancelled'));
           return;
         }
         const kind = classifyGenerationError(e);
         console.error(e);
-        if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
+        if (view && this.viewIsShowingFile(view, file)) view.renderError(file, e.message || String(e));
         new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: e.message || e }));
       });
   }
@@ -561,31 +561,28 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('batchAlreadyRunning'));
       return;
     }
-    const plugin = this;
+    const selectFolderText = this.t('batchSelectFolder');
+    const folderPromptText = this.t('batchFolderPrompt');
     const folderPath = await new Promise<string | null>((resolve) => {
-      class FolderPromptModal extends Modal {
-        private input!: HTMLInputElement;
-        onOpen() {
-          this.contentEl.createEl('p', { text: plugin.t('batchSelectFolder') });
-          this.input = this.contentEl.createEl('input', { type: 'text' });
-          this.input.placeholder = plugin.t('batchFolderPrompt');
-          this.input.style.width = '100%';
-          this.input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              resolve(this.input.value.trim());
-              this.close();
-            }
-          });
-          this.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
-            resolve(this.input.value.trim());
-            this.close();
-          });
-        }
-        onClose() {
-          resolve(null);
-        }
-      }
-      new FolderPromptModal(plugin.app).open();
+      const modal = new Modal(this.app);
+      modal.onOpen = () => {
+        modal.contentEl.createEl('p', { text: selectFolderText });
+        const field = modal.contentEl.createDiv({ cls: 'parallel-reader-modal-field' });
+        const input = field.createEl('input', { type: 'text' });
+        input.placeholder = folderPromptText;
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            resolve(input.value.trim());
+            modal.close();
+          }
+        });
+        modal.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
+          resolve(input.value.trim());
+          modal.close();
+        });
+      };
+      modal.onClose = () => resolve(null);
+      modal.open();
     });
     if (folderPath === null) return;
     const validation = validateBatchFolderInput(folderPath, (path) => {
@@ -661,15 +658,15 @@ class ParallelReaderPlugin extends Plugin {
     if (!view || !this.activeFileStillMatches(file)) return;
     const entry = this.cacheManager.get(file.path);
     if (!entry) {
-      await view.loadFor(file, [], false);
+      view.loadFor(file, [], false);
       view.renderEmptyWithHint(file);
       return;
     }
     const content = await this.app.vault.read(file);
     if (!this.activeFileStillMatches(file)) return;
     const stale = !cacheEntryMatches(entry, content, this.settings);
-    await this.cacheTouch(file.path);
-    await view.loadFor(file, this.resolveCardAnchors(content, entry.cards), stale);
+    this.cacheTouch(file.path);
+    view.loadFor(file, this.resolveCardAnchors(content, entry.cards), stale);
   }
 
   bindScrollSync() {
