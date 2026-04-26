@@ -2,10 +2,16 @@
 
 import { translate } from './i18n';
 import {
+  cardsFromAnthropicToolUse,
+  textFromAnthropicMessagesResponse,
+  textFromGoogleGenerativeAiResponse,
+  textFromOpenAiChatResponse,
+  textFromOpenAiResponsesResponse,
+} from './provider-parsers';
+import {
   ANTHROPIC_CARD_TOOL_NAME,
   anthropicCardTool,
   cardOutputSchema,
-  normalizeCardsPayload,
   openAiJsonSchemaResponseFormat,
   openAiResponsesTextFormat,
   parseCardsJson,
@@ -231,50 +237,6 @@ async function requestJsonBodyWithStructuredFallback(
   }
 }
 
-function textFromContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part;
-        if (part && typeof part === 'object') {
-          const p = part as Record<string, unknown>;
-          return typeof p.text === 'string' ? p.text : typeof p.output_text === 'string' ? p.output_text : '';
-        }
-        return '';
-      })
-      .join('');
-  }
-  if (content && typeof content === 'object') {
-    const c = content as Record<string, unknown>;
-    return typeof c.text === 'string' ? c.text : typeof c.output_text === 'string' ? c.output_text : '';
-  }
-  return '';
-}
-
-function textFromOpenAiResponses(json: Record<string, unknown>): string {
-  if (typeof json.output_text === 'string') return json.output_text;
-  const parts: string[] = [];
-  const walk = (value: unknown) => {
-    if (!value) return;
-    if (typeof value === 'string') return;
-    if (Array.isArray(value)) {
-      value.forEach(walk);
-      return;
-    }
-    if (typeof value === 'object') {
-      const v = value as Record<string, unknown>;
-      if (typeof v.text === 'string') parts.push(v.text);
-      if (typeof v.output_text === 'string') parts.push(v.output_text);
-      if (v.type === 'output_text' && typeof v.content === 'string') parts.push(v.content);
-      if (v.content) walk(v.content);
-      if (v.output) walk(v.output);
-    }
-  };
-  walk(json.output);
-  return parts.join('');
-}
-
 export function tokenLimitFieldForOpenAiChat(settings: PluginSettings): string {
   const preset = getApiPreset(settings);
   const format = API_FORMATS[getApiFormat(settings)];
@@ -363,16 +325,6 @@ export function buildGeminiBody(
   };
 }
 
-function cardsFromAnthropicToolUse(json: Record<string, unknown>, settings?: PluginSettings | null) {
-  const content = Array.isArray(json?.content) ? (json.content as Array<Record<string, unknown>>) : [];
-  const block = content.find((c) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
-  if (!block) return null;
-  if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
-  if (block.input && typeof block.input === 'object')
-    return normalizeCardsPayload(block.input as Record<string, unknown>);
-  return [];
-}
-
 async function summarizeViaAnthropicMessages(
   requestUrlImpl: RequestUrlFunction,
   system: string,
@@ -393,12 +345,7 @@ async function summarizeViaAnthropicMessages(
   const toolCards = cardsFromAnthropicToolUse(json, settings);
   if (toolCards) return toolCards;
 
-  const contentBlocks = Array.isArray(json.content) ? (json.content as Array<unknown>) : [];
-  const text = contentBlocks
-    .map((c) => textFromContent(c))
-    .join('')
-    .trim();
-  return parseCardsJson(text, settings);
+  return parseCardsJson(textFromAnthropicMessagesResponse(json), settings);
 }
 
 async function summarizeViaOpenAiChat(
@@ -417,11 +364,7 @@ async function summarizeViaOpenAiChat(
     buildOpenAiChatBody(system, user, settings, { structured: false }),
     settings,
   );
-  const choices = Array.isArray(json.choices) ? (json.choices as Array<Record<string, unknown>>) : [];
-  const choice = choices[0] || {};
-  const message = choice.message as Record<string, unknown> | undefined;
-  const text = textFromContent(message?.content ?? choice.text ?? '').trim();
-  return parseCardsJson(text, settings);
+  return parseCardsJson(textFromOpenAiChatResponse(json), settings);
 }
 
 async function summarizeViaOpenAiResponses(
@@ -440,7 +383,7 @@ async function summarizeViaOpenAiResponses(
     buildOpenAiResponsesBody(system, user, settings, { structured: false }),
     settings,
   );
-  return parseCardsJson(textFromOpenAiResponses(json).trim(), settings);
+  return parseCardsJson(textFromOpenAiResponsesResponse(json).trim(), settings);
 }
 
 async function summarizeViaGoogleGenerativeAi(
@@ -464,15 +407,7 @@ async function summarizeViaGoogleGenerativeAi(
     buildGeminiBody(system, user, settings, { structured: false }),
     settings,
   );
-  const candidates = Array.isArray(json.candidates) ? (json.candidates as Array<Record<string, unknown>>) : [];
-  const candidate = candidates[0] || {};
-  const contentObj = candidate.content as Record<string, unknown> | undefined;
-  const parts = Array.isArray(contentObj?.parts) ? (contentObj.parts as Array<unknown>) : [];
-  const text = parts
-    .map((p) => textFromContent(p))
-    .join('')
-    .trim();
-  return parseCardsJson(text, settings);
+  return parseCardsJson(textFromGoogleGenerativeAiResponse(json), settings);
 }
 
 // Obsidian's requestUrl is not directly compatible with fetch — we accept it as a typed callback

@@ -523,6 +523,35 @@ assert.strictEqual(gemBody.systemInstruction.parts[0].text, 'sys');
 assert.strictEqual(gemBody.contents[0].parts[0].text, 'usr');
 assert.strictEqual(gemBody.generationConfig.responseMimeType, 'application/json');
 
+const providerCardsJson = JSON.stringify({ cards: [{ title: 'T', anchor: 'A', gist: 'G', bullets: ['B'] }] });
+assert.strictEqual(
+  t.textFromOpenAiChatResponse({ choices: [{ message: { content: [{ text: providerCardsJson }] } }] }),
+  providerCardsJson,
+  'OpenAI Chat parser extracts message content text',
+);
+assert.strictEqual(
+  t.textFromAnthropicMessagesResponse({ content: [{ type: 'text', text: providerCardsJson }] }),
+  providerCardsJson,
+  'Anthropic parser extracts text blocks',
+);
+assert.strictEqual(
+  t.textFromOpenAiResponsesResponse({ output: [{ content: [{ type: 'output_text', text: providerCardsJson }] }] }),
+  providerCardsJson,
+  'OpenAI Responses parser extracts nested output text',
+);
+assert.strictEqual(
+  t.textFromGoogleGenerativeAiResponse({ candidates: [{ content: { parts: [{ text: providerCardsJson }] } }] }),
+  providerCardsJson,
+  'Gemini parser extracts candidate part text',
+);
+assert.deepStrictEqual(
+  t.cardsFromAnthropicToolUse({
+    content: [{ type: 'tool_use', name: 'record_parallel_reader_cards', input: JSON.parse(providerCardsJson) }],
+  }),
+  [{ title: 'T', anchor: 'A', gist: 'G', bullets: ['B'] }],
+  'Anthropic tool-use parser extracts structured card payloads',
+);
+
 // tokenLimitFieldForOpenAiChat
 assert.strictEqual(
   t.tokenLimitFieldForOpenAiChat({ ...baseSettings, apiProvider: 'openai' }),
