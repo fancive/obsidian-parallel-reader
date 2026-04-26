@@ -3,7 +3,7 @@ import { MarkdownView, Notice, Plugin, requestUrl, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
-import { resolveCliPath } from './src/cli';
+import { resolveCliPath, summarizeViaClaudeCode } from './src/cli';
 import {
   classifyGenerationError,
   type GenerationJob,
@@ -57,15 +57,19 @@ async function summarizeDocument(
 ) {
   const { system, user } = buildPrompts(content, settings);
   let cards: RawCard[];
-  const useStreaming = supportsStreaming(settings);
-  const abortController = useStreaming ? new AbortController() : null;
-  if (abortController) {
-    job.onCancel(() => abortController.abort());
-  }
-  if (useStreaming) {
-    cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
+  if (settings.backend === 'claude-code') {
+    cards = await summarizeViaClaudeCode(system, user, settings, job);
   } else {
-    cards = await summarizeViaApi(requestUrl, system, user, settings);
+    const useStreaming = supportsStreaming(settings);
+    const abortController = useStreaming ? new AbortController() : null;
+    if (abortController) {
+      job.onCancel(() => abortController.abort());
+    }
+    if (useStreaming) {
+      cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
+    } else {
+      cards = await summarizeViaApi(requestUrl, system, user, settings);
+    }
   }
   const resolved: ResolvedCard[] = cards.map((c) => ({
     title: c.title,

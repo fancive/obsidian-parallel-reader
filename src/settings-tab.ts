@@ -1,6 +1,7 @@
 'use strict';
 
 import { type App, Notice, type Plugin, PluginSettingTab, requestUrl, Setting } from 'obsidian';
+import { resolveCliPath, runCli } from './cli';
 import { testApiBackend } from './providers';
 import {
   API_AUTH_TYPES,
@@ -17,6 +18,11 @@ import {
 import type { PluginHost, PluginSettings } from './types';
 
 async function testBackend(settings: PluginSettings) {
+  if (settings.backend === 'claude-code') {
+    const cmd = resolveCliPath('claude', settings.cliPath);
+    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
+    return `claude @ ${cmd}\n${stdout.trim()}`;
+  }
   return testApiBackend(requestUrl, settings);
 }
 
@@ -48,9 +54,46 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
         });
       });
 
-    containerEl.createEl('h3', { text: tr('apiProviderHeader') });
+    new Setting(containerEl)
+      .setName(tr('settingBackendName'))
+      .setDesc(tr('settingBackendDesc'))
+      .addDropdown((d) =>
+        d
+          .addOption('api', 'API / Provider')
+          .addOption('claude-code', 'Claude Code CLI')
+          .setValue(this.plugin.settings.backend)
+          .onChange(async (v) => {
+            this.plugin.settings.backend = v;
+            if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
+              applyApiProviderPreset(this.plugin.settings, this.plugin.settings.apiProvider || 'anthropic');
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }),
+      );
 
-    {
+    const isCliBacked = this.plugin.settings.backend === 'claude-code';
+
+    if (isCliBacked) {
+      new Setting(containerEl)
+        .setName(tr('settingCliPathName'))
+        .setDesc(tr('settingCliPathDesc'))
+        .addText((t) =>
+          t
+            .setPlaceholder(tr('settingCliPathPlaceholder'))
+            .setValue(this.plugin.settings.cliPath)
+            .onChange(async (v) => {
+              this.plugin.settings.cliPath = v.trim();
+              this.plugin.saveSettingsDebounced();
+            }),
+        );
+    }
+
+    if (!isCliBacked) {
+      containerEl.createEl('h3', { text: tr('apiProviderHeader') });
+    }
+
+    if (!isCliBacked) {
       const preset = getApiPreset(this.plugin.settings);
       new Setting(containerEl)
         .setName(tr('settingProviderPresetName'))
@@ -173,13 +216,13 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(tr('settingModelName'))
-      .setDesc(tr('settingModelDescApi'))
+      .setDesc(isCliBacked ? tr('settingModelDescCli') : tr('settingModelDescApi'))
       .addText((t) =>
         t
-          .setPlaceholder(getApiPreset(this.plugin.settings).model || 'model-id')
+          .setPlaceholder(isCliBacked ? DEFAULT_SETTINGS.model : getApiPreset(this.plugin.settings).model || 'model-id')
           .setValue(this.plugin.settings.model)
           .onChange(async (v) => {
-            this.plugin.settings.model = v.trim();
+            this.plugin.settings.model = v.trim() || (isCliBacked ? DEFAULT_SETTINGS.model : '');
             this.plugin.saveSettingsDebounced();
           }),
       );
@@ -259,7 +302,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(tr('settingTestBackendName'))
-      .setDesc(tr('settingTestBackendDescApi'))
+      .setDesc(isCliBacked ? tr('settingTestBackendDescCli') : tr('settingTestBackendDescApi'))
       .addButton((b) =>
         b.setButtonText('Test').onClick(async () => {
           try {

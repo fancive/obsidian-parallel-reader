@@ -28,7 +28,16 @@
 3. 将三个文件放入该文件夹
 4. Obsidian → **设置 → 第三方插件 → 已安装插件** → 启用 **Parallel Reader**
 
-### 配置 Provider
+### 选择后端
+
+插件支持两种后端：
+
+| 后端 | 说明 |
+|------|------|
+| **API / Provider**（默认） | 直连 LLM API，支持 20+ provider |
+| **Claude Code CLI** | 通过本地 `claude -p` 调用，复用 Claude Code 登录态 |
+
+### API / Provider 模式
 
 在插件设置中选择一个 Provider preset，填入 API Key 和模型 ID 即可。
 
@@ -42,6 +51,20 @@
 | 自定义端点 | 任意 | 填写 Base URL 即可 |
 
 Model ID 支持 `provider/model` 写法（如 `anthropic/claude-sonnet-4-6`），匹配当前 preset 时自动剥离前缀。
+
+### Claude Code CLI 模式
+
+切换后端为 **Claude Code CLI**，插件通过 `claude -p --output-format json` 调用本地 Claude Code。
+
+Obsidian 从 GUI 启动时不继承 shell `PATH`，需要在设置中填写 `claude` 的绝对路径：
+
+```bash
+# 查看你的 claude 路径
+which claude
+# 例如：/Users/you/.claude/local/claude
+```
+
+在插件设置的 **CLI 路径** 中填入该路径，点击 **Test** 验证。
 
 ## 命令
 
