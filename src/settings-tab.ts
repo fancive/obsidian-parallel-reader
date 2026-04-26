@@ -1,7 +1,6 @@
 'use strict';
 
 import { type App, Notice, type Plugin, PluginSettingTab, requestUrl, Setting } from 'obsidian';
-import { resolveCliPath, runCli } from './cli';
 import { testApiBackend } from './providers';
 import {
   API_AUTH_TYPES,
@@ -12,27 +11,13 @@ import {
   DEFAULT_SETTINGS,
   getApiFormat,
   getApiPreset,
-  isApiBackend,
   PROMPT_LANGUAGES,
   UI_LANGUAGES,
 } from './settings';
 import type { PluginHost, PluginSettings } from './types';
 
 async function testBackend(settings: PluginSettings) {
-  if (settings.backend === 'codex') {
-    const cmd = resolveCliPath('codex', settings.cliPath);
-    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
-    return `codex @ ${cmd}\n${stdout.trim()}`;
-  }
-  if (settings.backend === 'claude-code') {
-    const cmd = resolveCliPath('claude', settings.cliPath);
-    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
-    return `claude @ ${cmd}\n${stdout.trim()}`;
-  }
-  if (isApiBackend(settings.backend)) {
-    return testApiBackend(requestUrl, settings);
-  }
-  throw new Error('Unknown backend: ' + settings.backend);
+  return testApiBackend(requestUrl, settings);
 }
 
 export class ParallelReaderSettingTab extends PluginSettingTab {
@@ -63,54 +48,9 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName(tr('settingBackendName'))
-      .setDesc(tr('settingBackendDesc'))
-      .addDropdown((d) =>
-        d
-          .addOption('claude-code', 'Claude Code CLI')
-          .addOption('codex', 'Codex CLI')
-          .addOption('api', 'API / Provider')
-          .addOption('anthropic-api', 'Anthropic API (legacy)')
-          .setValue(this.plugin.settings.backend)
-          .onChange(async (v) => {
-            this.plugin.settings.backend = v;
-            if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
-              applyApiProviderPreset(this.plugin.settings, this.plugin.settings.apiProvider || 'anthropic');
-            }
-            await this.plugin.saveSettings();
-            this.display();
-          }),
-      );
+    containerEl.createEl('h3', { text: tr('apiProviderHeader') });
 
-    const apiBackend = isApiBackend(this.plugin.settings.backend);
-
-    if (!apiBackend) {
-      new Setting(containerEl)
-        .setName(tr('settingCliPathName'))
-        .setDesc(tr('settingCliPathDesc'))
-        .addText((t) =>
-          t
-            .setPlaceholder(tr('settingCliPathPlaceholder'))
-            .setValue(this.plugin.settings.cliPath)
-            .onChange(async (v) => {
-              this.plugin.settings.cliPath = v.trim();
-              this.plugin.saveSettingsDebounced();
-            }),
-        );
-
-      new Setting(containerEl).setName(tr('settingCliTimeoutName')).addText((t) =>
-        t.setValue(String(this.plugin.settings.cliTimeoutMs)).onChange(async (v) => {
-          const n = parseInt(v, 10);
-          if (!Number.isNaN(n) && n > 0) {
-            this.plugin.settings.cliTimeoutMs = n;
-            this.plugin.saveSettingsDebounced();
-          }
-        }),
-      );
-    } else {
-      containerEl.createEl('h3', { text: tr('apiProviderHeader') });
-
+    {
       const preset = getApiPreset(this.plugin.settings);
       new Setting(containerEl)
         .setName(tr('settingProviderPresetName'))
@@ -233,13 +173,13 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(tr('settingModelName'))
-      .setDesc(apiBackend ? tr('settingModelDescApi') : tr('settingModelDescCli'))
+      .setDesc(tr('settingModelDescApi'))
       .addText((t) =>
         t
-          .setPlaceholder(apiBackend ? getApiPreset(this.plugin.settings).model || 'model-id' : DEFAULT_SETTINGS.model)
+          .setPlaceholder(getApiPreset(this.plugin.settings).model || 'model-id')
           .setValue(this.plugin.settings.model)
           .onChange(async (v) => {
-            this.plugin.settings.model = v.trim() || (apiBackend ? '' : DEFAULT_SETTINGS.model);
+            this.plugin.settings.model = v.trim();
             this.plugin.saveSettingsDebounced();
           }),
       );
@@ -319,7 +259,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(tr('settingTestBackendName'))
-      .setDesc(apiBackend ? tr('settingTestBackendDescApi') : tr('settingTestBackendDescCli'))
+      .setDesc(tr('settingTestBackendDescApi'))
       .addButton((b) =>
         b.setButtonText('Test').onClick(async () => {
           try {

@@ -1,183 +1,125 @@
 # Obsidian Parallel Reader
 
-An Obsidian plugin that splits any long note into a left/right parallel-reading layout: the original content stays on the left; LLM-generated section summaries appear on the right. Scrolling the source highlights the matching summary card; clicking a summary jumps the source editor.
+一个 Obsidian 插件：左边原文、右边 AI 摘要卡片，滚动联动、点击跳转。
 
-Inspired by the reading workflow demo in [this Bilibili video](https://www.bilibili.com/video/BV1FxoGBVETm/).
+灵感来自 [这个 B 站视频](https://www.bilibili.com/video/BV1FxoGBVETm/) 的阅读工作流演示。
 
-## Features
+## 功能
 
-- **Self-adaptive segmentation** — the LLM decides natural topic boundaries, no need to match markdown headings. Short adjacent sections merge; long ones split.
-- **Anchor-based line resolution** — summaries carry a verbatim quote from the source; the plugin finds the line number by `indexOf` (with graceful fallbacks).
-- **Scroll-sync highlighting** — scrolling the source editor updates the active card in the summary pane.
-- **Right-click → copy** — Markdown / plain text / anchor quote / jump to source, as a native Obsidian context menu.
-- **Markdown rendering** — summaries render through Obsidian's official `MarkdownRenderer`, so tables, bold, code, wikilinks all work.
-- **Persistent bounded cache** — generated summaries are cached by SHA-1 of source content plus generation settings in a separate `cache.json`. Reopening a note shows the cached view instantly; edits or model changes invalidate the cache (shows a stale banner). The cache has an LRU-style entry limit.
-- **Panel actions** — regenerate, copy all Markdown, or export the current comparison note directly from the right pane.
-- **Vault lifecycle aware** — cached summaries follow Markdown file renames and are removed when the source note is deleted.
-- **Configurable input limit** — default 20,000 characters, adjustable for long-context models and included in the cache fingerprint.
-- **Prompt controls** — choose summary language, card count range, and an optional custom system prompt. Prompt settings are included in the cache fingerprint.
-- **Localized UI** — plugin commands, settings, pane text, and notices support Chinese and English.
-- **Multiple model access paths** — Claude Code CLI, Codex CLI, direct provider APIs, and OpenAI/Anthropic-compatible proxies. The API backend follows the same lightweight `provider/model + base URL + protocol` idea as OpenClaw.
+- **自适应切段** — LLM 自行判断主题边界，不依赖 markdown 标题。短段合并、长段拆分。
+- **Anchor 定位** — 每张摘要卡片携带原文逐字引用，插件通过 `indexOf` 定位行号（含多级容错回退）。
+- **滚动联动** — 滚动编辑器时，右侧对应卡片自动高亮。
+- **右键菜单** — 复制 Markdown / 纯文本 / anchor 引用 / 跳转原文 / 编辑 / 删除卡片。
+- **Markdown 渲染** — 摘要通过 Obsidian 的 `MarkdownRenderer` 渲染，表格、加粗、代码、wikilink 均正常显示。
+- **流式输出** — 支持 OpenAI Chat 和 Anthropic API 的 SSE 流式响应，生成时实时显示进度。
+- **持久化缓存** — 生成结果按源文件 SHA-1 + 生成配置缓存在 `cache.json`，重新打开秒出；内容或配置变更后显示"已过期"提示。
+- **面板操作** — 重新生成、复制全部 Markdown、导出到 Vault。
+- **文件感知** — 缓存跟随文件重命名，源文件删除时自动清理。
+- **Prompt 控制** — 可选输出语言、卡片数量范围、自定义 system prompt。
+- **中英双语 UI** — 命令、设置、面板文案全部支持中文和英文。
+- **多 Provider 支持** — Anthropic、OpenAI、Gemini、OpenRouter、Groq、DeepSeek、Moonshot、千帆、MiniMax、xAI、Mistral、Cerebras、智谱、Ollama、LM Studio 及自定义兼容端点。
 
-## Installation
+## 安装
 
-### Manual install (until this lands in Community Plugins)
+### 手动安装
 
-1. Clone this repo into `.obsidian/plugins/parallel-reader/` in your vault, or symlink it there:
-   ```bash
-   ln -s /path/to/obsidian-parallel-reader /path/to/YourVault/.obsidian/plugins/parallel-reader
-   ```
-2. In Obsidian: **Settings → Community plugins → Installed plugins** → enable **Parallel Reader**.
+1. 下载 [最新 Release](https://github.com/fancive/obsidian-parallel-reader/releases) 中的 `main.js`、`manifest.json`、`styles.css`
+2. 在 Vault 的 `.obsidian/plugins/` 目录下创建 `parallel-reader` 文件夹
+3. 将三个文件放入该文件夹
+4. Obsidian → **设置 → 第三方插件 → 已安装插件** → 启用 **Parallel Reader**
 
-### Pick a backend
+### 配置 Provider
 
-| Backend | Auth | Cost | Notes |
-|---------|------|------|-------|
-| **Claude Code CLI** | OAuth in macOS Keychain | Included in Claude subscription | ⚠️ Keychain ACL may block Obsidian subprocess reads — may not work from GUI |
-| **Codex CLI** | File-based token (`~/.codex/auth.json`) | Included in ChatGPT Plus | ✅ Works from Obsidian GUI; recommended |
-| **API / Provider** | API key or local server | Provider billing / local | Supports Anthropic, OpenAI, Gemini, OpenRouter, Groq, DeepSeek, Moonshot, Qianfan, MiniMax, xAI, Mistral, Cerebras, Z.AI, Ollama, LM Studio, and custom compatible endpoints |
+在插件设置中选择一个 Provider preset，填入 API Key 和模型 ID 即可。
 
-### API provider mode
+| Provider | API 格式 | 说明 |
+|----------|----------|------|
+| Anthropic | `anthropic-messages` | 默认 preset，推荐 |
+| OpenAI | `openai-chat` | Chat Completions |
+| Google Gemini | `google-generative-ai` | generateContent |
+| OpenRouter / Groq / DeepSeek / Moonshot 等 | `openai-chat` | OpenAI 兼容格式 |
+| Ollama / LM Studio | `openai-chat` | 本地模型，无需 API Key |
+| 自定义端点 | 任意 | 填写 Base URL 即可 |
 
-In plugin settings, choose **Backend → API / Provider**, then select a provider preset. Presets fill the protocol, base URL, auth header, and environment variable name; you still control the model ID.
+Model ID 支持 `provider/model` 写法（如 `anthropic/claude-sonnet-4-6`），匹配当前 preset 时自动剥离前缀。
 
-Supported protocol formats:
+## 命令
 
-| Format | Use it for |
-|--------|------------|
-| `anthropic-messages` | Anthropic API and Anthropic-compatible proxies |
-| `openai-chat` | OpenAI-compatible `/chat/completions` providers and local proxies |
-| `openai-responses` | OpenAI `/responses` endpoint |
-| `google-generative-ai` | Gemini `generateContent` API |
+| 命令 | 说明 |
+|------|------|
+| 为当前笔记生成对照笔记（缓存优先） | 有缓存直接显示，否则调用 LLM |
+| 强制重新生成（绕过缓存） | 忽略缓存重新调用 LLM |
+| 打开对照笔记面板 | 打开右侧面板 |
+| 导出当前对照笔记到 Vault | 保存为 Markdown 文件 |
+| 复制当前对照笔记 Markdown | 复制到剪贴板 |
+| 取消当前对照笔记生成 | 取消正在进行的生成 |
+| `Alt+↑` / `Alt+↓` | 在摘要卡片间切换 |
+| `Enter`（在摘要面板内） | 跳转到当前卡片对应的原文位置 |
 
-Model IDs accept OpenClaw-style `provider/model` values. If the prefix matches the selected preset, the plugin strips it before the request. For example:
+## 交互
 
-- Preset `anthropic`, model `anthropic/claude-sonnet-4-6` → sends `claude-sonnet-4-6`
-- Preset `openrouter`, model `openrouter/anthropic/claude-sonnet-4-5` → sends `anthropic/claude-sonnet-4-5`
-- Preset `ollama`, model `llama3.3` → sends `llama3.3`
+| 操作 | 效果 |
+|------|------|
+| 点击卡片 | 跳转到原文对应位置 |
+| 右键卡片 | 上下文菜单 |
+| 滚动编辑器 | 右侧卡片自动高亮 |
+| 拖选文字 | 正常选择文本（不触发跳转） |
+| 文件右键菜单 | 生成 / 重新生成 / 清除缓存 |
+| Ribbon 图标 | 打开对照面板 |
 
-For Cloudflare AI Gateway or other proxies, use **额外 headers** with either JSON:
-
-```json
-{"cf-aig-authorization":"Bearer ..."}
-```
-
-or one header per line:
-
-```text
-cf-aig-authorization: Bearer ...
-```
-
-### Configure the CLI path
-
-Obsidian launched from Finder does **not** inherit your shell `PATH`. Create a stable symlink in `~/bin/` and point the plugin setting at it:
-
-```bash
-mkdir -p ~/bin
-# Claude Code (Mach-O binary, no Node needed)
-ln -sf "$(readlink -f "$(which claude)")" ~/bin/claude
-# Codex (Node script — use the wrapper pattern below instead)
-cat > ~/bin/codex <<'EOF'
-#!/bin/bash
-NODE="/path/to/your/node"
-CODEX_JS="/path/to/@openai/codex/bin/codex.js"
-exec "$NODE" "$CODEX_JS" "$@"
-EOF
-chmod +x ~/bin/codex
-```
-
-Then in the plugin settings, paste `/Users/you/bin/codex` (or `~/bin/claude`) into **CLI 路径**, and click **Test** to verify.
-
-## Commands
-
-| Command | What it does |
-|---------|--------------|
-| `为当前笔记生成对照笔记（缓存优先）` | Show cached summary if present, otherwise call LLM |
-| `强制重新生成（绕过缓存）` | Re-run the LLM even if cache matches |
-| `打开对照笔记面板` | Open right-pane view (loads cache if present) |
-| `导出当前对照笔记到 Vault` | Save the current comparison note under the configured export folder |
-| `复制当前对照笔记 Markdown` | Copy the current comparison note as Markdown |
-| `取消当前对照笔记生成` | Mark the active generation job as cancelled |
-| `清除当前笔记的缓存` | Drop the cache entry for the active note |
-| `清除所有缓存` | Wipe all cached summaries |
-| `聚焦上一张摘要卡片` / `Focus previous summary card` | Move the active summary card upward |
-| `聚焦下一张摘要卡片` / `Focus next summary card` | Move the active summary card downward |
-| `跳转到当前摘要卡片原文` / `Jump current summary card to source` | Jump the source editor to the active card |
-
-## Interaction
-
-| Action | Effect |
-|--------|--------|
-| Left-click a card body | Scroll source editor to that section |
-| Right-click a card | Context menu: Copy Markdown / Copy plain text / Copy anchor / Jump / Edit / Delete card |
-| Header icon buttons | Regenerate or cancel / copy all Markdown / export to Vault |
-| File context menu | Generate / force regenerate / clear cache for a Markdown file |
-| Ribbon icon | Open the comparison pane for the active note |
-| `Alt+↑` / `Alt+↓` | Move between summary cards |
-| `Enter` in the summary pane | Jump to the active card's source line |
-| Drag to select text | Normal text selection (does not trigger jump) |
-| Scroll source editor | Active card gets highlighted on the right |
-
-## Development
+## 开发
 
 ```bash
 npm install
-npm run dev       # watch main.ts + src/**/*.ts and rebuild main.js
-npm run build     # production bundle for Obsidian
-npm run typecheck
-npm test
-node --check main.js
+npm run dev       # 监听 main.ts + src/**/*.ts，自动重新构建
+npm run build     # 生产构建
+npm run typecheck # TypeScript 类型检查（strict 模式）
+npm run lint      # Biome lint
+npm test          # 构建 + 类型检查 + 测试
 ```
 
-### Code layout
+### 项目结构
 
-The plugin keeps `main.js` as the generated Obsidian runtime bundle. Edit `main.ts` and `src/**/*.ts`; esbuild bundles them back into root `main.js`.
+| 文件 | 职责 |
+|------|------|
+| `main.ts` | 插件生命周期、命令注册、缓存管理、滚动联动 |
+| `src/view.ts` | 右侧面板视图、卡片渲染、键盘导航、导出 |
+| `src/modal.ts` | 卡片编辑弹窗 |
+| `src/settings-tab.ts` | 设置面板 |
+| `src/providers.ts` | API 请求/响应适配器（Anthropic、OpenAI、Gemini） |
+| `src/streaming.ts` | SSE 流式解析 |
+| `src/prompt.ts` | Prompt 构建、语言控制、自定义 prompt 模板 |
+| `src/schema.ts` | JSON 提取、卡片数据归一化、结构化输出 schema |
+| `src/anchor.ts` | Anchor 到行号的匹配（含容错） |
+| `src/settings.ts` | 默认值、Provider preset、缓存指纹 |
+| `src/i18n.ts` | 中英文 UI 翻译 |
+| `src/cache.ts` / `src/cards.ts` / `src/navigation.ts` / `src/scroll.ts` / `src/vault.ts` / `src/markdown.ts` | 各种纯函数工具模块 |
 
-| File | Responsibility |
-|------|----------------|
-| `main.ts` | Obsidian lifecycle, commands, right-pane view, settings tab orchestration |
-| `src/anchor.ts` | Anchor-to-line matching and whitespace-normalized fallback |
-| `src/cache.ts` | Cache entry touch semantics and compact cache-file serialization |
-| `src/cards.ts` | Card list edit/delete helpers |
-| `src/i18n.ts` | Chinese/English UI strings and translation helper |
-| `src/navigation.ts` | Summary-card keyboard navigation helpers |
-| `src/prompt.ts` | Prompt construction, language controls, and custom prompt templating |
-| `src/settings.ts` | Defaults, provider presets, settings normalization, cache fingerprinting and pruning |
-| `src/vault.ts` | Vault path normalization and recursive folder creation |
-| `src/schema.ts` | JSON extraction, card payload normalization, structured-output schemas |
-| `src/scroll.ts` | Scroll-sync requestAnimationFrame throttling helper |
-| `src/providers.ts` | API provider request/response adapters |
-| `src/generation-job-manager.ts` | Per-file generation state, cancellation, and error classification |
-| `src/markdown.ts` | Card-to-Markdown/plain-text serialization |
+## 设计
 
-## Design notes
-
-The LLM is asked to return JSON with this shape:
+LLM 返回如下 JSON：
 
 ```json
 {
   "cards": [
     {
-      "title": "3-10 character short heading",
-      "anchor": "40-80 characters, verbatim from source, used for line resolution",
-      "gist": "20-40 character one-line summary serving as a lead-in",
-      "bullets": ["3-6 supporting details, 20-50 chars each"]
+      "title": "3-10 字短标题",
+      "anchor": "40-80 字，从原文逐字复制，用于定位",
+      "gist": "20-40 字一句话领读",
+      "bullets": ["3-6 条支撑要点，每条 20-50 字"]
     }
   ]
 }
 ```
 
-- The **anchor** is the key mechanism that keeps scroll-sync working without relying on markdown headings. It's copied verbatim so `content.indexOf(anchor)` finds the origin line; graceful fallbacks (prefix trimming, whitespace normalization) handle minor LLM drift.
-- The **gist + bullets** dual structure was chosen after several iterations — pure prose felt wall-of-text, pure bullets felt fragmented. A one-line lead-in before bullets gives both overview and scannable detail.
-- Output is rendered via `MarkdownRenderer.render()` so any tables / bold / code / wikilinks in the LLM response render natively.
+- **anchor** 是滚动联动的核心机制，通过 `content.indexOf(anchor)` 定位行号，不依赖 markdown 标题。
+- **gist + bullets** 双层结构在多次迭代后确定 — 纯散文太密、纯列表太碎，一句话导读 + bullet 兼顾概览和细节。
 
-## Known limitations
+## 已知限制
 
-- **Document size cap**: defaults to 20,000 characters. Longer notes are truncated unless you raise **最大输入字符数** in settings.
-- **Claude Code CLI auth**: Obsidian subprocess reads of the macOS Keychain `Claude Code-credentials` service may fail due to code-signing ACL. Codex backend doesn't have this issue.
-- **No streaming**: generation is a single batch call; expect ~5-15s wait depending on document length and backend.
-- **Provider feature gaps**: some OpenAI-compatible providers reject optional fields or use provider-specific model IDs. If a request fails, verify the model ID and switch between `openai-chat`, `openai-responses`, or the provider's native format.
-- **Preview mode**: scroll-sync uses Obsidian's `setEphemeralState` which works in reading mode too, but accuracy depends on how CodeMirror resolves line positions.
+- **文档长度**：默认 20,000 字符，超长笔记会截断（可在设置中调大）。
+- **Provider 差异**：部分 OpenAI 兼容 provider 可能不支持某些可选字段，请根据报错切换 API 格式。
+- **Preview 模式**：滚动联动在阅读模式下也能工作，但精度取决于 CodeMirror 的行位置计算。
 
 ## License
 

@@ -21,7 +21,7 @@ export const UI_LANGUAGES = {
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   uiLanguage: 'auto',
-  backend: 'claude-code',
+  backend: 'api',
   cliPath: '',
   apiProvider: 'anthropic',
   apiFormat: 'anthropic-messages',

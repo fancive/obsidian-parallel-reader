@@ -13,3 +13,6 @@ cache.json
 node_modules/
 dist/
 *.log
+
+# Agent state
+.agent/
