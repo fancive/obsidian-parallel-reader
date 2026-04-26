@@ -50,6 +50,7 @@ import {
   getApiBaseUrl,
   modelForApi,
   normalizeSettings,
+  normalizeStreamingTimeoutMs,
   pruneCacheEntries,
 } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
@@ -788,6 +789,8 @@ export const __test = {
   modelForApi,
   normalizeBatchFolderInput,
   normalizeCardsPayload,
+  normalizeSettings,
+  normalizeStreamingTimeoutMs,
   nextCardIndex,
   pruneCacheEntries,
   recordBatchProcessed,

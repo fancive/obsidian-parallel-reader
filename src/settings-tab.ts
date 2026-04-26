@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   getApiFormat,
   getApiPreset,
+  normalizeStreamingTimeoutMs,
   PROMPT_LANGUAGES,
   UI_LANGUAGES,
 } from './settings';
@@ -217,6 +218,19 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.plugin.settings.streaming = v;
             await this.plugin.saveSettings();
           }),
+        );
+
+      new Setting(containerEl)
+        .setName(tr('settingStreamingTimeoutName'))
+        .setDesc(tr('settingStreamingTimeoutDesc'))
+        .addText((t) =>
+          t
+            .setPlaceholder(String(DEFAULT_SETTINGS.streamingTimeoutMs))
+            .setValue(String(this.plugin.settings.streamingTimeoutMs || DEFAULT_SETTINGS.streamingTimeoutMs))
+            .onChange((v) => {
+              this.plugin.settings.streamingTimeoutMs = normalizeStreamingTimeoutMs(v);
+              this.plugin.saveSettingsDebounced();
+            }),
         );
     }
 

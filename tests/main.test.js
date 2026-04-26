@@ -92,6 +92,8 @@ assert.strictEqual(typeof t.shouldConfirmRegenerate, 'function');
 assert.strictEqual(typeof t.translate, 'function');
 assert.strictEqual(typeof t.updateCardAt, 'function');
 assert.strictEqual(typeof t.validateBatchFolderInput, 'function');
+assert.strictEqual(typeof t.normalizeSettings, 'function');
+assert.strictEqual(typeof t.normalizeStreamingTimeoutMs, 'function');
 
 const baseSettings = {
   backend: 'api',

@@ -8,6 +8,7 @@ export const MAX_DOC_CHARS = 100000;
 export const PROMPT_VERSION = 2;
 export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
+export const MIN_STREAMING_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
   zh: '中文',
   en: 'English',
@@ -352,6 +353,7 @@ export function normalizeSettings(settings: PluginSettings): PluginSettings {
   settings.minCards = normalizeCardCount(settings.minCards, DEFAULT_SETTINGS.minCards);
   settings.maxCards = normalizeCardCount(settings.maxCards, DEFAULT_SETTINGS.maxCards);
   if (settings.maxCards < settings.minCards) settings.maxCards = settings.minCards;
+  settings.streamingTimeoutMs = normalizeStreamingTimeoutMs(settings.streamingTimeoutMs);
   if (typeof settings.customSystemPrompt !== 'string') settings.customSystemPrompt = '';
   return settings;
 }
@@ -365,6 +367,12 @@ export function normalizeCardCount(value: unknown, fallback: number): number {
 export function normalizeMaxCacheEntries(value: unknown): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_MAX_CACHE_ENTRIES;
+  return n;
+}
+
+export function normalizeStreamingTimeoutMs(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < MIN_STREAMING_TIMEOUT_MS) return DEFAULT_SETTINGS.streamingTimeoutMs;
   return n;
 }
 

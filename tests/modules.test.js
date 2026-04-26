@@ -351,6 +351,14 @@ const fp2 = t.generationFingerprint({ ...baseSettings });
 assert.strictEqual(fp1, fp2, 'same settings = same fingerprint');
 assert.notStrictEqual(fp1, t.generationFingerprint({ ...baseSettings, model: 'other' }), 'different model = different fp');
 assert.notStrictEqual(fp1, t.generationFingerprint({ ...baseSettings, apiMaxTokens: 8192 }), 'different tokens = different fp');
+assert.strictEqual(t.normalizeStreamingTimeoutMs('30000'), 30000, 'streaming timeout accepts numeric strings');
+assert.strictEqual(t.normalizeStreamingTimeoutMs(999), 120000, 'streaming timeout below minimum falls back');
+assert.strictEqual(t.normalizeStreamingTimeoutMs('bad'), 120000, 'streaming timeout rejects non-numeric values');
+assert.strictEqual(
+  t.normalizeSettings({ ...baseSettings, streamingTimeoutMs: 500 }).streamingTimeoutMs,
+  120000,
+  'normalizeSettings protects invalid streaming timeout values',
+);
 
 // cacheEntryMatches
 const crypto = require('crypto');

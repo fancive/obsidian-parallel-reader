@@ -146,6 +146,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     clearAllCacheButton: '清除所有缓存',
     settingStreamingName: '流式输出',
     settingStreamingDesc: '启用后生成时实时显示 LLM 输出进度（仅 OpenAI Chat 和 Anthropic 格式支持）',
+    settingStreamingTimeoutName: '流式超时 (ms)',
+    settingStreamingTimeoutDesc: '单次流式请求的超时时间；低于 1000ms 或非法值会恢复默认值',
     cmdBatchGenerate: '批量生成对照笔记（当前文件夹）',
     batchSelectFolder: '请输入要批量处理的文件夹路径（留空为 Vault 根目录）',
     batchFolderPrompt: '文件夹路径',
@@ -308,6 +310,9 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingStreamingName: 'Streaming output',
     settingStreamingDesc:
       'Show real-time LLM output progress during generation (OpenAI Chat and Anthropic formats only)',
+    settingStreamingTimeoutName: 'Streaming timeout (ms)',
+    settingStreamingTimeoutDesc:
+      'Timeout for one streaming request; invalid values or values below 1000ms use the default',
     cmdBatchGenerate: 'Batch generate parallel notes (current folder)',
     batchSelectFolder: 'Enter the folder path to batch-process (leave blank for Vault root)',
     batchFolderPrompt: 'Folder path',
