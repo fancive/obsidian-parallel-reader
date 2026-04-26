@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   customSystemPrompt: '',
   model: 'claude-sonnet-4-6',
   exportFolder: 'Reading/Articles',
-  cliTimeoutMs: 300000,
+  cliTimeoutMs: 120000,
   streaming: true,
 };
 

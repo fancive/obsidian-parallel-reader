@@ -165,18 +165,30 @@ export async function summarizeViaClaudeCode(
     '--disallowed-tools',
     'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
   ];
-  if (settings.model) {
-    args.push('--model', settings.model);
-  }
   const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job);
 
-  let envelope;
+  // --output-format json produces a JSON array of event objects.
+  // Find the "result" entry and extract its .result text field.
+  let resultText = '';
   try {
-    envelope = JSON.parse(stdout);
-  } catch (_e) {
-    throw new Error('claude CLI returned a non-JSON envelope:\n' + stdout.slice(0, 500));
+    const events = JSON.parse(stdout);
+    if (Array.isArray(events)) {
+      const resultEvent = events.find((e: Record<string, unknown>) => e.type === 'result');
+      if (resultEvent && typeof resultEvent.result === 'string') {
+        resultText = resultEvent.result;
+      }
+    } else if (events && typeof events === 'object') {
+      // Older CLI versions return a single object
+      resultText = events.result || events.content || '';
+    }
+  } catch (_) {
+    throw new Error('claude CLI returned unexpected output:\n' + stdout.slice(0, 500));
   }
-  const resultText = envelope.result || envelope.content || '';
+
+  if (!resultText) {
+    throw new Error('claude CLI returned no result. Output:\n' + stdout.slice(0, 500));
+  }
+
   return parseCardsJson(resultText, settings);
 }
 
