@@ -63,7 +63,7 @@ That's it! Open any note and run the command **"Parallel Reader: Generate"** fro
 <details>
 <summary><b>CLI backends (advanced)</b></summary>
 
-If you have **Claude Code** or **Codex** installed locally, you can use them as backends instead of API keys. Switch the backend in settings and enter the CLI path. The plugin auto-detects common install locations, but Obsidian's GUI may not find it — in that case, paste the full path (run `which claude` or `which codex` in your terminal to find it).
+If you have **Claude Code** or **Codex** installed locally, you can use them as backends instead of API keys. Just switch the backend in settings — the plugin automatically detects common install locations. If auto-detection fails, you can manually enter the path in settings.
 
 </details>
 

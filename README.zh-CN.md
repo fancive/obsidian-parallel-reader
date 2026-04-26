@@ -63,7 +63,7 @@ Obsidian 对照阅读插件 — 左边原文、右边 AI 摘要卡片，滚动�
 <details>
 <summary><b>CLI 模式（进阶）</b></summary>
 
-如果你本地装了 **Claude Code** 或 **Codex**，可以在设置里切换后端直接使用。插件会自动探测常见安装位置，如果找不到，在终端运行 `which claude` 或 `which codex` 获取完整路径，粘贴到设置里即可。
+如果你本地装了 **Claude Code** 或 **Codex**，在设置里切换后端即可，插件会自动找到安装位置。万一自动探测失败，可以手动填写路径。
 
 </details>
 
