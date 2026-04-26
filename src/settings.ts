@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { translate } from './i18n';
 import type { ApiFormat, ApiProviderPreset, CacheEntry, PluginSettings } from './types';
 
-export const MAX_DOC_CHARS = 20000;
+export const MAX_DOC_CHARS = 100000;
 export const PROMPT_VERSION = 2;
 export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
