@@ -386,11 +386,7 @@ class ParallelReaderPlugin extends Plugin {
       return;
     }
     if (!wasMarkdown) return;
-    if (this.cacheManager.cache[oldPath]) {
-      this.cacheManager.cache[file.path] = this.cacheManager.cache[oldPath];
-      delete this.cacheManager.cache[oldPath];
-      await this.cacheManager.save();
-    }
+    await this.cacheManager.move(oldPath, file.path);
     const view = this.getParallelView();
     if (view?.sourceFile && (view.sourceFile.path === oldPath || view.sourceFile.path === file.path)) {
       view.sourceFile = file;
@@ -726,6 +722,7 @@ export const __test = {
   batchProgressVars,
   buildPrompts,
   cardsToMarkdown,
+  CacheManager,
   cacheEntryMatches,
   cancellationNoticeKey,
   classifyGenerationError,

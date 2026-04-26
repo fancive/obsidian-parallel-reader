@@ -55,6 +55,8 @@ assert.ok(/flushCacheSave\s*\(/.test(mainSource), 'pending cache touches should 
 assert.ok(/onunload[\s\S]*flushCacheSave/.test(mainSource), 'plugin unload should flush pending cache touches');
 assert.ok(/cacheTouch[\s\S]*scheduleCacheSave/.test(mainSource), 'cacheTouch should schedule a cache save');
 assert.ok(!/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource), 'cacheTouch should not synchronously write cache.json');
+assert.ok(/handleFileRename[\s\S]*cacheManager\.move/.test(mainSource), 'file rename should delegate cache moves');
+assert.ok(!/handleFileRename[\s\S]*cacheManager\.cache\[/.test(mainSource), 'file rename should not mutate cache directly');
 assert.ok(!/function addIconButton/.test(mainSource), 'UI icon helper should live outside main.ts');
 assert.ok(!/function addTextButton/.test(mainSource), 'UI text-button helper should live outside main.ts');
 assert.ok(!/function copyToClipboard/.test(mainSource), 'clipboard helper should live outside main.ts');
@@ -72,6 +74,7 @@ assert.strictEqual(typeof t.findLineForAnchor, 'function');
 assert.strictEqual(typeof t.folderPathsForTarget, 'function');
 assert.strictEqual(typeof t.getApiBaseUrl, 'function');
 assert.strictEqual(typeof t.generationFingerprint, 'function');
+assert.strictEqual(typeof t.CacheManager, 'function');
 assert.strictEqual(typeof t.GenerationJobManager, 'function');
 assert.strictEqual(typeof t.modelForApi, 'function');
 assert.strictEqual(typeof t.activeSectionLine, 'function');

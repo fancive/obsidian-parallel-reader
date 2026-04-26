@@ -112,6 +112,38 @@ assert.strictEqual(parsed.version, 1, 'cache file has version 1');
 assert.ok(parsed.entries['a.md'], 'cache file has entries');
 assert.strictEqual(serialized.includes('\n'), false, 'cache file is single line');
 
+async function testCacheManagerMove() {
+  const writes = [];
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async (filePath, content) => writes.push({ filePath, content }),
+  };
+  const manager = new t.CacheManager(adapter, '.obsidian', 'parallel-reader', () => ({
+    maxCacheEntries: 100,
+  }));
+  const cacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z', cards: [{ title: 'Card' }] };
+  manager.cache = {
+    'old.md': cacheEntry,
+    'other.md': { generatedAt: '2024-01-02T00:00:00.000Z', cards: [] },
+  };
+
+  assert.strictEqual(await manager.move('missing.md', 'new.md'), false, 'missing cache move returns false');
+  assert.strictEqual(await manager.move('missing.md', 'missing.md'), false, 'missing same-path move returns false');
+  assert.strictEqual(await manager.move('  ', 'new.md'), false, 'blank source path is rejected');
+  assert.strictEqual(await manager.move('old.md', '   '), false, 'blank target path is rejected');
+  assert.strictEqual(await manager.move('old.md', 'old.md'), true, 'same-path move is a no-op success');
+  assert.strictEqual(await manager.move('old.md', 'other.md'), false, 'move does not overwrite an existing target path');
+  assert.strictEqual(writes.length, 0, 'no-op and rejected cache moves are not persisted');
+  assert.strictEqual(await manager.move('old.md', 'new.md'), true, 'existing cache move returns true');
+  assert.strictEqual(manager.cache['old.md'], undefined, 'old cache path is removed');
+  assert.deepStrictEqual(manager.cache['new.md'], cacheEntry, 'cache entry is moved to new path');
+  assert.ok(manager.cache['other.md'], 'unrelated cache entries remain');
+  assert.strictEqual(writes.length, 1, 'successful cache move is persisted once');
+  assert.ok(JSON.parse(writes[0].content).entries['new.md'], 'persisted cache uses moved path');
+}
+
 assert.strictEqual(t.shouldConfirmRegenerate(null, true), false, 'null entry never confirms');
 assert.strictEqual(t.shouldConfirmRegenerate(null, false), false);
 assert.strictEqual(t.shouldConfirmRegenerate({ generatedAt: '2024-01-01' }, true), false, 'no updatedAt => no confirm');
@@ -606,6 +638,7 @@ try {
 
 // Wrap the tail in an async runner so module-level tests can include async cases.
 (async () => {
+  await testCacheManagerMove();
   await testSummarizeDocumentAnchorSorting();
   console.log('modules tests passed');
 })().catch((e) => {

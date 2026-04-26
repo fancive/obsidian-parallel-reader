@@ -114,6 +114,24 @@ export class CacheManager {
     return entry;
   }
 
+  async move(oldPath: string, newPath: string): Promise<boolean> {
+    if (typeof oldPath !== 'string' || typeof newPath !== 'string') return false;
+    if (!oldPath.trim() || !newPath.trim()) return false;
+    if (oldPath === newPath) return Object.hasOwn(this.cache, oldPath);
+    const entry = this.cache[oldPath];
+    if (!entry) return false;
+    if (Object.hasOwn(this.cache, newPath)) return false;
+
+    const nextCache = {
+      ...this.cache,
+      [newPath]: entry,
+    };
+    delete nextCache[oldPath];
+    this.cache = nextCache;
+    await this.save();
+    return true;
+  }
+
   async put(filePath: string, content: string, cards: RawCard[], settings: PluginSettings): Promise<void> {
     const now = new Date().toISOString();
     this.cache[filePath] = {
