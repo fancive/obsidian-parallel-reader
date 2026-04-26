@@ -64,7 +64,9 @@ export class GenerationJob {
     for (const handler of this._cancelHandlers.splice(0)) {
       try {
         handler();
-      } catch { /* handler error ignored */ }
+      } catch {
+        /* handler error ignored */
+      }
     }
     return true;
   }

@@ -58,6 +58,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     noExportContent: '当前没有可导出的对照笔记',
     noCopyContent: '当前没有可复制的对照笔记',
     noActiveCard: '当前没有可跳转的摘要卡片',
+    viewOpenFailed: '无法打开对照笔记面板',
     confirmRegenerateEditedCards: '这篇笔记的对照卡片已被手动编辑。重新生成会覆盖这些修改，是否继续？',
     regenerateCancelled: '已取消重新生成',
     cardDeleted: '已删除此卡片',
@@ -208,6 +209,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     noExportContent: 'No parallel notes to export',
     noCopyContent: 'No parallel notes to copy',
     noActiveCard: 'No active summary card to jump',
+    viewOpenFailed: 'Could not open the Parallel Reader pane',
     confirmRegenerateEditedCards:
       'These parallel-reader cards were edited manually. Regenerating will overwrite those edits. Continue?',
     regenerateCancelled: 'Regeneration cancelled',

@@ -45,7 +45,7 @@ export function deltaExtractorForFormat(format: string): DeltaExtractor | null {
 export function parseSseBuffer(buffer: string, extractDelta: DeltaExtractor): { deltas: string[]; rest: string } {
   const deltas: string[] = [];
   const lines = buffer.split('\n');
-  const rest = lines.pop()!; // keep incomplete line
+  const rest = lines.pop() ?? ''; // keep incomplete line
 
   for (const line of lines) {
     const trimmed = line.trim();

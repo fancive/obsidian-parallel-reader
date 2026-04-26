@@ -73,12 +73,10 @@ async function summarizeDocument(
       break;
     default: {
       const useStreaming = supportsStreaming(settings);
-      const abortController = useStreaming ? new AbortController() : null;
-      if (abortController) {
-        job.onCancel(() => abortController.abort());
-      }
       if (useStreaming) {
-        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
+        const abortController = new AbortController();
+        job.onCancel(() => abortController.abort());
+        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController.signal);
       } else {
         cards = await summarizeViaApi(requestUrl, system, user, settings);
       }
@@ -132,7 +130,8 @@ class ParallelReaderPlugin extends Plugin {
 
     this.addRibbonIcon('book-open', this.t('ribbonOpen'), async () => {
       const active = this.getActiveView();
-      await this.ensureView();
+      const view = await this.ensureView();
+      if (!view) return;
       if (active?.file) await this.syncViewToFile(active.file);
     });
 
@@ -153,7 +152,8 @@ class ParallelReaderPlugin extends Plugin {
       name: this.t('cmdOpenView'),
       callback: async () => {
         const active = this.getActiveView();
-        await this.ensureView();
+        const view = await this.ensureView();
+        if (!view) return;
         if (active?.file) void this.syncViewToFile(active.file);
       },
     });
@@ -221,12 +221,16 @@ class ParallelReaderPlugin extends Plugin {
       }),
     );
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => this.addFileMenuItems(menu, file)));
-    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
-      if (file instanceof TFile) void this.handleFileRename(file, oldPath);
-    }));
-    this.registerEvent(this.app.vault.on('delete', (file) => {
-      if (file instanceof TFile) void this.handleFileDelete(file);
-    }));
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (file instanceof TFile) void this.handleFileRename(file, oldPath);
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on('delete', (file) => {
+        if (file instanceof TFile) void this.handleFileDelete(file);
+      }),
+    );
     this.bindScrollSync();
   }
 
@@ -296,11 +300,16 @@ class ParallelReaderPlugin extends Plugin {
 
   /* ---------- View management ---------- */
 
-  async ensureView() {
+  async ensureView(): Promise<ParallelReaderView | null> {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE_PARALLEL)[0];
     if (!leaf) {
-      leaf = workspace.getRightLeaf(false)!;
+      const newLeaf = workspace.getRightLeaf(false);
+      if (!newLeaf) {
+        new Notice(this.t('viewOpenFailed'));
+        return null;
+      }
+      leaf = newLeaf;
       await leaf.setViewState({ type: VIEW_TYPE_PARALLEL, active: true });
     }
     await workspace.revealLeaf(leaf);
@@ -446,6 +455,7 @@ class ParallelReaderPlugin extends Plugin {
   async exportCurrentView() {
     const active = this.getActiveView();
     const view = await this.ensureView();
+    if (!view) return;
     if (!view.sourceFile || !view.sections.length) {
       if (active?.file) await this.syncViewToFile(active.file);
     }
@@ -459,6 +469,7 @@ class ParallelReaderPlugin extends Plugin {
   async copyCurrentViewMarkdown() {
     const active = this.getActiveView();
     const view = await this.ensureView();
+    if (!view) return;
     if (!view.sourceFile || !view.sections.length) {
       if (active?.file) await this.syncViewToFile(active.file);
     }
@@ -492,7 +503,10 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('alreadyGenerating'));
       return;
     }
-    if (shouldConfirmRegenerate(this.cacheManager.get(file.path), force) && !(await this.confirmRegenerateEditedCards())) {
+    if (
+      shouldConfirmRegenerate(this.cacheManager.get(file.path), force) &&
+      !(await this.confirmRegenerateEditedCards())
+    ) {
       new Notice(this.t('regenerateCancelled'));
       return;
     }
@@ -509,6 +523,7 @@ class ParallelReaderPlugin extends Plugin {
         }
 
         view = await this.ensureView();
+        if (!view) return;
         job.throwIfCancelled();
 
         job.setPhase('cache-check');
@@ -528,10 +543,11 @@ class ParallelReaderPlugin extends Plugin {
         new Notice(this.t('generatingNotice'));
 
         job.setPhase('generating');
-        const streamProgress = view
+        const streamingView = view;
+        const streamProgress = streamingView
           ? (progress: StreamProgress) => {
-              if (!progress.done && this.viewIsShowingFile(view, file)) {
-                view!.renderStreamingPreview(file, progress.accumulated);
+              if (!progress.done && this.viewIsShowingFile(streamingView, file)) {
+                streamingView.renderStreamingPreview(file, progress.accumulated);
               }
             }
           : undefined;

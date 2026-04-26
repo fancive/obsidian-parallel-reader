@@ -115,10 +115,19 @@ export function runCli(
       });
     }
 
-    child.stdout!.on('data', (d) => {
+    if (!child.stdout || !child.stderr || !child.stdin) {
+      fail(new Error('CLI process streams are unavailable'));
+      return;
+    }
+
+    const childStdout = child.stdout;
+    const childStderr = child.stderr;
+    const childStdin = child.stdin;
+
+    childStdout.on('data', (d) => {
       stdout += d.toString('utf8');
     });
-    child.stderr!.on('data', (d) => {
+    childStderr.on('data', (d) => {
       stderr += d.toString('utf8');
     });
     child.on('error', (e) => {
@@ -134,14 +143,14 @@ export function runCli(
 
     if (stdinText) {
       try {
-        child.stdin!.write(stdinText);
-        child.stdin!.end();
+        childStdin.write(stdinText);
+        childStdin.end();
       } catch (_e) {
         // Child may have exited before stdin was written.
       }
     } else {
       try {
-        child.stdin!.end();
+        childStdin.end();
       } catch (_) {
         /* ignore */
       }

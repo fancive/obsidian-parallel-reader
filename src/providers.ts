@@ -32,6 +32,12 @@ type RequestUrlFunction = (params: {
   throw?: boolean;
 }) => Promise<{ status: number; json: unknown; text: string }>;
 
+function requiredDeltaExtractor(format: string) {
+  const extractor = deltaExtractorForFormat(format);
+  if (!extractor) throw new Error(`Streaming not supported for format: ${format}`);
+  return extractor;
+}
+
 interface AnthropicMessagesBody {
   model: string;
   max_tokens: number;
@@ -506,7 +512,7 @@ async function streamSummarizeViaOpenAiChat(
   const headers = buildApiHeaders(settings);
   const body = buildOpenAiChatBody(system, user, settings, { structured: false });
   body.stream = true;
-  const extractor = deltaExtractorForFormat('openai-chat')!;
+  const extractor = requiredDeltaExtractor('openai-chat');
   const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
   return parseCardsJson(text.trim(), settings);
 }
@@ -522,7 +528,7 @@ async function streamSummarizeViaAnthropicMessages(
   const headers = buildApiHeaders(settings, { 'anthropic-version': '2023-06-01' });
   const body = buildAnthropicMessagesBody(system, user, settings, { structured: false });
   body.stream = true;
-  const extractor = deltaExtractorForFormat('anthropic-messages')!;
+  const extractor = requiredDeltaExtractor('anthropic-messages');
   const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
   return parseCardsJson(text.trim(), settings);
 }

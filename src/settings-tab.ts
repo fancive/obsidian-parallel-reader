@@ -347,7 +347,9 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.display();
           }
         };
-        t.inputEl.addEventListener('change', () => { void commit(); });
+        t.inputEl.addEventListener('change', () => {
+          void commit();
+        });
         t.inputEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') t.inputEl.blur();
         });
