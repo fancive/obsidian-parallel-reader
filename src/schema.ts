@@ -105,8 +105,16 @@ export function normalizeCardsPayload(parsed: { cards?: unknown[] }): RawCard[] 
     }));
 }
 
-export function cardOutputSchema(strict: boolean) {
-  const cardSchema: any = {
+interface JsonSchema {
+  type: string;
+  properties?: Record<string, unknown>;
+  items?: unknown;
+  required?: string[];
+  additionalProperties?: boolean;
+}
+
+export function cardOutputSchema(strict: boolean): JsonSchema {
+  const cardSchema: JsonSchema = {
     type: 'object',
     properties: {
       title: { type: 'string' },
@@ -119,7 +127,7 @@ export function cardOutputSchema(strict: boolean) {
     },
     required: ['title', 'anchor', 'gist', 'bullets'],
   };
-  const rootSchema: any = {
+  const rootSchema: JsonSchema = {
     type: 'object',
     properties: {
       cards: {

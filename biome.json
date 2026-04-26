@@ -8,12 +8,12 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noRedundantUseStrict": "off",
         "noImplicitAnyLet": "off"
       },
       "style": {
-        "noNonNullAssertion": "off",
+        "noNonNullAssertion": "warn",
         "useConst": "warn",
         "useNodejsImportProtocol": "off",
         "useTemplate": "off"
