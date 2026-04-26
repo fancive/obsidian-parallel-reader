@@ -456,4 +456,71 @@ const anthSse = t.parseSseBuffer(
 );
 assert.deepStrictEqual(anthSse.deltas, ['token'], 'Anthropic SSE extracts text delta');
 
+// parseSseBuffer: partial line (no trailing newline → stays in rest)
+const ssePartial = t.parseSseBuffer('data: {"choices":[{"delta":{"content":"ok"}}]}', openaiExtract);
+assert.deepStrictEqual(ssePartial.deltas, [], 'incomplete line yields no deltas');
+assert.ok(ssePartial.rest.includes('"ok"'), 'partial line kept in rest');
+
+// parseSseBuffer: multi-event in one chunk
+const sseMulti = t.parseSseBuffer(
+  'data: {"choices":[{"delta":{"content":"a"}}]}\ndata: {"choices":[{"delta":{"content":"b"}}]}\ndata: {"choices":[{"delta":{"content":"c"}}]}\n',
+  openaiExtract,
+);
+assert.deepStrictEqual(sseMulti.deltas, ['a', 'b', 'c'], 'three events in one chunk');
+assert.strictEqual(sseMulti.rest, '', 'nothing left in rest when chunk ends with newline');
+
+// parseSseBuffer: non-data lines are skipped
+const sseMixed = t.parseSseBuffer(
+  ': comment\nevent: ping\ndata: {"choices":[{"delta":{"content":"x"}}]}\n',
+  openaiExtract,
+);
+assert.deepStrictEqual(sseMixed.deltas, ['x'], 'comment and event lines ignored');
+
+// parseSseBuffer: malformed JSON is silently skipped
+const sseBad = t.parseSseBuffer('data: not_json\ndata: {"choices":[{"delta":{"content":"y"}}]}\n', openaiExtract);
+assert.deepStrictEqual(sseBad.deltas, ['y'], 'bad JSON line skipped, good line extracted');
+
+// i18n: additional edge cases
+assert.strictEqual(
+  t.translate({ uiLanguage: 'en' }, 'generationDone', { count: 3, suffix: '' }),
+  'Generated 3 sections',
+  'variable interpolation with multiple vars',
+);
+assert.strictEqual(
+  t.translate({ uiLanguage: 'zh' }, 'appTitle'),
+  '对照阅读笔记',
+  'zh translation for appTitle',
+);
+// missing key fallback chain: should return the key itself
+assert.strictEqual(t.translate({ uiLanguage: 'en' }, '__no_such_key__'), '__no_such_key__', 'missing key returns key');
+
+// ── cli.ts: resolveCliPath ──
+
+// Override path: should return the trimmed override immediately
+assert.strictEqual(t.resolveCliPath('claude', '  /usr/bin/claude  '), '/usr/bin/claude', 'trims override path');
+assert.strictEqual(t.resolveCliPath('claude', '/custom/path'), '/custom/path', 'returns custom path unchanged');
+
+// Empty override: falls back to filesystem search; mock fs.existsSync to control behavior
+const fsModule = require('fs');
+const origExistsSync = fsModule.existsSync;
+
+// Mock existsSync to pretend a specific path exists
+const mockPath = require('path').join(require('os').homedir(), '.local', 'bin', 'claude');
+fsModule.existsSync = (p) => p === mockPath;
+try {
+  const resolved = t.resolveCliPath('claude', '');
+  assert.strictEqual(resolved, mockPath, 'resolveCliPath finds binary in mocked ~/.local/bin');
+} finally {
+  fsModule.existsSync = origExistsSync;
+}
+
+// No match: falls back to bare name
+fsModule.existsSync = () => false;
+try {
+  const fallback = t.resolveCliPath('claude', '');
+  assert.strictEqual(fallback, 'claude', 'resolveCliPath falls back to bare name when not found');
+} finally {
+  fsModule.existsSync = origExistsSync;
+}
+
 console.log('modules tests passed');
