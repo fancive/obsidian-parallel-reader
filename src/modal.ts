@@ -47,7 +47,7 @@ export class CardEditModal extends Modal {
           gist: gistInput.value.trim(),
           bullets: bulletsInput.value
             .split(/\r?\n/)
-            .map((line) => line.trim())
+            .map((line: string) => line.trim())
             .filter(Boolean),
         });
         this.close();
@@ -56,7 +56,7 @@ export class CardEditModal extends Modal {
     );
   }
 
-  createLabeledInput(parent, label: string, value: string) {
+  createLabeledInput(parent: HTMLElement, label: string, value: string) {
     const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
     wrapper.createEl('label', { text: label });
     const input = wrapper.createEl('input', { attr: { type: 'text' } });
@@ -64,7 +64,7 @@ export class CardEditModal extends Modal {
     return input;
   }
 
-  createLabeledTextarea(parent, label: string, value: string, rows: number) {
+  createLabeledTextarea(parent: HTMLElement, label: string, value: string, rows: number) {
     const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
     wrapper.createEl('label', { text: label });
     const textarea = wrapper.createEl('textarea');

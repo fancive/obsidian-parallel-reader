@@ -21,7 +21,7 @@ import {
 } from './settings';
 import type { PluginSettings, RawCard } from './types';
 
-function endpointUrl(baseUrl, suffixes) {
+function endpointUrl(baseUrl: string, suffixes: string[]) {
   const base = baseUrl.replace(/\/+$/, '');
   for (const suffix of suffixes) {
     if (base.endsWith(suffix)) return base;
@@ -29,33 +29,33 @@ function endpointUrl(baseUrl, suffixes) {
   return base + suffixes[0];
 }
 
-function parseApiHeaders(raw, settings?) {
+function parseApiHeaders(raw: string, settings?: PluginSettings | null): Record<string, string> {
   const text = (raw || '').trim();
   if (!text) return {};
   if (text.startsWith('{')) {
-    let parsed;
+    let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(text);
-    } catch (e) {
-      throw new Error(translate(settings, 'errorCustomHeadersJsonParse', { error: e.message }));
+    } catch (e: any) {
+      throw new Error(translate(settings || null, 'errorCustomHeadersJsonParse', { error: e.message }));
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(translate(settings, 'errorCustomHeadersJsonObject'));
+      throw new Error(translate(settings || null, 'errorCustomHeadersJsonObject'));
     }
-    const headers = {};
+    const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (typeof v === 'string' && k.trim()) headers[k.trim()] = v;
     }
     return headers;
   }
 
-  const headers = {};
+  const headers: Record<string, string> = {};
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const idx = trimmed.indexOf(':');
     if (idx <= 0) {
-      throw new Error(translate(settings, 'errorCustomHeadersLineFormat'));
+      throw new Error(translate(settings || null, 'errorCustomHeadersLineFormat'));
     }
     const key = trimmed.slice(0, idx).trim();
     const value = trimmed.slice(idx + 1).trim();
@@ -64,7 +64,7 @@ function parseApiHeaders(raw, settings?) {
   return headers;
 }
 
-function authHeaders(settings) {
+function authHeaders(settings: PluginSettings): Record<string, string> {
   const authType = getApiAuthType(settings);
   if (authType === 'none') return {};
   const key = getApiKey(settings);
@@ -80,7 +80,7 @@ function authHeaders(settings) {
   return { authorization: `Bearer ${key}` };
 }
 
-function buildApiHeaders(settings, extra?) {
+function buildApiHeaders(settings: PluginSettings, extra?: Record<string, string>): Record<string, string> {
   return {
     'content-type': 'application/json',
     ...authHeaders(settings),
@@ -89,13 +89,13 @@ function buildApiHeaders(settings, extra?) {
   };
 }
 
-function responseJson(resp, label, settings?) {
+function responseJson(resp: any, label: string, settings?: PluginSettings | null) {
   if (resp.json && typeof resp.json === 'object') return resp.json;
   try {
     return JSON.parse(resp.text || '{}');
   } catch (_) {
     throw new Error(
-      translate(settings, 'errorProviderNonJson', {
+      translate(settings || null, 'errorProviderNonJson', {
         label,
         excerpt: (resp.text || '').slice(0, 500),
       }),
@@ -103,8 +103,15 @@ function responseJson(resp, label, settings?) {
   }
 }
 
-async function requestJsonBody(requestUrlImpl, label, url, headers, body, settings?) {
-  let resp;
+async function requestJsonBody(
+  requestUrlImpl: any,
+  label: string,
+  url: string,
+  headers: Record<string, string>,
+  body: any,
+  settings?: PluginSettings | null,
+) {
+  let resp: any;
   try {
     resp = await requestUrlImpl({
       url,
@@ -113,9 +120,9 @@ async function requestJsonBody(requestUrlImpl, label, url, headers, body, settin
       body: JSON.stringify(body),
       throw: false,
     });
-  } catch (e) {
+  } catch (e: any) {
     throw new Error(
-      translate(settings, 'errorProviderRequestFailed', {
+      translate(settings || null, 'errorProviderRequestFailed', {
         label,
         error: e.message || e,
       }),
@@ -124,7 +131,7 @@ async function requestJsonBody(requestUrlImpl, label, url, headers, body, settin
 
   if (resp.status >= 400) {
     throw new Error(
-      translate(settings, 'errorProviderApiStatus', {
+      translate(settings || null, 'errorProviderApiStatus', {
         label,
         status: resp.status,
         excerpt: (resp.text || '').slice(0, 500),
@@ -134,7 +141,7 @@ async function requestJsonBody(requestUrlImpl, label, url, headers, body, settin
   return responseJson(resp, label, settings);
 }
 
-function shouldRetryWithoutStructuredOutput(error) {
+function shouldRetryWithoutStructuredOutput(error: any) {
   const message = String(error?.message ? error.message : error);
   if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message))
     return false;
@@ -144,13 +151,13 @@ function shouldRetryWithoutStructuredOutput(error) {
 }
 
 async function requestJsonBodyWithStructuredFallback(
-  requestUrlImpl,
-  label,
-  url,
-  headers,
-  structuredBody,
-  fallbackBody,
-  settings?,
+  requestUrlImpl: any,
+  label: string,
+  url: string,
+  headers: Record<string, string>,
+  structuredBody: any,
+  fallbackBody: any,
+  settings?: PluginSettings | null,
 ) {
   try {
     return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody, settings);
@@ -161,7 +168,7 @@ async function requestJsonBodyWithStructuredFallback(
   }
 }
 
-function textFromContent(content) {
+function textFromContent(content: any): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
@@ -178,7 +185,7 @@ function textFromContent(content) {
   return '';
 }
 
-function textFromOpenAiResponses(json) {
+function textFromOpenAiResponses(json: any): string {
   if (typeof json.output_text === 'string') return json.output_text;
   const parts: string[] = [];
   const walk = (value: any) => {
@@ -288,16 +295,21 @@ export function buildGeminiBody(
   };
 }
 
-function cardsFromAnthropicToolUse(json, settings?) {
+function cardsFromAnthropicToolUse(json: any, settings?: PluginSettings | null) {
   const content = Array.isArray(json?.content) ? json.content : [];
-  const block = content.find((c) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
+  const block = content.find((c: any) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
   if (!block) return null;
   if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
   if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input);
   return [];
 }
 
-async function summarizeViaAnthropicMessages(requestUrlImpl, system, user, settings) {
+async function summarizeViaAnthropicMessages(
+  requestUrlImpl: any,
+  system: string,
+  user: string,
+  settings: PluginSettings,
+) {
   const url = endpointUrl(getApiBaseUrl(settings), ['/messages']);
   const json = await requestJsonBodyWithStructuredFallback(
     requestUrlImpl,
@@ -313,13 +325,13 @@ async function summarizeViaAnthropicMessages(requestUrlImpl, system, user, setti
   if (toolCards) return toolCards;
 
   const text = (json.content || [])
-    .map((c) => textFromContent(c))
+    .map((c: any) => textFromContent(c))
     .join('')
     .trim();
   return parseCardsJson(text, settings);
 }
 
-async function summarizeViaOpenAiChat(requestUrlImpl, system, user, settings) {
+async function summarizeViaOpenAiChat(requestUrlImpl: any, system: string, user: string, settings: PluginSettings) {
   const url = endpointUrl(getApiBaseUrl(settings), ['/chat/completions']);
   const json = await requestJsonBodyWithStructuredFallback(
     requestUrlImpl,
@@ -335,7 +347,12 @@ async function summarizeViaOpenAiChat(requestUrlImpl, system, user, settings) {
   return parseCardsJson(text, settings);
 }
 
-async function summarizeViaOpenAiResponses(requestUrlImpl, system, user, settings) {
+async function summarizeViaOpenAiResponses(
+  requestUrlImpl: any,
+  system: string,
+  user: string,
+  settings: PluginSettings,
+) {
   const url = endpointUrl(getApiBaseUrl(settings), ['/responses']);
   const json = await requestJsonBodyWithStructuredFallback(
     requestUrlImpl,
@@ -349,7 +366,12 @@ async function summarizeViaOpenAiResponses(requestUrlImpl, system, user, setting
   return parseCardsJson(textFromOpenAiResponses(json).trim(), settings);
 }
 
-async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, settings) {
+async function summarizeViaGoogleGenerativeAi(
+  requestUrlImpl: any,
+  system: string,
+  user: string,
+  settings: PluginSettings,
+) {
   const model = encodeURIComponent(modelForApi(settings));
   let url = getApiBaseUrl(settings);
   if (!/:generateContent(?:\?|$)/.test(url)) {
@@ -368,7 +390,7 @@ async function summarizeViaGoogleGenerativeAi(requestUrlImpl, system, user, sett
   const candidate = (json.candidates || [])[0] || {};
   const parts = candidate.content?.parts || [];
   const text = parts
-    .map((p) => textFromContent(p))
+    .map((p: any) => textFromContent(p))
     .join('')
     .trim();
   return parseCardsJson(text, settings);

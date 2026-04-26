@@ -2,8 +2,8 @@
 
 export function findLineForAnchor(content: string, anchor: string): number {
   if (!anchor) return -1;
-  const normalize = (s) => s.replace(/\s+/g, ' ').trim();
-  const normalizeWithMap = (s) => {
+  const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const normalizeWithMap = (s: string) => {
     const chars: string[] = [];
     const map: number[] = [];
     let pendingWhitespace = false;
@@ -23,7 +23,7 @@ export function findLineForAnchor(content: string, anchor: string): number {
     }
     return { text: chars.join(''), map };
   };
-  const tryAt = (needle) => {
+  const tryAt = (needle: string) => {
     if (!needle) return -1;
     const idx = content.indexOf(needle);
     if (idx === -1) return -1;

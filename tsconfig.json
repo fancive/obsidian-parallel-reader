@@ -7,7 +7,7 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "strict": false,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
     "strictBindCallApply": true,

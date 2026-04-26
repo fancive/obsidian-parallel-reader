@@ -16,9 +16,9 @@ import {
   PROMPT_LANGUAGES,
   UI_LANGUAGES,
 } from './settings';
-import type { PluginHost } from './types';
+import type { PluginHost, PluginSettings } from './types';
 
-async function testBackend(settings) {
+async function testBackend(settings: PluginSettings) {
   if (settings.backend === 'codex') {
     const cmd = resolveCliPath('codex', settings.cliPath);
     const { stdout } = await runCli(cmd, ['--version'], '', 10000);
@@ -45,7 +45,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
-    const tr = (key, vars?) => this.plugin.t(key, vars);
+    const tr = (key: string, vars?: Record<string, string | number>) => this.plugin.t(key, vars);
     containerEl.empty();
     containerEl.createEl('h2', { text: tr('settingsTitle') });
 

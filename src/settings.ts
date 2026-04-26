@@ -235,7 +235,7 @@ export function stableStringify(value: unknown): string {
       '{' +
       Object.keys(value)
         .sort()
-        .map((k) => JSON.stringify(k) + ':' + stableStringify(value[k]))
+        .map((k) => JSON.stringify(k) + ':' + stableStringify((value as Record<string, unknown>)[k]))
         .join(',') +
       '}'
     );
@@ -325,13 +325,14 @@ export function applyApiProviderPreset(settings: PluginSettings, providerId: str
 }
 
 export function normalizeSettings(settings: PluginSettings): PluginSettings {
-  if (!UI_LANGUAGES[settings.uiLanguage]) settings.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
+  if (!(UI_LANGUAGES as Record<string, string>)[settings.uiLanguage]) settings.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
   if (!settings.apiProvider || !API_PROVIDER_PRESETS[settings.apiProvider]) {
     settings.apiProvider = 'anthropic';
   }
   const preset = getApiPreset(settings);
   if (!settings.apiFormat || !API_FORMATS[settings.apiFormat]) settings.apiFormat = preset.format;
-  if (!settings.apiAuthType || !API_AUTH_TYPES[settings.apiAuthType]) settings.apiAuthType = 'auto';
+  if (!settings.apiAuthType || !(API_AUTH_TYPES as Record<string, string>)[settings.apiAuthType])
+    settings.apiAuthType = 'auto';
   if (settings.backend === 'anthropic-api') {
     settings.apiProvider = settings.apiProvider || 'anthropic';
     settings.apiFormat = settings.apiFormat || 'anthropic-messages';
@@ -344,7 +345,8 @@ export function normalizeSettings(settings: PluginSettings): PluginSettings {
   const maxDocChars = Number(settings.maxDocChars);
   if (!Number.isFinite(maxDocChars) || maxDocChars < 1000) settings.maxDocChars = DEFAULT_SETTINGS.maxDocChars;
   settings.maxCacheEntries = normalizeMaxCacheEntries(settings.maxCacheEntries);
-  if (!PROMPT_LANGUAGES[settings.promptLanguage]) settings.promptLanguage = DEFAULT_SETTINGS.promptLanguage;
+  if (!(PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage])
+    settings.promptLanguage = DEFAULT_SETTINGS.promptLanguage;
   settings.minCards = normalizeCardCount(settings.minCards, DEFAULT_SETTINGS.minCards);
   settings.maxCards = normalizeCardCount(settings.maxCards, DEFAULT_SETTINGS.maxCards);
   if (settings.maxCards < settings.minCards) settings.maxCards = settings.minCards;

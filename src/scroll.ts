@@ -2,7 +2,7 @@
 
 export type RafThrottledHandler = (() => void) & { cancel: () => void };
 
-export function visibleTopProbeY(rect, maxOffset = 80, ratio = 0.1) {
+export function visibleTopProbeY(rect: { top?: number; height?: number } | null, maxOffset = 80, ratio = 0.1) {
   const top = Number(rect?.top) || 0;
   const height = Math.max(0, Number(rect?.height) || 0);
   const cappedOffset = Math.min(Number(maxOffset) || 0, height * ratio);

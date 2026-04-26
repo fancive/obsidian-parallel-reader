@@ -41,16 +41,16 @@ export function runCli(
   job?: GenerationJob,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    let child;
+    let child: ReturnType<typeof spawn>;
     let settled = false;
-    let timer;
-    const fail = (err) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const fail = (err: Error) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       reject(err);
     };
-    const succeed = (value) => {
+    const succeed = (value: { stdout: string; stderr: string }) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -97,10 +97,10 @@ export function runCli(
       });
     }
 
-    child.stdout.on('data', (d) => {
+    child.stdout!.on('data', (d) => {
       stdout += d.toString('utf8');
     });
-    child.stderr.on('data', (d) => {
+    child.stderr!.on('data', (d) => {
       stderr += d.toString('utf8');
     });
     child.on('error', (e) => {
@@ -116,14 +116,14 @@ export function runCli(
 
     if (stdinText) {
       try {
-        child.stdin.write(stdinText);
-        child.stdin.end();
+        child.stdin!.write(stdinText);
+        child.stdin!.end();
       } catch (_e) {
         // Child may have exited before stdin was written.
       }
     } else {
       try {
-        child.stdin.end();
+        child.stdin!.end();
       } catch (_) {
         /* ignore */
       }

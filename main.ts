@@ -6,6 +6,7 @@ import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/ca
 import { resolveCliPath, summarizeViaClaudeCode, summarizeViaCodex } from './src/cli';
 import {
   classifyGenerationError,
+  type GenerationJob,
   GenerationJobAlreadyRunningError,
   GenerationJobCancelledError,
   GenerationJobManager,
@@ -45,7 +46,7 @@ import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
 
 /* ---------- Helpers ---------- */
 
-async function summarizeDocument(content, settings, job) {
+async function summarizeDocument(content: string, settings: PluginSettings, job: GenerationJob) {
   const { system, user } = buildPrompts(content, settings);
   let cards: RawCard[];
   switch (settings.backend) {
@@ -79,8 +80,8 @@ async function summarizeDocument(content, settings, job) {
   return resolved;
 }
 
-function cancellationNoticeKey(settings, job) {
-  if (job?.phase === 'generating' && isApiBackend(settings?.backend)) {
+function cancellationNoticeKey(settings: PluginSettings | null, job: GenerationJob | null) {
+  if (job?.phase === 'generating' && settings && isApiBackend(settings.backend)) {
     return 'cancelRequestedApiInFlight';
   }
   return 'cancelRequested';
@@ -97,7 +98,7 @@ class ParallelReaderPlugin extends Plugin {
   _cacheSaveTimer: ReturnType<typeof setTimeout> | null;
   _cacheDirty: boolean;
 
-  t(key, vars?) {
+  t(key: string, vars?: Record<string, string | number>) {
     return translate(this.settings || DEFAULT_SETTINGS, key, vars);
   }
 
@@ -195,8 +196,8 @@ class ParallelReaderPlugin extends Plugin {
       }),
     );
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => this.addFileMenuItems(menu, file)));
-    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.handleFileRename(file, oldPath)));
-    this.registerEvent(this.app.vault.on('delete', (file) => this.handleFileDelete(file)));
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.handleFileRename(file as TFile, oldPath)));
+    this.registerEvent(this.app.vault.on('delete', (file) => this.handleFileDelete(file as TFile)));
     this.bindScrollSync();
   }
 
@@ -322,18 +323,18 @@ class ParallelReaderPlugin extends Plugin {
     if (removed.length > 0) await this.saveCache();
     return removed;
   }
-  cacheGet(filePath) {
+  cacheGet(filePath: string) {
     return this.cache[filePath] || null;
   }
 
-  async cacheTouch(filePath) {
+  async cacheTouch(filePath: string) {
     const entry = touchCacheEntry(this.cache[filePath] || null);
     if (!entry) return null;
     this.scheduleCacheSave();
     return entry;
   }
 
-  async cachePut(filePath, content, cards, settings) {
+  async cachePut(filePath: string, content: string, cards: RawCard[], settings: PluginSettings) {
     const now = new Date().toISOString();
     this.cache[filePath] = {
       schemaVersion: CACHE_SCHEMA_VERSION,
@@ -346,11 +347,11 @@ class ParallelReaderPlugin extends Plugin {
     await this.saveCache();
   }
 
-  async cacheReplaceCards(filePath, cards) {
+  async cacheReplaceCards(filePath: string, cards: ResolvedCard[]) {
     const entry = this.cache[filePath];
     if (!entry) return false;
     const now = new Date().toISOString();
-    entry.cards = (cards || []).map((card) => ({
+    entry.cards = (cards || []).map((card: ResolvedCard) => ({
       title: card.title,
       anchor: card.anchor,
       gist: card.gist,
@@ -362,7 +363,7 @@ class ParallelReaderPlugin extends Plugin {
     return true;
   }
 
-  async cacheDelete(filePath) {
+  async cacheDelete(filePath: string) {
     if (this.cache[filePath]) {
       delete this.cache[filePath];
       await this.saveCache();
@@ -393,7 +394,7 @@ class ParallelReaderPlugin extends Plugin {
     return this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL)[0]?.view as ParallelReaderView | undefined;
   }
 
-  moveActiveCard(delta) {
+  moveActiveCard(delta: number) {
     const view = this.getParallelView();
     if (!view?.sections.length) {
       new Notice(this.t('noActiveCard'));
@@ -411,11 +412,11 @@ class ParallelReaderPlugin extends Plugin {
     return true;
   }
 
-  isGeneratingFile(file) {
+  isGeneratingFile(file: TFile | null) {
     return !!file && !!file.path && this.jobs.isRunning(file.path);
   }
 
-  cancelGenerationForFile(file) {
+  cancelGenerationForFile(file: TFile | null) {
     if (!file?.path) {
       new Notice(this.t('noCancelableJob'));
       return false;
@@ -427,10 +428,10 @@ class ParallelReaderPlugin extends Plugin {
     return cancelled;
   }
 
-  viewIsShowingFile(view, file) {
+  viewIsShowingFile(view: ParallelReaderView | null, file: TFile) {
     return !!view && !!file && view.sourceFile?.path === file.path;
   }
-  activeFileStillMatches(file) {
+  activeFileStillMatches(file: TFile) {
     const active = this.getActiveView();
     return !active?.file || active.file.path === file.path;
   }
@@ -449,23 +450,23 @@ class ParallelReaderPlugin extends Plugin {
     return true;
   }
 
-  addFileMenuItems(menu, file) {
+  addFileMenuItems(menu: any, file: any) {
     if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
     menu.addSeparator();
-    menu.addItem((it) =>
+    menu.addItem((it: any) =>
       it
         .setTitle(this.t('fileMenuGenerate'))
         .setIcon('book-open')
         .onClick(() => this.runForFile(file, false)),
     );
-    menu.addItem((it) =>
+    menu.addItem((it: any) =>
       it
         .setTitle(this.t('fileMenuRegen'))
         .setIcon('refresh-cw')
         .onClick(() => this.runForFile(file, true)),
     );
     if (this.cacheGet(file.path)) {
-      menu.addItem((it) =>
+      menu.addItem((it: any) =>
         it
           .setTitle(this.t('fileMenuClear'))
           .setIcon('trash')
@@ -477,7 +478,7 @@ class ParallelReaderPlugin extends Plugin {
     }
   }
 
-  async handleFileRename(file, oldPath) {
+  async handleFileRename(file: TFile, oldPath: string) {
     if (!(file instanceof TFile) || !oldPath) return;
     const wasMarkdown = oldPath.endsWith('.md');
     const isMarkdown = file.path.endsWith('.md');
@@ -504,7 +505,7 @@ class ParallelReaderPlugin extends Plugin {
     }
   }
 
-  async handleFileDelete(file) {
+  async handleFileDelete(file: TFile) {
     if (!(file instanceof TFile)) return;
     if (this.cache[file.path]) {
       delete this.cache[file.path];
@@ -545,7 +546,7 @@ class ParallelReaderPlugin extends Plugin {
 
   /* ---------- Generation ---------- */
 
-  async runForActiveFile(force) {
+  async runForActiveFile(force: boolean) {
     const mdView = this.getActiveView();
     if (!mdView?.file) {
       new Notice(this.t('openNoteFirst'));
@@ -554,7 +555,7 @@ class ParallelReaderPlugin extends Plugin {
     return this.runForFile(mdView.file, force);
   }
 
-  async runForFile(file, force) {
+  async runForFile(file: TFile | null, force: boolean) {
     if (!file) {
       new Notice(this.t('openNoteFirst'));
       return;
@@ -635,8 +636,8 @@ class ParallelReaderPlugin extends Plugin {
       });
   }
 
-  resolveCardAnchors(content, rawCards) {
-    const resolved: ResolvedCard[] = (rawCards || []).map((c) => ({
+  resolveCardAnchors(content: string, rawCards: RawCard[]) {
+    const resolved: ResolvedCard[] = (rawCards || []).map((c: RawCard) => ({
       title: c.title,
       level: 2,
       anchor: c.anchor,
@@ -655,7 +656,7 @@ class ParallelReaderPlugin extends Plugin {
 
   /* ---------- Scroll sync ---------- */
 
-  async syncViewToFile(file) {
+  async syncViewToFile(file: TFile) {
     if (!file?.path?.endsWith('.md')) return;
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL);
     if (leaves.length === 0) return;
@@ -693,7 +694,7 @@ class ParallelReaderPlugin extends Plugin {
     };
   }
 
-  handleEditorScroll(mdView) {
+  handleEditorScroll(mdView: MarkdownView) {
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
     const editor = mdView.editor;
@@ -718,7 +719,7 @@ class ParallelReaderPlugin extends Plugin {
     view.setActiveSection(activeIdx);
   }
 
-  findLeafForFile(file) {
+  findLeafForFile(file: TFile | null) {
     if (!file) return null;
     for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
       const v = leaf.view as any;
@@ -727,7 +728,7 @@ class ParallelReaderPlugin extends Plugin {
     return null;
   }
 
-  async scrollEditorToLine(line, file) {
+  async scrollEditorToLine(line: number, file: TFile | null) {
     let leaf = file ? this.findLeafForFile(file) : null;
     if (!leaf && file) {
       leaf = this.app.workspace.getLeaf('tab');

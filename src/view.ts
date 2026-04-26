@@ -1,6 +1,6 @@
 'use strict';
 
-import { ItemView, MarkdownRenderer, Menu, Notice, TFile } from 'obsidian';
+import { ItemView, MarkdownRenderer, Menu, Notice, TFile, type WorkspaceLeaf } from 'obsidian';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 import { cardsToMarkdown, cardToMarkdown, cardToPlain } from './markdown';
 import { CardEditModal } from './modal';
@@ -21,7 +21,7 @@ export class ParallelReaderView extends ItemView {
   loadingMessage: string;
   errorMessage: string;
 
-  constructor(leaf, plugin: PluginHost) {
+  constructor(leaf: WorkspaceLeaf, plugin: PluginHost) {
     super(leaf);
     this.plugin = plugin;
     this.sections = [];
@@ -78,7 +78,7 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  async loadFor(file, sections, stale) {
+  async loadFor(file: TFile, sections: ResolvedCard[], stale: boolean) {
     this.sourceFile = file;
     this.sections = sections;
     this.stale = !!stale;
@@ -87,7 +87,7 @@ export class ParallelReaderView extends ItemView {
     this.render();
   }
 
-  async renderLoading(file, message) {
+  async renderLoading(file: TFile, message: string) {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
@@ -96,7 +96,7 @@ export class ParallelReaderView extends ItemView {
     this.render();
   }
 
-  async renderError(file, message) {
+  async renderError(file: TFile, message: string) {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
@@ -105,7 +105,7 @@ export class ParallelReaderView extends ItemView {
     this.render();
   }
 
-  renderEmptyWithHint(file) {
+  renderEmptyWithHint(file: TFile) {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
@@ -129,9 +129,9 @@ export class ParallelReaderView extends ItemView {
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     if (this.sourceFile) {
       if (this.plugin.isGeneratingFile(this.sourceFile)) {
-        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () =>
-          this.plugin.cancelGenerationForFile(this.sourceFile),
-        );
+        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => {
+          this.plugin.cancelGenerationForFile(this.sourceFile);
+        });
       } else {
         addIconButton(actions, 'refresh-cw', this.plugin.t('actionRegenerate'), () =>
           this.plugin.runForFile(this.sourceFile, true),
@@ -270,7 +270,7 @@ export class ParallelReaderView extends ItemView {
     }
   }
 
-  setActiveSection(idx) {
+  setActiveSection(idx: number) {
     if (idx === this.activeIdx) return;
     if (this.activeIdx >= 0 && this.cards[this.activeIdx]) {
       this.cards[this.activeIdx].removeClass('is-active');
@@ -282,7 +282,7 @@ export class ParallelReaderView extends ItemView {
     }
   }
 
-  moveActiveSection(delta) {
+  moveActiveSection(delta: number) {
     const nextIdx = nextCardIndex(this.activeIdx, this.sections.length, delta);
     this.setActiveSection(nextIdx);
     this.focusSummaryPane();
@@ -313,7 +313,7 @@ export class ParallelReaderView extends ItemView {
     }
   }
 
-  async deleteCard(index) {
+  async deleteCard(index: number) {
     if (!this.sourceFile) return false;
     const nextSections = removeCardAt(this.sections, index);
     if (nextSections.length === this.sections.length) return false;
@@ -326,7 +326,7 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  openEditCardModal(index) {
+  openEditCardModal(index: number) {
     if (!this.sourceFile || !this.sections[index]) return false;
     new CardEditModal(this.app, this.plugin, this.sections[index], async (patch) => {
       await this.updateCard(index, patch);
@@ -334,7 +334,7 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  async updateCard(index, patch: CardPatch) {
+  async updateCard(index: number, patch: CardPatch) {
     if (!this.sourceFile) return false;
     const nextSections = updateCardAt(this.sections, index, patch);
     if (nextSections.length !== this.sections.length) return false;
