@@ -70,24 +70,15 @@ export interface StreamProgress {
   done: boolean;
 }
 
-/**
- * Perform a streaming fetch with SSE parsing.
- * Uses the native Fetch API (available in Electron/Obsidian).
- * Returns the full accumulated text when done.
- */
-export async function streamingFetch(
+async function doStreamingFetch(
   url: string,
   headers: Record<string, string>,
   body: unknown,
   extractDelta: DeltaExtractor,
-  onProgress?: (progress: StreamProgress) => void,
-  signal?: AbortSignal,
-  settings?: PluginSettings | null,
+  onProgress: ((progress: StreamProgress) => void) | undefined,
+  signal: AbortSignal,
+  settings: PluginSettings | null | undefined,
 ): Promise<string> {
-  if (typeof globalThis.fetch !== 'function') {
-    throw new Error('Streaming requires fetch API');
-  }
-
   const response = await globalThis.fetch(url, {
     method: 'POST',
     headers,
@@ -137,4 +128,51 @@ export async function streamingFetch(
 
   onProgress?.({ accumulated, done: true });
   return accumulated;
+}
+
+/**
+ * Perform a streaming fetch with SSE parsing and configurable timeout.
+ * Uses the native Fetch API (available in Electron/Obsidian).
+ * Returns the full accumulated text when done.
+ */
+export async function streamingFetch(
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
+  extractDelta: DeltaExtractor,
+  onProgress?: (progress: StreamProgress) => void,
+  signal?: AbortSignal,
+  settings?: PluginSettings | null,
+): Promise<string> {
+  if (typeof globalThis.fetch !== 'function') {
+    throw new Error('Streaming requires fetch API');
+  }
+
+  const timeoutMs = settings?.streamingTimeoutMs ?? 120000;
+  const timeoutController = new AbortController();
+
+  if (signal) {
+    if (signal.aborted) {
+      timeoutController.abort();
+    } else {
+      signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+    }
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      timeoutController.abort();
+      reject(new Error(`Streaming timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      doStreamingFetch(url, headers, body, extractDelta, onProgress, timeoutController.signal, settings),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
 }

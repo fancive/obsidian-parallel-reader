@@ -22,6 +22,58 @@ import {
 import { deltaExtractorForFormat, type StreamProgress, streamingFetch } from './streaming';
 import type { PluginSettings, RawCard } from './types';
 
+/* ---------- Typed request/response shapes ---------- */
+
+type RequestUrlFunction = (params: {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  throw?: boolean;
+}) => Promise<{ status: number; json: unknown; text: string }>;
+
+interface AnthropicMessagesBody {
+  model: string;
+  max_tokens: number;
+  system: string;
+  messages: Array<{ role: string; content: string }>;
+  tools?: unknown[];
+  tool_choice?: { type: string; name: string };
+  stream?: boolean;
+}
+
+interface OpenAiChatBody {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  response_format?: unknown;
+  stream?: boolean;
+  [tokenField: string]: unknown;
+}
+
+interface OpenAiResponsesBody {
+  model: string;
+  instructions: string;
+  input: string;
+  max_output_tokens: number;
+  text?: unknown;
+  stream?: boolean;
+}
+
+interface GeminiGenerationConfig {
+  temperature: number;
+  maxOutputTokens: number;
+  responseMimeType?: string;
+  responseJsonSchema?: unknown;
+}
+
+interface GeminiBody {
+  systemInstruction: { parts: Array<{ text: string }> };
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+  generationConfig: GeminiGenerationConfig;
+}
+
+/* ---------- Helpers ---------- */
+
 function endpointUrl(baseUrl: string, suffixes: string[]) {
   const base = baseUrl.replace(/\/+$/, '');
   for (const suffix of suffixes) {
@@ -37,8 +89,8 @@ function parseApiHeaders(raw: string, settings?: PluginSettings | null): Record<
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(text);
-    } catch (e: any) {
-      throw new Error(translate(settings || null, 'errorCustomHeadersJsonParse', { error: e.message }));
+    } catch (e: unknown) {
+      throw new Error(translate(settings || null, 'errorCustomHeadersJsonParse', { error: (e as Error).message }));
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(translate(settings || null, 'errorCustomHeadersJsonObject'));
@@ -90,10 +142,14 @@ function buildApiHeaders(settings: PluginSettings, extra?: Record<string, string
   };
 }
 
-function responseJson(resp: any, label: string, settings?: PluginSettings | null) {
-  if (resp.json && typeof resp.json === 'object') return resp.json;
+function responseJson(
+  resp: { json: unknown; text: string },
+  label: string,
+  settings?: PluginSettings | null,
+): Record<string, unknown> {
+  if (resp.json && typeof resp.json === 'object') return resp.json as Record<string, unknown>;
   try {
-    return JSON.parse(resp.text || '{}');
+    return JSON.parse(resp.text || '{}') as Record<string, unknown>;
   } catch (_) {
     throw new Error(
       translate(settings || null, 'errorProviderNonJson', {
@@ -105,14 +161,14 @@ function responseJson(resp: any, label: string, settings?: PluginSettings | null
 }
 
 async function requestJsonBody(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   label: string,
   url: string,
   headers: Record<string, string>,
-  body: any,
+  body: unknown,
   settings?: PluginSettings | null,
-) {
-  let resp: any;
+): Promise<Record<string, unknown>> {
+  let resp: { status: number; json: unknown; text: string };
   try {
     resp = await requestUrlImpl({
       url,
@@ -121,11 +177,11 @@ async function requestJsonBody(
       body: JSON.stringify(body),
       throw: false,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw new Error(
       translate(settings || null, 'errorProviderRequestFailed', {
         label,
-        error: e.message || e,
+        error: (e as Error).message || String(e),
       }),
     );
   }
@@ -142,8 +198,8 @@ async function requestJsonBody(
   return responseJson(resp, label, settings);
 }
 
-function shouldRetryWithoutStructuredOutput(error: any) {
-  const message = String(error?.message ? error.message : error);
+function shouldRetryWithoutStructuredOutput(error: unknown): boolean {
+  const message = String((error as Error)?.message ?? error);
   if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message))
     return false;
   return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(
@@ -152,14 +208,14 @@ function shouldRetryWithoutStructuredOutput(error: any) {
 }
 
 async function requestJsonBodyWithStructuredFallback(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   label: string,
   url: string,
   headers: Record<string, string>,
-  structuredBody: any,
-  fallbackBody: any,
+  structuredBody: unknown,
+  fallbackBody: unknown,
   settings?: PluginSettings | null,
-) {
+): Promise<Record<string, unknown>> {
   try {
     return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody, settings);
   } catch (e) {
@@ -169,27 +225,31 @@ async function requestJsonBodyWithStructuredFallback(
   }
 }
 
-function textFromContent(content: any): string {
+function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
       .map((part) => {
         if (typeof part === 'string') return part;
-        if (part && typeof part === 'object') return part.text || part.output_text || '';
+        if (part && typeof part === 'object') {
+          const p = part as Record<string, unknown>;
+          return typeof p.text === 'string' ? p.text : typeof p.output_text === 'string' ? p.output_text : '';
+        }
         return '';
       })
       .join('');
   }
   if (content && typeof content === 'object') {
-    return content.text || content.output_text || '';
+    const c = content as Record<string, unknown>;
+    return typeof c.text === 'string' ? c.text : typeof c.output_text === 'string' ? c.output_text : '';
   }
   return '';
 }
 
-function textFromOpenAiResponses(json: any): string {
+function textFromOpenAiResponses(json: Record<string, unknown>): string {
   if (typeof json.output_text === 'string') return json.output_text;
   const parts: string[] = [];
-  const walk = (value: any) => {
+  const walk = (value: unknown) => {
     if (!value) return;
     if (typeof value === 'string') return;
     if (Array.isArray(value)) {
@@ -197,11 +257,12 @@ function textFromOpenAiResponses(json: any): string {
       return;
     }
     if (typeof value === 'object') {
-      if (typeof value.text === 'string') parts.push(value.text);
-      if (typeof value.output_text === 'string') parts.push(value.output_text);
-      if (value.type === 'output_text' && typeof value.content === 'string') parts.push(value.content);
-      if (value.content) walk(value.content);
-      if (value.output) walk(value.output);
+      const v = value as Record<string, unknown>;
+      if (typeof v.text === 'string') parts.push(v.text);
+      if (typeof v.output_text === 'string') parts.push(v.output_text);
+      if (v.type === 'output_text' && typeof v.content === 'string') parts.push(v.content);
+      if (v.content) walk(v.content);
+      if (v.output) walk(v.output);
     }
   };
   walk(json.output);
@@ -219,9 +280,9 @@ export function buildAnthropicMessagesBody(
   user: string,
   settings: PluginSettings,
   options?: { structured?: boolean },
-) {
+): AnthropicMessagesBody {
   const structured = !options || options.structured !== false;
-  const body: any = {
+  const body: AnthropicMessagesBody = {
     model: modelForApi(settings),
     max_tokens: Number(settings.apiMaxTokens) || 4096,
     system,
@@ -239,9 +300,9 @@ export function buildOpenAiChatBody(
   user: string,
   settings: PluginSettings,
   options?: { structured?: boolean },
-) {
+): OpenAiChatBody {
   const structured = !options || options.structured !== false;
-  const body: any = {
+  const body: OpenAiChatBody = {
     model: modelForApi(settings),
     messages: [
       { role: 'system', content: system },
@@ -260,9 +321,9 @@ export function buildOpenAiResponsesBody(
   user: string,
   settings: PluginSettings,
   options?: { structured?: boolean },
-) {
+): OpenAiResponsesBody {
   const structured = !options || options.structured !== false;
-  const body: any = {
+  const body: OpenAiResponsesBody = {
     model: modelForApi(settings),
     instructions: system,
     input: user,
@@ -279,9 +340,9 @@ export function buildGeminiBody(
   user: string,
   settings: PluginSettings,
   options?: { structured?: boolean },
-) {
+): GeminiBody {
   const structured = !options || options.structured !== false;
-  const generationConfig: any = {
+  const generationConfig: GeminiGenerationConfig = {
     temperature: 0,
     maxOutputTokens: Number(settings.apiMaxTokens) || 4096,
   };
@@ -296,17 +357,18 @@ export function buildGeminiBody(
   };
 }
 
-function cardsFromAnthropicToolUse(json: any, settings?: PluginSettings | null) {
-  const content = Array.isArray(json?.content) ? json.content : [];
-  const block = content.find((c: any) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
+function cardsFromAnthropicToolUse(json: Record<string, unknown>, settings?: PluginSettings | null) {
+  const content = Array.isArray(json?.content) ? (json.content as Array<Record<string, unknown>>) : [];
+  const block = content.find((c) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
   if (!block) return null;
   if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
-  if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input);
+  if (block.input && typeof block.input === 'object')
+    return normalizeCardsPayload(block.input as Record<string, unknown>);
   return [];
 }
 
 async function summarizeViaAnthropicMessages(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -325,14 +387,20 @@ async function summarizeViaAnthropicMessages(
   const toolCards = cardsFromAnthropicToolUse(json, settings);
   if (toolCards) return toolCards;
 
-  const text = (json.content || [])
-    .map((c: any) => textFromContent(c))
+  const contentBlocks = Array.isArray(json.content) ? (json.content as Array<unknown>) : [];
+  const text = contentBlocks
+    .map((c) => textFromContent(c))
     .join('')
     .trim();
   return parseCardsJson(text, settings);
 }
 
-async function summarizeViaOpenAiChat(requestUrlImpl: any, system: string, user: string, settings: PluginSettings) {
+async function summarizeViaOpenAiChat(
+  requestUrlImpl: RequestUrlFunction,
+  system: string,
+  user: string,
+  settings: PluginSettings,
+) {
   const url = endpointUrl(getApiBaseUrl(settings), ['/chat/completions']);
   const json = await requestJsonBodyWithStructuredFallback(
     requestUrlImpl,
@@ -343,13 +411,15 @@ async function summarizeViaOpenAiChat(requestUrlImpl: any, system: string, user:
     buildOpenAiChatBody(system, user, settings, { structured: false }),
     settings,
   );
-  const choice = (json.choices || [])[0] || {};
-  const text = textFromContent(choice.message?.content || choice.text || '').trim();
+  const choices = Array.isArray(json.choices) ? (json.choices as Array<Record<string, unknown>>) : [];
+  const choice = choices[0] || {};
+  const message = choice.message as Record<string, unknown> | undefined;
+  const text = textFromContent(message?.content ?? choice.text ?? '').trim();
   return parseCardsJson(text, settings);
 }
 
 async function summarizeViaOpenAiResponses(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -368,7 +438,7 @@ async function summarizeViaOpenAiResponses(
 }
 
 async function summarizeViaGoogleGenerativeAi(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -388,18 +458,20 @@ async function summarizeViaGoogleGenerativeAi(
     buildGeminiBody(system, user, settings, { structured: false }),
     settings,
   );
-  const candidate = (json.candidates || [])[0] || {};
-  const parts = candidate.content?.parts || [];
+  const candidates = Array.isArray(json.candidates) ? (json.candidates as Array<Record<string, unknown>>) : [];
+  const candidate = candidates[0] || {};
+  const contentObj = candidate.content as Record<string, unknown> | undefined;
+  const parts = Array.isArray(contentObj?.parts) ? (contentObj.parts as Array<unknown>) : [];
   const text = parts
-    .map((p: any) => textFromContent(p))
+    .map((p) => textFromContent(p))
     .join('')
     .trim();
   return parseCardsJson(text, settings);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
+// Obsidian's requestUrl is not directly compatible with fetch — we accept it as a typed callback
 export async function summarizeViaApi(
-  requestUrlImpl: any,
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -473,8 +545,8 @@ export async function summarizeViaApiStreaming(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian's requestUrl is not compatible with fetch
-export async function testApiBackend(requestUrlImpl: any, settings: PluginSettings): Promise<string> {
+// Obsidian's requestUrl is not directly compatible with fetch — we accept it as a typed callback
+export async function testApiBackend(requestUrlImpl: RequestUrlFunction, settings: PluginSettings): Promise<string> {
   await summarizeViaApi(requestUrlImpl, '只输出 JSON：{"cards":[]}', '连通性测试：请原样输出 {"cards":[]}', settings);
   const format = getApiFormat(settings);
   return `${getApiPreset(settings).label} / ${API_FORMATS[format].label}`;

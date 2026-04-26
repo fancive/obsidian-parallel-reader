@@ -1,0 +1,160 @@
+'use strict';
+
+import type { DataAdapter } from 'obsidian';
+import { serializeCacheFile, touchCacheEntry } from './cache';
+import {
+  CACHE_SCHEMA_VERSION,
+  DEFAULT_MAX_CACHE_ENTRIES,
+  generationFingerprint,
+  hashContent,
+  pruneCacheEntries,
+} from './settings';
+import type { CacheEntry, PluginSettings, RawCard, ResolvedCard } from './types';
+
+export class CacheManager {
+  cache: Record<string, CacheEntry> = {};
+  private _timer: ReturnType<typeof setTimeout> | null = null;
+  private _dirty = false;
+
+  constructor(
+    private readonly adapter: DataAdapter,
+    private readonly configDir: string,
+    private readonly pluginId: string,
+    private readonly getSettings: () => PluginSettings,
+  ) {}
+
+  filePath(): string {
+    return `${this.configDir}/plugins/${this.pluginId}/cache.json`;
+  }
+
+  async ensureDir(): Promise<void> {
+    const dir = `${this.configDir}/plugins/${this.pluginId}`;
+    try {
+      if (typeof this.adapter.exists === 'function' && (await this.adapter.exists(dir))) return;
+      await this.adapter.mkdir(dir);
+    } catch (_) {
+      /* ignore race */
+    }
+  }
+
+  async readFile(): Promise<Record<string, CacheEntry>> {
+    try {
+      const raw = await this.adapter.read(this.filePath());
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object')
+        return parsed.entries;
+    } catch (e: unknown) {
+      const message = String((e as Error)?.message || e || '');
+      if (!/not found|does not exist|ENOENT/i.test(message))
+        console.warn('[parallel-reader] failed to read cache.json', e);
+    }
+    return {};
+  }
+
+  async writeFile(): Promise<void> {
+    await this.ensureDir();
+    await this.adapter.write(this.filePath(), serializeCacheFile(this.cache));
+  }
+
+  async load(): Promise<void> {
+    this.cache = await this.readFile();
+    const pruned = this.prune();
+    if (pruned.length > 0) await this.writeFile();
+  }
+
+  prune(): string[] {
+    const settings = this.getSettings();
+    return pruneCacheEntries(this.cache, settings?.maxCacheEntries || DEFAULT_MAX_CACHE_ENTRIES);
+  }
+
+  async pruneIfNeeded(): Promise<string[]> {
+    const removed = this.prune();
+    if (removed.length > 0) await this.save();
+    return removed;
+  }
+
+  async save(): Promise<void> {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
+    this.prune();
+    await this.writeFile();
+    this._dirty = false;
+  }
+
+  scheduleSave(delayMs = 5000): void {
+    this._dirty = true;
+    if (this._timer) return;
+    this._timer = setTimeout(() => {
+      this._timer = null;
+      if (!this._dirty) return;
+      this.save().catch((e) => console.error('[parallel-reader] failed to save cache', e));
+    }, delayMs);
+  }
+
+  async flush(): Promise<void> {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
+    if (!this._dirty) return;
+    await this.save();
+  }
+
+  get(filePath: string): CacheEntry | null {
+    return this.cache[filePath] || null;
+  }
+
+  async touch(filePath: string): Promise<CacheEntry | null> {
+    const entry = touchCacheEntry(this.cache[filePath] || null);
+    if (!entry) return null;
+    this.cache[filePath] = entry;
+    this.scheduleSave();
+    return entry;
+  }
+
+  async put(filePath: string, content: string, cards: RawCard[], settings: PluginSettings): Promise<void> {
+    const now = new Date().toISOString();
+    this.cache[filePath] = {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      contentHash: hashContent(content),
+      settingsHash: generationFingerprint(settings || this.getSettings()),
+      cards,
+      generatedAt: now,
+      lastAccessedAt: now,
+    };
+    await this.save();
+  }
+
+  async replaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean> {
+    const entry = this.cache[filePath];
+    if (!entry) return false;
+    const now = new Date().toISOString();
+    this.cache[filePath] = {
+      ...entry,
+      cards: (cards || []).map((card: ResolvedCard) => ({
+        title: card.title,
+        anchor: card.anchor,
+        gist: card.gist,
+        bullets: card.bullets || [],
+      })),
+      updatedAt: now,
+      lastAccessedAt: now,
+    };
+    await this.save();
+    return true;
+  }
+
+  async delete(filePath: string): Promise<void> {
+    if (this.cache[filePath]) {
+      delete this.cache[filePath];
+      await this.save();
+    }
+  }
+
+  async clear(): Promise<void> {
+    this.cache = {};
+    await this.save();
+  }
+}

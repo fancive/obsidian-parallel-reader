@@ -1,7 +1,8 @@
 'use strict';
-import { MarkdownView, Notice, Plugin, requestUrl, TFile } from 'obsidian';
+import { MarkdownView, Modal, Notice, Plugin, requestUrl, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
+import { CacheManager } from './src/cache-manager';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
 import { resolveCliPath, summarizeViaClaudeCode, summarizeViaCodex } from './src/cli';
 import {
@@ -30,11 +31,9 @@ import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import {
   CACHE_SCHEMA_VERSION,
   cacheEntryMatches,
-  DEFAULT_MAX_CACHE_ENTRIES,
   DEFAULT_SETTINGS,
   generationFingerprint,
   getApiBaseUrl,
-  hashContent,
   isApiBackend,
   modelForApi,
   normalizeSettings,
@@ -42,7 +41,15 @@ import {
 } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
 import { deltaExtractorForFormat, parseSseBuffer, type StreamProgress } from './src/streaming';
-import type { CacheEntry, PluginSettings, RawCard, ResolvedCard } from './src/types';
+import type {
+  CacheEntry,
+  ObsidianEditorWithCm,
+  ObsidianMenu,
+  ObsidianMenuItem,
+  PluginSettings,
+  RawCard,
+  ResolvedCard,
+} from './src/types';
 import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
 import { folderPathsForTarget } from './src/vault';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
@@ -106,12 +113,14 @@ function cancellationNoticeKey(settings: PluginSettings | null, job: GenerationJ
 
 class ParallelReaderPlugin extends Plugin {
   settings!: PluginSettings;
-  cache!: Record<string, CacheEntry>;
+  cacheManager!: CacheManager;
   jobs!: GenerationJobManager;
   _scrollDispose: (() => void) | null = null;
   _settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  _cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  _cacheDirty = false;
+
+  get cache(): Record<string, CacheEntry> {
+    return this.cacheManager.cache;
+  }
 
   t(key: string, vars?: Record<string, string | number>) {
     return translate(this.settings || DEFAULT_SETTINGS, key, vars);
@@ -120,8 +129,6 @@ class ParallelReaderPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.jobs = new GenerationJobManager();
-    this._cacheSaveTimer = null;
-    this._cacheDirty = false;
 
     this.addRibbonIcon('book-open', this.t('ribbonOpen'), async () => {
       const active = this.getActiveView();
@@ -171,7 +178,7 @@ class ParallelReaderPlugin extends Plugin {
       callback: async () => {
         const active = this.getActiveView();
         if (!active?.file) return new Notice(this.t('noCurrentNote'));
-        await this.cacheDelete(active.file.path);
+        await this.cacheManager.delete(active.file.path);
         new Notice(this.t('cacheClearedFile', { name: active.file.basename }));
       },
     });
@@ -179,8 +186,8 @@ class ParallelReaderPlugin extends Plugin {
       id: 'parallel-reader-clear-all',
       name: this.t('cmdClearAll'),
       callback: async () => {
-        const n = Object.keys(this.cache).length;
-        await this.cacheClear();
+        const n = Object.keys(this.cacheManager.cache).length;
+        await this.cacheManager.clear();
         new Notice(this.t('cacheClearedAll', { count: n }));
       },
     });
@@ -200,6 +207,11 @@ class ParallelReaderPlugin extends Plugin {
       id: 'parallel-reader-card-jump',
       name: this.t('cmdCardJump'),
       callback: () => this.jumpActiveCard(),
+    });
+    this.addCommand({
+      id: 'parallel-reader-batch-generate',
+      name: this.t('cmdBatchGenerate'),
+      callback: () => this.runBatchForFolder(),
     });
 
     this.addSettingTab(new ParallelReaderSettingTab(this.app, this));
@@ -228,7 +240,13 @@ class ParallelReaderPlugin extends Plugin {
     const data = (await this.loadData()) || {};
     const settingsBlob = data.settings || {};
     this.settings = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, settingsBlob));
-    await this.loadCache();
+    this.cacheManager = new CacheManager(
+      this.app.vault.adapter,
+      this.app.vault.configDir || '.obsidian',
+      this.manifest?.id || 'parallel-reader',
+      () => this.settings,
+    );
+    await this.cacheManager.load();
   }
 
   async saveSettings() {
@@ -254,139 +272,25 @@ class ParallelReaderPlugin extends Plugin {
     await this.saveSettings();
   }
 
-  /* ---------- Cache persistence ---------- */
-
-  async saveCache() {
-    if (this._cacheSaveTimer) {
-      clearTimeout(this._cacheSaveTimer);
-      this._cacheSaveTimer = null;
-    }
-    this.pruneCache();
-    await this.writeCacheFile();
-    this._cacheDirty = false;
-  }
-
-  scheduleCacheSave(delayMs = 5000) {
-    this._cacheDirty = true;
-    if (this._cacheSaveTimer) return;
-    this._cacheSaveTimer = setTimeout(() => {
-      this._cacheSaveTimer = null;
-      if (!this._cacheDirty) return;
-      this.saveCache().catch((e) => console.error('[parallel-reader] failed to save cache', e));
-    }, delayMs);
-  }
-
-  async flushCacheSave() {
-    if (this._cacheSaveTimer) {
-      clearTimeout(this._cacheSaveTimer);
-      this._cacheSaveTimer = null;
-    }
-    if (!this._cacheDirty) return;
-    await this.saveCache();
-  }
-
-  cacheFilePath() {
-    const configDir = this.app.vault.configDir || '.obsidian';
-    const pluginId = this.manifest?.id || 'parallel-reader';
-    return `${configDir}/plugins/${pluginId}/cache.json`;
-  }
-
-  async ensurePluginDataDir() {
-    const adapter = this.app.vault.adapter;
-    const configDir = this.app.vault.configDir || '.obsidian';
-    const pluginId = this.manifest?.id || 'parallel-reader';
-    const dir = `${configDir}/plugins/${pluginId}`;
-    try {
-      if (typeof adapter.exists === 'function' && (await adapter.exists(dir))) return;
-      await adapter.mkdir(dir);
-    } catch (_) {
-      /* ignore race */
-    }
-  }
-
-  async readCacheFile() {
-    const adapter = this.app.vault.adapter;
-    try {
-      const raw = await adapter.read(this.cacheFilePath());
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object')
-        return parsed.entries;
-    } catch (e: unknown) {
-      const message = String((e as Error)?.message || e || '');
-      if (!/not found|does not exist|ENOENT/i.test(message))
-        console.warn('[parallel-reader] failed to read cache.json', e);
-    }
-    return {};
-  }
-
-  async writeCacheFile() {
-    await this.ensurePluginDataDir();
-    await this.app.vault.adapter.write(this.cacheFilePath(), serializeCacheFile(this.cache));
-  }
-
-  async loadCache() {
-    this.cache = await this.readCacheFile();
-    const pruned = this.pruneCache();
-    if (pruned.length > 0) await this.writeCacheFile();
-  }
-
-  pruneCache() {
-    return pruneCacheEntries(this.cache, this.settings?.maxCacheEntries || DEFAULT_MAX_CACHE_ENTRIES);
-  }
-  async pruneCacheIfNeeded() {
-    const removed = this.pruneCache();
-    if (removed.length > 0) await this.saveCache();
-    return removed;
-  }
-  cacheGet(filePath: string) {
-    return this.cache[filePath] || null;
-  }
+  /* ---------- Cache delegation ---------- */
 
   async cacheTouch(filePath: string) {
-    const entry = touchCacheEntry(this.cache[filePath] || null);
-    if (!entry) return null;
-    this.scheduleCacheSave();
-    return entry;
+    return this.cacheManager.touch(filePath);
   }
-
-  async cachePut(filePath: string, content: string, cards: RawCard[], settings: PluginSettings) {
-    const now = new Date().toISOString();
-    this.cache[filePath] = {
-      schemaVersion: CACHE_SCHEMA_VERSION,
-      contentHash: hashContent(content),
-      settingsHash: generationFingerprint(settings || this.settings),
-      cards,
-      generatedAt: now,
-      lastAccessedAt: now,
-    };
-    await this.saveCache();
+  scheduleCacheSave(delayMs = 5000) {
+    this.cacheManager.scheduleSave(delayMs);
   }
-
+  async flushCacheSave() {
+    await this.cacheManager.flush();
+  }
   async cacheReplaceCards(filePath: string, cards: ResolvedCard[]) {
-    const entry = this.cache[filePath];
-    if (!entry) return false;
-    const now = new Date().toISOString();
-    entry.cards = (cards || []).map((card: ResolvedCard) => ({
-      title: card.title,
-      anchor: card.anchor,
-      gist: card.gist,
-      bullets: card.bullets || [],
-    }));
-    entry.updatedAt = now;
-    entry.lastAccessedAt = now;
-    await this.saveCache();
-    return true;
-  }
-
-  async cacheDelete(filePath: string) {
-    if (this.cache[filePath]) {
-      delete this.cache[filePath];
-      await this.saveCache();
-    }
+    return this.cacheManager.replaceCards(filePath, cards);
   }
   async cacheClear() {
-    this.cache = {};
-    await this.saveCache();
+    return this.cacheManager.clear();
+  }
+  async pruneCacheIfNeeded() {
+    return this.cacheManager.pruneIfNeeded();
   }
 
   /* ---------- View management ---------- */
@@ -465,29 +369,29 @@ class ParallelReaderPlugin extends Plugin {
     return true;
   }
 
-  addFileMenuItems(menu: any, file: any) {
+  addFileMenuItems(menu: ObsidianMenu, file: unknown) {
     if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
     menu.addSeparator();
-    menu.addItem((it: any) =>
+    menu.addItem((it: ObsidianMenuItem) =>
       it
         .setTitle(this.t('fileMenuGenerate'))
         .setIcon('book-open')
         .onClick(() => this.runForFile(file, false)),
     );
-    menu.addItem((it: any) =>
+    menu.addItem((it: ObsidianMenuItem) =>
       it
         .setTitle(this.t('fileMenuRegen'))
         .setIcon('refresh-cw')
         .onClick(() => this.runForFile(file, true)),
     );
-    if (this.cacheGet(file.path)) {
-      menu.addItem((it: any) =>
+    if (this.cacheManager.get(file.path)) {
+      menu.addItem((it: ObsidianMenuItem) =>
         it
           .setTitle(this.t('fileMenuClear'))
           .setIcon('trash')
           .onClick(async () => {
-            await this.cacheDelete(file.path);
-            new Notice(this.t('cacheClearedFile', { name: file.basename }));
+            await this.cacheManager.delete(file.path);
+            new Notice(this.t('cacheClearedFile', { name: (file as TFile).basename }));
           }),
       );
     }
@@ -499,19 +403,16 @@ class ParallelReaderPlugin extends Plugin {
     const isMarkdown = file.path.endsWith('.md');
     if (!wasMarkdown && !isMarkdown) return;
     if (wasMarkdown && !isMarkdown) {
-      if (this.cache[oldPath]) {
-        delete this.cache[oldPath];
-        await this.saveCache();
-      }
+      await this.cacheManager.delete(oldPath);
       const view = this.getParallelView();
       if (view && view.sourceFile?.path === oldPath) view.renderEmpty();
       return;
     }
     if (!wasMarkdown) return;
-    if (this.cache[oldPath]) {
-      this.cache[file.path] = this.cache[oldPath];
-      delete this.cache[oldPath];
-      await this.saveCache();
+    if (this.cacheManager.cache[oldPath]) {
+      this.cacheManager.cache[file.path] = this.cacheManager.cache[oldPath];
+      delete this.cacheManager.cache[oldPath];
+      await this.cacheManager.save();
     }
     const view = this.getParallelView();
     if (view?.sourceFile && (view.sourceFile.path === oldPath || view.sourceFile.path === file.path)) {
@@ -522,10 +423,7 @@ class ParallelReaderPlugin extends Plugin {
 
   async handleFileDelete(file: TFile) {
     if (!(file instanceof TFile)) return;
-    if (this.cache[file.path]) {
-      delete this.cache[file.path];
-      await this.saveCache();
-    }
+    await this.cacheManager.delete(file.path);
     const view = this.getParallelView();
     if (view?.sourceFile?.path === file.path) view.renderEmpty();
   }
@@ -579,7 +477,7 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('alreadyGenerating'));
       return;
     }
-    if (shouldConfirmRegenerate(this.cacheGet(file.path), force) && !this.confirmRegenerateEditedCards()) {
+    if (shouldConfirmRegenerate(this.cacheManager.get(file.path), force) && !this.confirmRegenerateEditedCards()) {
       new Notice(this.t('regenerateCancelled'));
       return;
     }
@@ -600,8 +498,8 @@ class ParallelReaderPlugin extends Plugin {
 
         job.setPhase('cache-check');
         if (!force) {
-          const entry = this.cacheGet(file.path);
-          if (cacheEntryMatches(entry, content, this.settings)) {
+          const entry = this.cacheManager.get(file.path);
+          if (entry && cacheEntryMatches(entry, content, this.settings)) {
             await this.cacheTouch(file.path);
             if (this.activeFileStillMatches(file))
               await view.loadFor(file, this.resolveCardAnchors(content, entry.cards), false);
@@ -630,7 +528,7 @@ class ParallelReaderPlugin extends Plugin {
         }
         const rawCards = sections.map((s) => ({ title: s.title, anchor: s.anchor, gist: s.gist, bullets: s.bullets }));
         job.setPhase('saving');
-        await this.cachePut(file.path, content, rawCards, this.settings);
+        await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
         if (this.viewIsShowingFile(view, file)) await view.loadFor(file, sections, false);
         const unanchored = sections.filter((s) => s.startLine < 0).length;
@@ -656,6 +554,57 @@ class ParallelReaderPlugin extends Plugin {
         if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
         new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: e.message || e }));
       });
+  }
+
+  async runBatchForFolder() {
+    const plugin = this;
+    const folderPath = await new Promise<string | null>((resolve) => {
+      class FolderPromptModal extends Modal {
+        private input!: HTMLInputElement;
+        onOpen() {
+          this.contentEl.createEl('p', { text: plugin.t('batchSelectFolder') });
+          this.input = this.contentEl.createEl('input', { type: 'text' });
+          this.input.placeholder = plugin.t('batchFolderPrompt');
+          this.input.style.width = '100%';
+          this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              resolve(this.input.value.trim());
+              this.close();
+            }
+          });
+          this.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
+            resolve(this.input.value.trim());
+            this.close();
+          });
+        }
+        onClose() {
+          resolve(null);
+        }
+      }
+      new FolderPromptModal(plugin.app).open();
+    });
+    if (folderPath === null) return;
+    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => {
+      if (folderPath === '') return !f.path.includes('/');
+      return f.parent?.path === folderPath;
+    });
+    if (allFiles.length === 0) {
+      new Notice(this.t('batchNoMarkdown'));
+      return;
+    }
+    let skipped = 0;
+    for (let i = 0; i < allFiles.length; i++) {
+      const file = allFiles[i];
+      new Notice(this.t('batchProgress', { current: i + 1, total: allFiles.length }));
+      const content = await this.app.vault.read(file);
+      const entry = this.cacheManager.get(file.path);
+      if (entry && cacheEntryMatches(entry, content, this.settings)) {
+        skipped++;
+        continue;
+      }
+      await this.runForFile(file, false);
+    }
+    new Notice(this.t('batchDone', { total: allFiles.length, skipped }));
   }
 
   resolveCardAnchors(content: string, rawCards: RawCard[]) {
@@ -684,7 +633,7 @@ class ParallelReaderPlugin extends Plugin {
     if (leaves.length === 0) return;
     const view = leaves[0].view as ParallelReaderView;
     if (!view || !this.activeFileStillMatches(file)) return;
-    const entry = this.cacheGet(file.path);
+    const entry = this.cacheManager.get(file.path);
     if (!entry) {
       await view.loadFor(file, [], false);
       view.renderEmptyWithHint(file);
@@ -705,7 +654,7 @@ class ParallelReaderPlugin extends Plugin {
     const mdView = this.getActiveView();
     if (!mdView) return;
     const editor = mdView.editor;
-    const cm = editor && (editor as any).cm;
+    const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector('.cm-scroller');
     if (!scrollDom) return;
     const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
@@ -720,7 +669,7 @@ class ParallelReaderPlugin extends Plugin {
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
     const editor = mdView.editor;
-    const cm = editor && (editor as any).cm;
+    const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     if (!cm?.scrollDOM) return;
     const rect = cm.scrollDOM.getBoundingClientRect();
     const topY = visibleTopProbeY(rect);
@@ -744,7 +693,7 @@ class ParallelReaderPlugin extends Plugin {
   findLeafForFile(file: TFile | null) {
     if (!file) return null;
     for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
-      const v = leaf.view as any;
+      const v = leaf.view as { file?: TFile };
       if (v?.file && v.file.path === file.path) return leaf;
     }
     return null;

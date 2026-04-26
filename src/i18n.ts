@@ -145,6 +145,12 @@ export const STRINGS: Record<string, Record<string, string>> = {
     clearAllCacheButton: '清除所有缓存',
     settingStreamingName: '流式输出',
     settingStreamingDesc: '启用后生成时实时显示 LLM 输出进度（仅 OpenAI Chat 和 Anthropic 格式支持）',
+    cmdBatchGenerate: '批量生成对照笔记（当前文件夹）',
+    batchSelectFolder: '请输入要批量处理的文件夹路径（留空为 Vault 根目录）',
+    batchFolderPrompt: '文件夹路径',
+    batchNoMarkdown: '该文件夹下没有 Markdown 文件',
+    batchProgress: '批量生成：{current}/{total}',
+    batchDone: '批量生成完成：共处理 {total} 篇，跳过缓存 {skipped} 篇',
   },
   en: {
     appTitle: 'Parallel Reader',
@@ -295,6 +301,12 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingStreamingName: 'Streaming output',
     settingStreamingDesc:
       'Show real-time LLM output progress during generation (OpenAI Chat and Anthropic formats only)',
+    cmdBatchGenerate: 'Batch generate parallel notes (current folder)',
+    batchSelectFolder: 'Enter the folder path to batch-process (leave blank for Vault root)',
+    batchFolderPrompt: 'Folder path',
+    batchNoMarkdown: 'No Markdown files found in that folder',
+    batchProgress: 'Batch generating: {current}/{total}',
+    batchDone: 'Batch complete: processed {total}, skipped {skipped} (cached)',
   },
 };
 

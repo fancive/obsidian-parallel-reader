@@ -4,8 +4,7 @@ import type { CacheEntry } from './types';
 
 export function touchCacheEntry(entry: CacheEntry | null, now?: string): CacheEntry | null {
   if (!entry) return null;
-  entry.lastAccessedAt = now || new Date().toISOString();
-  return entry;
+  return { ...entry, lastAccessedAt: now || new Date().toISOString() };
 }
 
 export function serializeCacheFile(entries: Record<string, CacheEntry>): string {
