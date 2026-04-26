@@ -90,13 +90,13 @@ function cancellationNoticeKey(settings: PluginSettings | null, job: GenerationJ
 /* ---------- Plugin ---------- */
 
 class ParallelReaderPlugin extends Plugin {
-  settings: PluginSettings;
-  cache: Record<string, CacheEntry>;
-  jobs: GenerationJobManager;
-  _scrollDispose: (() => void) | null;
-  _settingsSaveTimer: ReturnType<typeof setTimeout> | null;
-  _cacheSaveTimer: ReturnType<typeof setTimeout> | null;
-  _cacheDirty: boolean;
+  settings!: PluginSettings;
+  cache!: Record<string, CacheEntry>;
+  jobs!: GenerationJobManager;
+  _scrollDispose: (() => void) | null = null;
+  _settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  _cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  _cacheDirty = false;
 
   t(key: string, vars?: Record<string, string | number>) {
     return translate(this.settings || DEFAULT_SETTINGS, key, vars);
@@ -296,8 +296,8 @@ class ParallelReaderPlugin extends Plugin {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object')
         return parsed.entries;
-    } catch (e) {
-      const message = String(e?.message || e || '');
+    } catch (e: unknown) {
+      const message = String((e as Error)?.message || e || '');
       if (!/not found|does not exist|ENOENT/i.test(message))
         console.warn('[parallel-reader] failed to read cache.json', e);
     }

@@ -72,8 +72,8 @@ export function runCli(
             .join(':'),
         },
       });
-    } catch (e) {
-      return reject(new Error(`Failed to start ${cmd}: ${e.message}`));
+    } catch (e: unknown) {
+      return reject(new Error(`Failed to start ${cmd}: ${(e as Error).message}`));
     }
 
     let stdout = '';

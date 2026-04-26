@@ -17,9 +17,9 @@ export class ParallelReaderView extends ItemView {
   sourceFile: TFile | null;
   cards: HTMLElement[];
   activeIdx: number;
-  stale: boolean;
-  loadingMessage: string;
-  errorMessage: string;
+  stale = false;
+  loadingMessage = '';
+  errorMessage = '';
 
   constructor(leaf: WorkspaceLeaf, plugin: PluginHost) {
     super(leaf);
@@ -28,8 +28,6 @@ export class ParallelReaderView extends ItemView {
     this.sourceFile = null;
     this.cards = [];
     this.activeIdx = -1;
-    this.loadingMessage = '';
-    this.errorMessage = '';
   }
 
   getViewType() {

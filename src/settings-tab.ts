@@ -315,8 +315,8 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           try {
             const result = await testBackend(this.plugin.settings);
             new Notice(`✓ ${result.slice(0, 180)}`, 8000);
-          } catch (e) {
-            new Notice(tr('backendTestFailed', { error: e.message }), 10000);
+          } catch (e: unknown) {
+            new Notice(tr('backendTestFailed', { error: (e as Error).message }), 10000);
           }
         }),
       );

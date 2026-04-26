@@ -18,9 +18,9 @@ export function addIconButton(parent: HTMLElement, icon: string, title: string, 
     e.stopPropagation();
     try {
       await onClick();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      new Notice(`${title} failed: ` + (err.message || err));
+      new Notice(`${title} failed: ` + ((err as Error).message || err));
     }
   });
   return button;
@@ -44,9 +44,9 @@ export function addTextButton(
     e.stopPropagation();
     try {
       await onClick();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      new Notice(`${label} failed: ` + (err.message || err));
+      new Notice(`${label} failed: ` + ((err as Error).message || err));
     }
   });
   return button;
@@ -56,7 +56,7 @@ export async function copyToClipboard(text: string, successMsg: string) {
   try {
     await navigator.clipboard.writeText(text);
     new Notice(successMsg);
-  } catch (e) {
-    new Notice('Copy failed: ' + (e.message || e));
+  } catch (e: unknown) {
+    new Notice('Copy failed: ' + ((e as Error).message || e));
   }
 }
