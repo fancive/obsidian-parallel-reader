@@ -35,6 +35,7 @@ async function requireBundledModule(relativePath) {
 (async () => {
   try {
     const cache = await requireBundledModule('src/cache.ts');
+    const cacheManagerModule = await requireBundledModule('src/cache-manager.ts');
     const generation = await requireBundledModule('src/generation.ts');
     const providerParsers = await requireBundledModule('src/provider-parsers.ts');
     const settings = await requireBundledModule('src/settings.ts');
@@ -45,6 +46,73 @@ async function requireBundledModule(relativePath) {
   assert.strictEqual(touched.lastAccessedAt, '2024-06-01T00:00:00.000Z', 'direct cache import touches entries');
   assert.strictEqual(cacheEntry.lastAccessedAt, undefined, 'direct cache import keeps cache entries immutable');
   assert.strictEqual(JSON.parse(cache.serializeCacheFile({ 'a.md': { cards: [] } })).version, 1);
+
+  function createFakeAdapter() {
+    const files = new Map();
+    const dirs = new Set();
+    return {
+      files,
+      dirs,
+      writes: [],
+      exists: async (filePath) => dirs.has(filePath) || files.has(filePath),
+      mkdir: async (filePath) => {
+        dirs.add(filePath);
+      },
+      read: async (filePath) => {
+        if (!files.has(filePath)) throw new Error('not found');
+        return files.get(filePath);
+      },
+      write: async (filePath, content) => {
+        files.set(filePath, content);
+        return files.get(filePath);
+      },
+    };
+  }
+
+  const adapter = createFakeAdapter();
+  const manager = new cacheManagerModule.CacheManager(adapter, '.obsidian', 'parallel-reader', () => ({
+    ...settings.DEFAULT_SETTINGS,
+    maxCacheEntries: 2,
+  }));
+  adapter.files.set(
+    manager.filePath(),
+    JSON.stringify({
+      version: 1,
+      entries: {
+        'old.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [] },
+        'fresh.md': { generatedAt: '2024-01-02T00:00:00.000Z', cards: [] },
+        'touched.md': {
+          generatedAt: '2024-01-03T00:00:00.000Z',
+          lastAccessedAt: '2024-02-01T00:00:00.000Z',
+          cards: [],
+        },
+      },
+    }),
+  );
+  await manager.load();
+  assert.strictEqual(manager.cache['old.md'], undefined, 'CacheManager.load prunes old entries');
+  assert.ok(adapter.files.get(manager.filePath()).includes('fresh.md'), 'CacheManager.load persists prune results');
+
+  const touchedEntry = await manager.touch('fresh.md');
+  assert.ok(touchedEntry.lastAccessedAt, 'CacheManager.touch updates existing entries');
+  await manager.flush();
+  assert.ok(JSON.parse(adapter.files.get(manager.filePath())).entries['fresh.md'].lastAccessedAt);
+
+  assert.strictEqual(
+    await manager.replaceCards('fresh.md', [{ title: 'New', anchor: 'A', gist: 'G', bullets: ['B'], level: 2, startLine: 1 }]),
+    true,
+    'CacheManager.replaceCards updates existing entries',
+  );
+  assert.strictEqual(JSON.parse(adapter.files.get(manager.filePath())).entries['fresh.md'].cards[0].title, 'New');
+
+  await manager.delete('fresh.md');
+  assert.strictEqual(manager.cache['fresh.md'], undefined, 'CacheManager.delete removes entries');
+
+  manager.cache = { 'clear.md': { generatedAt: '2024-01-04T00:00:00.000Z', cards: [] } };
+  await manager.save();
+  assert.ok(adapter.files.get(manager.filePath()).includes('clear.md'), 'CacheManager.save persists current cache');
+  await manager.clear();
+  assert.deepStrictEqual(manager.cache, {}, 'CacheManager.clear resets cache state');
 
   assert.strictEqual(
     generation.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
