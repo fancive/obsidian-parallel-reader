@@ -23,6 +23,11 @@ async function testBackend(settings: PluginSettings) {
     const { stdout } = await runCli(cmd, ['--version'], '', 10000);
     return `claude @ ${cmd}\n${stdout.trim()}`;
   }
+  if (settings.backend === 'codex') {
+    const cmd = resolveCliPath('codex', settings.cliPath);
+    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
+    return `codex @ ${cmd}\n${stdout.trim()}`;
+  }
   return testApiBackend(requestUrl, settings);
 }
 
@@ -61,6 +66,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
         d
           .addOption('api', 'API / Provider')
           .addOption('claude-code', 'Claude Code CLI')
+          .addOption('codex', 'Codex CLI')
           .setValue(this.plugin.settings.backend)
           .onChange(async (v) => {
             this.plugin.settings.backend = v;
@@ -72,7 +78,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           }),
       );
 
-    const isCliBacked = this.plugin.settings.backend === 'claude-code';
+    const isCliBacked = this.plugin.settings.backend === 'claude-code' || this.plugin.settings.backend === 'codex';
 
     if (isCliBacked) {
       new Setting(containerEl)

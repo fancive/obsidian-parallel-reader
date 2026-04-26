@@ -36,6 +36,7 @@
 |------|------|
 | **API / Provider**（默认） | 直连 LLM API，支持 20+ provider |
 | **Claude Code CLI** | 通过本地 `claude -p` 调用，复用 Claude Code 登录态 |
+| **Codex CLI** | 通过本地 `codex exec` 调用，复用 Codex 登录态 |
 
 ### API / Provider 模式
 
@@ -52,16 +53,16 @@
 
 Model ID 支持 `provider/model` 写法（如 `anthropic/claude-sonnet-4-6`），匹配当前 preset 时自动剥离前缀。
 
-### Claude Code CLI 模式
+### CLI 模式（Claude Code / Codex）
 
-切换后端为 **Claude Code CLI**，插件通过 `claude -p --output-format json` 调用本地 Claude Code。
+切换后端为 **Claude Code CLI** 或 **Codex CLI**，插件通过本地 CLI 调用 LLM。
 
-Obsidian 从 GUI 启动时不继承 shell `PATH`，需要在设置中填写 `claude` 的绝对路径：
+Obsidian 从 GUI 启动时不继承 shell `PATH`，需要在设置中填写 CLI 的绝对路径：
 
 ```bash
-# 查看你的 claude 路径
-which claude
-# 例如：/Users/you/.claude/local/claude
+# 查看路径
+which claude    # Claude Code
+which codex     # Codex
 ```
 
 在插件设置的 **CLI 路径** 中填入该路径，点击 **Test** 验证。

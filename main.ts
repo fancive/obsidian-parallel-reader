@@ -3,7 +3,7 @@ import { MarkdownView, Notice, Plugin, requestUrl, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
-import { resolveCliPath, summarizeViaClaudeCode } from './src/cli';
+import { resolveCliPath, summarizeViaClaudeCode, summarizeViaCodex } from './src/cli';
 import {
   classifyGenerationError,
   type GenerationJob,
@@ -57,18 +57,25 @@ async function summarizeDocument(
 ) {
   const { system, user } = buildPrompts(content, settings);
   let cards: RawCard[];
-  if (settings.backend === 'claude-code') {
-    cards = await summarizeViaClaudeCode(system, user, settings, job);
-  } else {
-    const useStreaming = supportsStreaming(settings);
-    const abortController = useStreaming ? new AbortController() : null;
-    if (abortController) {
-      job.onCancel(() => abortController.abort());
-    }
-    if (useStreaming) {
-      cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
-    } else {
-      cards = await summarizeViaApi(requestUrl, system, user, settings);
+  switch (settings.backend) {
+    case 'claude-code':
+      cards = await summarizeViaClaudeCode(system, user, settings, job);
+      break;
+    case 'codex':
+      cards = await summarizeViaCodex(system, user, settings, job);
+      break;
+    default: {
+      const useStreaming = supportsStreaming(settings);
+      const abortController = useStreaming ? new AbortController() : null;
+      if (abortController) {
+        job.onCancel(() => abortController.abort());
+      }
+      if (useStreaming) {
+        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController!.signal);
+      } else {
+        cards = await summarizeViaApi(requestUrl, system, user, settings);
+      }
+      break;
     }
   }
   const resolved: ResolvedCard[] = cards.map((c) => ({
