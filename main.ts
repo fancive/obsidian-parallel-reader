@@ -2,10 +2,15 @@
 import { MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import {
+  type BatchRunState,
   batchProgressVars,
+  createBatchRunState,
   createBatchStats,
+  markBatchFileRunning,
   normalizeBatchFolderInput,
+  recordBatchProcessed,
   recordBatchSkip,
+  requestBatchCancel,
   selectBatchFiles,
   shouldSkipBatchFile,
 } from './src/batch';
@@ -66,6 +71,7 @@ class ParallelReaderPlugin extends Plugin {
   settings!: PluginSettings;
   cacheManager!: CacheManager;
   jobs!: GenerationJobManager;
+  activeBatch: BatchRunState | null = null;
   _scrollDispose: (() => void) | null = null;
   _settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -306,8 +312,13 @@ class ParallelReaderPlugin extends Plugin {
     const job = this.jobs.get(file.path);
     const noticeKey = cancellationNoticeKey(this.settings, job);
     const cancelled = this.jobs.cancel(file.path);
+    if (cancelled && this.activeBatch?.currentPath === file.path) requestBatchCancel(this.activeBatch);
     new Notice(cancelled ? this.t(noticeKey) : this.t('noCancelableJob'));
     return cancelled;
+  }
+
+  requestBatchCancellation(): boolean {
+    return requestBatchCancel(this.activeBatch);
   }
 
   viewIsShowingFile(view: ParallelReaderView | null, file: TFile) {
@@ -319,6 +330,12 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   cancelActiveGeneration() {
+    if (this.requestBatchCancellation()) {
+      const currentPath = this.activeBatch?.currentPath;
+      if (currentPath) this.jobs.cancel(currentPath);
+      new Notice(this.t('batchCancelRequested'));
+      return;
+    }
     const active = this.getActiveView();
     if (active?.file && this.cancelGenerationForFile(active.file)) return;
     const view = this.getParallelView();
@@ -537,6 +554,10 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   async runBatchForFolder() {
+    if (this.activeBatch) {
+      new Notice(this.t('batchAlreadyRunning'));
+      return;
+    }
     const plugin = this;
     const folderPath = await new Promise<string | null>((resolve) => {
       class FolderPromptModal extends Modal {
@@ -569,19 +590,35 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('batchNoMarkdown'));
       return;
     }
+    const batch = createBatchRunState();
+    this.activeBatch = batch;
     let stats = createBatchStats(allFiles.length);
-    for (let i = 0; i < allFiles.length; i++) {
-      const file = allFiles[i];
-      new Notice(this.t('batchProgress', batchProgressVars(i, allFiles.length)));
-      const content = await this.app.vault.read(file);
-      const entry = this.cacheManager.get(file.path);
-      if (shouldSkipBatchFile(entry, content, this.settings)) {
-        stats = recordBatchSkip(stats);
-        continue;
+    try {
+      for (let i = 0; i < allFiles.length; i++) {
+        if (batch.cancelled) break;
+        const file = allFiles[i];
+        markBatchFileRunning(batch, file.path);
+        new Notice(this.t('batchProgress', batchProgressVars(i, allFiles.length)));
+        const content = await this.app.vault.read(file);
+        if (batch.cancelled) break;
+        const entry = this.cacheManager.get(file.path);
+        if (shouldSkipBatchFile(entry, content, this.settings)) {
+          stats = recordBatchSkip(stats);
+          continue;
+        }
+        await this.runForFile(file, false);
+        stats = recordBatchProcessed(stats);
       }
-      await this.runForFile(file, false);
+    } finally {
+      if (this.activeBatch === batch) this.activeBatch = null;
     }
-    new Notice(this.t('batchDone', { total: stats.total, skipped: stats.skipped }));
+    const batchVars: Record<string, string | number> = {
+      processed: stats.processed,
+      skipped: stats.skipped,
+      total: stats.total,
+    };
+    if (batch.cancelled) new Notice(this.t('batchCancelled', batchVars));
+    else new Notice(this.t('batchDone', batchVars));
   }
 
   resolveCardAnchors(content: string, rawCards: RawCard[]) {
@@ -728,18 +765,22 @@ export const __test = {
   classifyGenerationError,
   copyToClipboard,
   createRafThrottledHandler,
+  createBatchRunState,
   extractJson,
   findLineForAnchor,
   folderPathsForTarget,
   createBatchStats,
   generationFingerprint,
   getApiBaseUrl,
+  markBatchFileRunning,
   modelForApi,
   normalizeBatchFolderInput,
   normalizeCardsPayload,
   nextCardIndex,
   pruneCacheEntries,
+  recordBatchProcessed,
   recordBatchSkip,
+  requestBatchCancel,
   removeCardAt,
   resolveCliPath,
   serializeCacheFile,

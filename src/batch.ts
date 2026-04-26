@@ -10,7 +10,13 @@ export interface BatchFileLike {
 
 export interface BatchStats {
   total: number;
+  processed: number;
   skipped: number;
+}
+
+export interface BatchRunState {
+  cancelled: boolean;
+  currentPath: string;
 }
 
 export function normalizeBatchFolderInput(input: string): string {
@@ -37,13 +43,32 @@ export function batchProgressVars(index: number, total: number): { current: numb
 }
 
 export function createBatchStats(total: number): BatchStats {
-  return { total, skipped: 0 };
+  return { total, processed: 0, skipped: 0 };
+}
+
+export function recordBatchProcessed(stats: BatchStats): BatchStats {
+  return { ...stats, processed: stats.processed + 1 };
 }
 
 export function recordBatchSkip(stats: BatchStats): BatchStats {
-  return { ...stats, skipped: stats.skipped + 1 };
+  return { ...stats, processed: stats.processed + 1, skipped: stats.skipped + 1 };
 }
 
 export function shouldSkipBatchFile(entry: CacheEntry | null, content: string, settings: PluginSettings): boolean {
   return !!entry && cacheEntryMatches(entry, content, settings);
+}
+
+export function createBatchRunState(): BatchRunState {
+  return { cancelled: false, currentPath: '' };
+}
+
+export function markBatchFileRunning(state: BatchRunState, filePath: string): BatchRunState {
+  state.currentPath = filePath;
+  return state;
+}
+
+export function requestBatchCancel(state: BatchRunState | null): boolean {
+  if (!state || state.cancelled) return false;
+  state.cancelled = true;
+  return true;
 }

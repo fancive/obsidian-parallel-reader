@@ -149,9 +149,12 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cmdBatchGenerate: '批量生成对照笔记（当前文件夹）',
     batchSelectFolder: '请输入要批量处理的文件夹路径（留空为 Vault 根目录）',
     batchFolderPrompt: '文件夹路径',
+    batchAlreadyRunning: '批量生成正在运行',
+    batchCancelRequested: '已请求取消批量生成；当前文件结束后停止',
     batchNoMarkdown: '该文件夹下没有 Markdown 文件',
     batchProgress: '批量生成：{current}/{total}',
-    batchDone: '批量生成完成：共处理 {total} 篇，跳过缓存 {skipped} 篇',
+    batchDone: '批量生成完成：共处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇',
+    batchCancelled: '批量生成已取消：已处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇',
   },
   en: {
     appTitle: 'Parallel Reader',
@@ -306,9 +309,12 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cmdBatchGenerate: 'Batch generate parallel notes (current folder)',
     batchSelectFolder: 'Enter the folder path to batch-process (leave blank for Vault root)',
     batchFolderPrompt: 'Folder path',
+    batchAlreadyRunning: 'Batch generation is already running',
+    batchCancelRequested: 'Batch cancellation requested; it will stop after the current note',
     batchNoMarkdown: 'No Markdown files found in that folder',
     batchProgress: 'Batch generating: {current}/{total}',
-    batchDone: 'Batch complete: processed {total}, skipped {skipped} (cached)',
+    batchDone: 'Batch complete: processed {processed}/{total}, skipped {skipped} (cached)',
+    batchCancelled: 'Batch cancelled: processed {processed}/{total}, skipped {skipped} (cached)',
   },
 };
 

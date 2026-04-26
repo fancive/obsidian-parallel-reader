@@ -76,6 +76,7 @@ assert.strictEqual(typeof t.getApiBaseUrl, 'function');
 assert.strictEqual(typeof t.generationFingerprint, 'function');
 assert.strictEqual(typeof t.CacheManager, 'function');
 assert.strictEqual(typeof t.GenerationJobManager, 'function');
+assert.strictEqual(typeof t.createBatchRunState, 'function');
 assert.strictEqual(typeof t.modelForApi, 'function');
 assert.strictEqual(typeof t.activeSectionLine, 'function');
 assert.strictEqual(typeof t.touchCacheEntry, 'function');

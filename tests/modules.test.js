@@ -240,8 +240,19 @@ assert.deepStrictEqual(
 assert.deepStrictEqual(t.batchProgressVars(1, 3), { current: 2, total: 3 }, 'progress vars are one-based');
 const batchStats = t.createBatchStats(3);
 const skippedStats = t.recordBatchSkip(batchStats);
-assert.deepStrictEqual(batchStats, { total: 3, skipped: 0 }, 'batch stats are immutable');
-assert.deepStrictEqual(skippedStats, { total: 3, skipped: 1 }, 'batch stats accumulate');
+const processedStats = t.recordBatchProcessed(skippedStats);
+assert.deepStrictEqual(batchStats, { total: 3, processed: 0, skipped: 0 }, 'batch stats are immutable');
+assert.deepStrictEqual(skippedStats, { total: 3, processed: 1, skipped: 1 }, 'batch skip updates progress');
+assert.deepStrictEqual(processedStats, { total: 3, processed: 2, skipped: 1 }, 'batch processed count accumulates');
+
+const batchState = t.createBatchRunState();
+assert.deepStrictEqual(batchState, { cancelled: false, currentPath: '' }, 'batch state starts idle');
+assert.strictEqual(t.markBatchFileRunning(batchState, 'Reading/a.md'), batchState, 'batch state updates in place');
+assert.strictEqual(batchState.currentPath, 'Reading/a.md', 'batch state records current file');
+assert.strictEqual(t.requestBatchCancel(batchState), true, 'first batch cancellation request succeeds');
+assert.strictEqual(batchState.cancelled, true, 'batch cancellation flag is set');
+assert.strictEqual(t.requestBatchCancel(batchState), false, 'duplicate batch cancellation request is ignored');
+assert.strictEqual(t.requestBatchCancel(null), false, 'missing batch state cannot be cancelled');
 
 // ── i18n.ts ──
 
