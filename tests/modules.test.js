@@ -594,7 +594,7 @@ assert.strictEqual(t.deltaExtractorForFormat('google-generative-ai'), null, 'no 
 
 // parseSseBuffer
 const sseResult = t.parseSseBuffer(
-  'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: {"choices":[{"delta":{"content":" there"}}]}\ndata: [DONE]\npartial',
+  'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: {"choices":[{"delta":{"content":" there"}}]}\n\ndata: [DONE]\n\npartial',
   openaiExtract,
 );
 assert.deepStrictEqual(sseResult.deltas, ['hi', ' there'], 'SSE parser extracts deltas');
@@ -618,21 +618,34 @@ assert.ok(ssePartial.rest.includes('"ok"'), 'partial line kept in rest');
 
 // parseSseBuffer: multi-event in one chunk
 const sseMulti = t.parseSseBuffer(
-  'data: {"choices":[{"delta":{"content":"a"}}]}\ndata: {"choices":[{"delta":{"content":"b"}}]}\ndata: {"choices":[{"delta":{"content":"c"}}]}\n',
+  'data: {"choices":[{"delta":{"content":"a"}}]}\n\ndata: {"choices":[{"delta":{"content":"b"}}]}\n\ndata: {"choices":[{"delta":{"content":"c"}}]}\n\n',
   openaiExtract,
 );
 assert.deepStrictEqual(sseMulti.deltas, ['a', 'b', 'c'], 'three events in one chunk');
 assert.strictEqual(sseMulti.rest, '', 'nothing left in rest when chunk ends with newline');
 
+const sseMultilineData = t.parseSseBuffer(
+  'data: {"choices":[\ndata: {"delta":{"content":"joined"}}\ndata: ]}\n\n',
+  openaiExtract,
+);
+assert.deepStrictEqual(sseMultilineData.deltas, ['joined'], 'consecutive data lines are merged into one event');
+
+const ssePartialEvent = t.parseSseBuffer(
+  'data: {"choices":[{"delta":{"content":"wait"}}]}\n',
+  openaiExtract,
+);
+assert.deepStrictEqual(ssePartialEvent.deltas, [], 'event without blank-line terminator is retained');
+assert.strictEqual(ssePartialEvent.rest.includes('"wait"'), true, 'partial event remains in rest');
+
 // parseSseBuffer: non-data lines are skipped
 const sseMixed = t.parseSseBuffer(
-  ': comment\nevent: ping\ndata: {"choices":[{"delta":{"content":"x"}}]}\n',
+  ': comment\nevent: ping\ndata: {"choices":[{"delta":{"content":"x"}}]}\n\n',
   openaiExtract,
 );
 assert.deepStrictEqual(sseMixed.deltas, ['x'], 'comment and event lines ignored');
 
 // parseSseBuffer: malformed JSON is silently skipped
-const sseBad = t.parseSseBuffer('data: not_json\ndata: {"choices":[{"delta":{"content":"y"}}]}\n', openaiExtract);
+const sseBad = t.parseSseBuffer('data: not_json\n\ndata: {"choices":[{"delta":{"content":"y"}}]}\n\n', openaiExtract);
 assert.deepStrictEqual(sseBad.deltas, ['y'], 'bad JSON line skipped, good line extracted');
 
 // i18n: additional edge cases

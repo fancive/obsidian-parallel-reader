@@ -44,16 +44,22 @@ export function deltaExtractorForFormat(format: string): DeltaExtractor | null {
  */
 export function parseSseBuffer(buffer: string, extractDelta: DeltaExtractor): { deltas: string[]; rest: string } {
   const deltas: string[] = [];
-  const lines = buffer.split('\n');
-  const rest = lines.pop() ?? ''; // keep incomplete line
+  const normalized = buffer.replace(/\r\n/g, '\n');
+  const chunks = normalized.split('\n\n');
+  const rest = normalized.endsWith('\n\n') ? '' : (chunks.pop() ?? '');
+  const eventChunks = normalized.endsWith('\n\n') ? chunks.slice(0, -1) : chunks;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed === 'data: [DONE]') continue;
-    if (trimmed.startsWith('event:')) continue;
-    if (!trimmed.startsWith('data:')) continue;
+  for (const eventChunk of eventChunks) {
+    const dataLines: string[] = [];
+    for (const line of eventChunk.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(line.startsWith('data: ') ? 6 : 5);
+      dataLines.push(data);
+    }
+    if (dataLines.length === 0) continue;
 
-    const data = trimmed.slice(trimmed.startsWith('data: ') ? 6 : 5);
+    const data = dataLines.join('\n');
+    if (data.trim() === '[DONE]') continue;
     try {
       const json = JSON.parse(data) as Record<string, unknown>;
       const delta = extractDelta(json);
