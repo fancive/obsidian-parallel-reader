@@ -173,6 +173,9 @@ assert.deepStrictEqual(t.folderPathsForTarget(''), [], 'empty path');
 assert.deepStrictEqual(t.folderPathsForTarget('A/B/C'), ['A', 'A/B', 'A/B/C']);
 assert.deepStrictEqual(t.folderPathsForTarget('/A//B/'), ['A', 'A/B'], 'normalizes slashes');
 assert.deepStrictEqual(t.folderPathsForTarget('single'), ['single']);
+assert.deepStrictEqual(t.folderPathsForTarget('../../etc/passwd'), ['etc', 'etc/passwd'], 'strips .. path traversal');
+assert.deepStrictEqual(t.folderPathsForTarget('./a/../b'), ['a', 'a/b'], 'strips . and .. segments');
+assert.deepStrictEqual(t.folderPathsForTarget('a/../../b'), ['a', 'a/b'], 'strips mid-path ..');
 
 // ── i18n.ts ──
 

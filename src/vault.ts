@@ -6,7 +6,7 @@ export function normalizeVaultPath(path: string): string {
   return String(path || '')
     .split('/')
     .map((part) => part.trim())
-    .filter(Boolean)
+    .filter((part) => !!part && part !== '..' && part !== '.')
     .join('/');
 }
 
