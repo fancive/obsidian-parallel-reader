@@ -1,9 +1,10 @@
 {
   "id": "parallel-reader",
   "name": "Parallel Reader",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "minAppVersion": "1.4.0",
-  "description": "Split-view reading: left = original note, right = LLM-generated section bullets with scroll-sync highlight.",
+  "description": "AI-powered split-view reading: source note on the left, LLM-generated summary cards on the right with scroll-sync highlighting.",
   "author": "lancivez",
+  "authorUrl": "https://github.com/fancive",
   "isDesktopOnly": true
 }
