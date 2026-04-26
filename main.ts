@@ -32,14 +32,6 @@ import { cardsToMarkdown } from './src/markdown';
 import { activeSectionLine, nextCardIndex } from './src/navigation';
 import { buildPrompts } from './src/prompt';
 import {
-  cardsFromAnthropicToolUse,
-  textFromAnthropicMessagesResponse,
-  textFromGoogleGenerativeAiResponse,
-  textFromOpenAiChatResponse,
-  textFromOpenAiResponsesResponse,
-  textFromProviderContent,
-} from './src/provider-parsers';
-import {
   buildAnthropicMessagesBody,
   buildGeminiBody,
   buildOpenAiChatBody,
@@ -816,12 +808,6 @@ export const __test = {
   touchCacheEntry,
   translate,
   tokenLimitFieldForOpenAiChat,
-  cardsFromAnthropicToolUse,
-  textFromAnthropicMessagesResponse,
-  textFromGoogleGenerativeAiResponse,
-  textFromOpenAiChatResponse,
-  textFromOpenAiResponsesResponse,
-  textFromProviderContent,
   updateCardAt,
   validateBatchFolderInput,
   visibleTopProbeY,

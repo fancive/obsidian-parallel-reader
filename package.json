@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check main.ts src/",
     "lint:fix": "biome check --write main.ts src/",
-    "test": "npm run build && npm run typecheck && node tests/main.test.js && node tests/generation-job-manager.test.js && node tests/modules.test.js"
+    "test": "npm run build && npm run typecheck && node tests/main.test.js && node tests/generation-job-manager.test.js && node tests/modules.test.js && node tests/direct-modules.test.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
