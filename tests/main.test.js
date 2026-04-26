@@ -60,6 +60,7 @@ assert.ok(!/function addTextButton/.test(mainSource), 'UI text-button helper sho
 assert.ok(!/function copyToClipboard/.test(mainSource), 'clipboard helper should live outside main.ts');
 assert.strictEqual(typeof t.cardsToMarkdown, 'function');
 assert.strictEqual(typeof t.cancellationNoticeKey, 'function');
+assert.strictEqual(typeof t.summarizeDocument, 'function');
 assert.strictEqual(typeof t.addIconButton, 'function');
 assert.strictEqual(typeof t.addTextButton, 'function');
 assert.strictEqual(typeof t.copyToClipboard, 'function');

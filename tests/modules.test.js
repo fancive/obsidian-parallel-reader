@@ -2,6 +2,7 @@ const assert = require('assert');
 const Module = require('module');
 
 const originalLoad = Module._load;
+let requestUrlMock = async () => ({ status: 200, json: {}, text: '{}' });
 Module._load = function load(request, parent, isMain) {
   if (request === 'obsidian') {
     class Plugin {}
@@ -16,7 +17,7 @@ Module._load = function load(request, parent, isMain) {
     return {
       Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal,
       MarkdownRenderer: { render: async () => {} },
-      requestUrl: async () => ({ status: 200, json: {}, text: '{}' }),
+      requestUrl: (params) => requestUrlMock(params),
       setIcon: () => {},
     };
   }
@@ -24,6 +25,17 @@ Module._load = function load(request, parent, isMain) {
 };
 
 const t = require('../main.js').__test;
+
+function openAiCardsResponse(cards) {
+  const json = {
+    choices: [{
+      message: {
+        content: JSON.stringify({ cards }),
+      },
+    }],
+  };
+  return { status: 200, json, text: JSON.stringify(json) };
+}
 
 // ── anchor.ts ──
 
@@ -298,6 +310,44 @@ assert.strictEqual(
 );
 assert.strictEqual(t.shouldSkipBatchFile(null, 'test', baseSettings), false, 'missing cache entry is not skipped');
 
+async function testSummarizeDocumentAnchorSorting() {
+  const previousRequestUrlMock = requestUrlMock;
+  requestUrlMock = async () =>
+    openAiCardsResponse([
+      { title: 'Second', anchor: 'second anchor', gist: 'G2', bullets: ['B2'] },
+      { title: 'First', anchor: 'first anchor', gist: 'G1', bullets: ['B1'] },
+    ]);
+
+  let sections;
+  try {
+    sections = await t.summarizeDocument(
+      'intro\nfirst anchor\nmiddle\nsecond anchor\nend',
+      {
+        ...baseSettings,
+        streaming: false,
+        promptLanguage: 'en',
+        minCards: 1,
+        maxCards: 3,
+        maxDocChars: 10000,
+      },
+      { phase: 'queued', onCancel: () => {}, throwIfCancelled: () => {}, setPhase: () => {} },
+    );
+  } finally {
+    requestUrlMock = previousRequestUrlMock;
+  }
+
+  assert.deepStrictEqual(
+    sections.map((section) => section.title),
+    ['First', 'Second'],
+    'summarizeDocument sorts API cards by resolved anchor line',
+  );
+  assert.deepStrictEqual(
+    sections.map((section) => section.startLine),
+    [1, 3],
+    'summarizeDocument resolves anchor lines from source content',
+  );
+}
+
 // pruneCacheEntries
 const cache = {
   'a.md': { generatedAt: '2024-01-01' },
@@ -554,4 +604,11 @@ try {
   fsModule.existsSync = origExistsSync;
 }
 
-console.log('modules tests passed');
+// Wrap the tail in an async runner so module-level tests can include async cases.
+(async () => {
+  await testSummarizeDocumentAnchorSorting();
+  console.log('modules tests passed');
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

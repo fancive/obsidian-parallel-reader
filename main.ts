@@ -749,6 +749,7 @@ export const __test = {
   shouldConfirmRegenerate,
   shouldSkipBatchFile,
   selectBatchFiles,
+  summarizeDocument,
   summarizeViaApi,
   touchCacheEntry,
   translate,
