@@ -109,6 +109,37 @@ export interface PromptPair {
   user: string;
 }
 
+/* ---------- Obsidian internal API types ---------- */
+
+/** Minimal CodeMirror 6 EditorView shape used for scroll synchronization. */
+export interface CmEditorView {
+  scrollDOM: HTMLElement;
+  state: {
+    doc: {
+      lineAt(pos: number): { number: number };
+    };
+  };
+  posAtCoords(coords: { x: number; y: number }): number | null;
+}
+
+/** Obsidian Editor with optional CodeMirror 6 view attached at `.cm`. */
+export interface ObsidianEditorWithCm {
+  cm?: CmEditorView;
+}
+
+/** Minimal Obsidian MenuItem builder API used in file-menu callbacks. */
+export interface ObsidianMenuItem {
+  setTitle(title: string): this;
+  setIcon(icon: string): this;
+  onClick(callback: () => unknown): this;
+}
+
+/** Minimal Obsidian Menu API used to build context-menu entries. */
+export interface ObsidianMenu {
+  addSeparator(): void;
+  addItem(cb: (item: ObsidianMenuItem) => void): void;
+}
+
 /* ---------- Plugin host interface ---------- */
 
 /**

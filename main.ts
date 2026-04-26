@@ -41,7 +41,15 @@ import {
 } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
 import { deltaExtractorForFormat, parseSseBuffer, type StreamProgress } from './src/streaming';
-import type { CacheEntry, PluginSettings, RawCard, ResolvedCard } from './src/types';
+import type {
+  CacheEntry,
+  ObsidianEditorWithCm,
+  ObsidianMenu,
+  ObsidianMenuItem,
+  PluginSettings,
+  RawCard,
+  ResolvedCard,
+} from './src/types';
 import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
 import { folderPathsForTarget } from './src/vault';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
@@ -356,29 +364,29 @@ class ParallelReaderPlugin extends Plugin {
     return true;
   }
 
-  addFileMenuItems(menu: any, file: any) {
+  addFileMenuItems(menu: ObsidianMenu, file: unknown) {
     if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
     menu.addSeparator();
-    menu.addItem((it: any) =>
+    menu.addItem((it: ObsidianMenuItem) =>
       it
         .setTitle(this.t('fileMenuGenerate'))
         .setIcon('book-open')
         .onClick(() => this.runForFile(file, false)),
     );
-    menu.addItem((it: any) =>
+    menu.addItem((it: ObsidianMenuItem) =>
       it
         .setTitle(this.t('fileMenuRegen'))
         .setIcon('refresh-cw')
         .onClick(() => this.runForFile(file, true)),
     );
     if (this.cacheManager.get(file.path)) {
-      menu.addItem((it: any) =>
+      menu.addItem((it: ObsidianMenuItem) =>
         it
           .setTitle(this.t('fileMenuClear'))
           .setIcon('trash')
           .onClick(async () => {
             await this.cacheManager.delete(file.path);
-            new Notice(this.t('cacheClearedFile', { name: file.basename }));
+            new Notice(this.t('cacheClearedFile', { name: (file as TFile).basename }));
           }),
       );
     }
@@ -590,7 +598,7 @@ class ParallelReaderPlugin extends Plugin {
     const mdView = this.getActiveView();
     if (!mdView) return;
     const editor = mdView.editor;
-    const cm = editor && (editor as any).cm;
+    const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector('.cm-scroller');
     if (!scrollDom) return;
     const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
@@ -605,7 +613,7 @@ class ParallelReaderPlugin extends Plugin {
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
     const editor = mdView.editor;
-    const cm = editor && (editor as any).cm;
+    const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     if (!cm?.scrollDOM) return;
     const rect = cm.scrollDOM.getBoundingClientRect();
     const topY = visibleTopProbeY(rect);
@@ -629,7 +637,7 @@ class ParallelReaderPlugin extends Plugin {
   findLeafForFile(file: TFile | null) {
     if (!file) return null;
     for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
-      const v = leaf.view as any;
+      const v = leaf.view as { file?: TFile };
       if (v?.file && v.file.path === file.path) return leaf;
     }
     return null;
