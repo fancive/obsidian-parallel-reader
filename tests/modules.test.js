@@ -1,4 +1,5 @@
 const assert = require('assert');
+const { EventEmitter } = require('events');
 const Module = require('module');
 
 const originalLoad = Module._load;
@@ -677,8 +678,65 @@ try {
   fsModule.existsSync = origExistsSync;
 }
 
+function createFakeChild() {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = {
+    written: '',
+    ended: false,
+    write(value) {
+      this.written += value;
+    },
+    end() {
+      this.ended = true;
+    },
+  };
+  child.killedWith = null;
+  child.kill = (signal) => {
+    child.killedWith = signal;
+    return true;
+  };
+  return child;
+}
+
+async function testRunCliEdgeCases() {
+  const timeoutChild = createFakeChild();
+  await assert.rejects(
+    () => t.runCli('fake', [], '', 5, undefined, () => timeoutChild),
+    /CLI timed out \(5ms\)/,
+    'runCli rejects on timeout',
+  );
+  assert.strictEqual(timeoutChild.killedWith, 'SIGKILL', 'runCli kills timed out processes');
+
+  const cancelChild = createFakeChild();
+  let cancelHandler = null;
+  const cancelPromise = t.runCli(
+    'fake',
+    [],
+    '',
+    1000,
+    { key: 'cancel.md', onCancel: (handler) => { cancelHandler = handler; } },
+    () => cancelChild,
+  );
+  cancelHandler();
+  await assert.rejects(
+    () => cancelPromise,
+    (err) => err && err.code === 'cancelled' && err.key === 'cancel.md',
+    'runCli rejects with GenerationJobCancelledError on cancellation',
+  );
+  assert.strictEqual(cancelChild.killedWith, 'SIGKILL', 'runCli kills cancelled processes');
+
+  await assert.rejects(
+    () => t.runCli('fake', [], '', 100, undefined, () => ({ stdout: null, stderr: null, stdin: null })),
+    /CLI process streams are unavailable/,
+    'runCli reports unavailable stdio streams',
+  );
+}
+
 // Wrap the tail in an async runner so module-level tests can include async cases.
 (async () => {
+  await testRunCliEdgeCases();
   await testCacheManagerMove();
   await testSummarizeDocumentAnchorSorting();
   console.log('modules tests passed');

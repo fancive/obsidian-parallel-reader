@@ -57,6 +57,7 @@ export function runCli(
   stdinText: string,
   timeoutMs: number,
   job?: GenerationJob,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
@@ -75,7 +76,7 @@ export function runCli(
       resolve(value);
     };
     try {
-      child = spawn(cmd, args, {
+      child = spawnImpl(cmd, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,

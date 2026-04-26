@@ -19,7 +19,7 @@ import {
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
-import { resolveCliPath } from './src/cli';
+import { resolveCliPath, runCli } from './src/cli';
 import { cancellationNoticeKey, summarizeDocument } from './src/generation';
 import {
   classifyGenerationError,
@@ -798,6 +798,7 @@ export const __test = {
   requestBatchCancel,
   removeCardAt,
   resolveCliPath,
+  runCli,
   serializeCacheFile,
   shouldConfirmRegenerate,
   shouldSkipBatchFile,

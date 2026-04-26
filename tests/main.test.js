@@ -67,6 +67,7 @@ assert.strictEqual(typeof t.addIconButton, 'function');
 assert.strictEqual(typeof t.addTextButton, 'function');
 assert.strictEqual(typeof t.copyToClipboard, 'function');
 assert.strictEqual(typeof t.resolveCliPath, 'function');
+assert.strictEqual(typeof t.runCli, 'function');
 assert.strictEqual(typeof t.buildPrompts, 'function');
 assert.strictEqual(typeof t.buildOpenAiChatBody, 'function');
 assert.strictEqual(typeof t.extractJson, 'function');
