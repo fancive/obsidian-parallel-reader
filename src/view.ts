@@ -76,7 +76,7 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  async loadFor(file: TFile, sections: ResolvedCard[], stale: boolean) {
+  loadFor(file: TFile, sections: ResolvedCard[], stale: boolean) {
     this.sourceFile = file;
     this.sections = sections;
     this.stale = !!stale;
@@ -85,7 +85,7 @@ export class ParallelReaderView extends ItemView {
     this.render();
   }
 
-  async renderLoading(file: TFile, message: string) {
+  renderLoading(file: TFile, message: string) {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
@@ -127,7 +127,7 @@ export class ParallelReaderView extends ItemView {
     pre.textContent = text.slice(-2000);
   }
 
-  async renderError(file: TFile, message: string) {
+  renderError(file: TFile, message: string) {
     this.sourceFile = file;
     this.sections = [];
     this.stale = false;
@@ -243,7 +243,7 @@ export class ParallelReaderView extends ItemView {
         if (sel && sel.toString().length > 0) return;
         const target = e.target as HTMLElement | null;
         if (target && target.tagName === 'A') return;
-        if (s.startLine >= 0) this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
+        if (s.startLine >= 0) void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
       });
 
       card.addEventListener('contextmenu', (e) => {
@@ -323,7 +323,7 @@ export class ParallelReaderView extends ItemView {
   jumpToActiveSection() {
     const line = activeSectionLine(this.sections, this.activeIdx);
     if (line < 0 || !this.sourceFile) return -1;
-    this.plugin.scrollEditorToLine(line, this.sourceFile);
+    void this.plugin.scrollEditorToLine(line, this.sourceFile);
     return line;
   }
 

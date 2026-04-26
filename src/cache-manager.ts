@@ -44,7 +44,7 @@ export class CacheManager {
       if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object')
         return parsed.entries;
     } catch (e: unknown) {
-      const message = String((e as Error)?.message || e || '');
+      const message = e instanceof Error ? e.message : String(e);
       if (!/not found|does not exist|ENOENT/i.test(message))
         console.warn('[parallel-reader] failed to read cache.json', e);
     }

@@ -13,15 +13,13 @@ export function addIconButton(parent: HTMLElement, icon: string, title: string, 
   } else {
     button.textContent = title;
   }
-  button.addEventListener('click', async (e) => {
+  button.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      await onClick();
-    } catch (err: unknown) {
+    Promise.resolve(onClick()).catch((err: unknown) => {
       console.error(err);
-      new Notice(`${title} failed: ` + ((err as Error).message || err));
-    }
+      new Notice(`${title} failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
   });
   return button;
 }
@@ -39,15 +37,13 @@ export function addTextButton(
   });
   if (icon && typeof setIcon === 'function') setIcon(button, icon);
   button.createSpan({ text: label });
-  button.addEventListener('click', async (e) => {
+  button.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      await onClick();
-    } catch (err: unknown) {
+    Promise.resolve(onClick()).catch((err: unknown) => {
       console.error(err);
-      new Notice(`${label} failed: ` + ((err as Error).message || err));
-    }
+      new Notice(`${label} failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
   });
   return button;
 }
@@ -57,6 +53,6 @@ export async function copyToClipboard(text: string, successMsg: string) {
     await navigator.clipboard.writeText(text);
     new Notice(successMsg);
   } catch (e: unknown) {
-    new Notice('Copy failed: ' + ((e as Error).message || e));
+    new Notice(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }

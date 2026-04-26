@@ -139,41 +139,41 @@ class ParallelReaderPlugin extends Plugin {
     this.registerView(VIEW_TYPE_PARALLEL, (leaf) => new ParallelReaderView(leaf, this));
 
     this.addCommand({
-      id: 'parallel-reader-run',
+      id: 'run',
       name: this.t('cmdRun'),
       callback: () => this.runForActiveFile(false),
     });
     this.addCommand({
-      id: 'parallel-reader-regen',
+      id: 'regen',
       name: this.t('cmdRegen'),
       callback: () => this.runForActiveFile(true),
     });
     this.addCommand({
-      id: 'parallel-reader-open-view',
+      id: 'open-view',
       name: this.t('cmdOpenView'),
       callback: async () => {
         const active = this.getActiveView();
         await this.ensureView();
-        if (active?.file) this.syncViewToFile(active.file);
+        if (active?.file) void this.syncViewToFile(active.file);
       },
     });
     this.addCommand({
-      id: 'parallel-reader-export-current',
+      id: 'export-current',
       name: this.t('cmdExport'),
       callback: () => this.exportCurrentView(),
     });
     this.addCommand({
-      id: 'parallel-reader-copy-current-markdown',
+      id: 'copy-current-markdown',
       name: this.t('cmdCopyMarkdown'),
       callback: () => this.copyCurrentViewMarkdown(),
     });
     this.addCommand({
-      id: 'parallel-reader-cancel-current',
+      id: 'cancel-current',
       name: this.t('cmdCancel'),
       callback: () => this.cancelActiveGeneration(),
     });
     this.addCommand({
-      id: 'parallel-reader-clear-current',
+      id: 'clear-current',
       name: this.t('cmdClearCurrent'),
       callback: async () => {
         const active = this.getActiveView();
@@ -183,7 +183,7 @@ class ParallelReaderPlugin extends Plugin {
       },
     });
     this.addCommand({
-      id: 'parallel-reader-clear-all',
+      id: 'clear-all',
       name: this.t('cmdClearAll'),
       callback: async () => {
         const n = Object.keys(this.cacheManager.cache).length;
@@ -192,24 +192,22 @@ class ParallelReaderPlugin extends Plugin {
       },
     });
     this.addCommand({
-      id: 'parallel-reader-card-prev',
+      id: 'card-prev',
       name: this.t('cmdCardPrev'),
-      hotkeys: [{ modifiers: ['Alt'], key: 'ArrowUp' }],
       callback: () => this.moveActiveCard(-1),
     });
     this.addCommand({
-      id: 'parallel-reader-card-next',
+      id: 'card-next',
       name: this.t('cmdCardNext'),
-      hotkeys: [{ modifiers: ['Alt'], key: 'ArrowDown' }],
       callback: () => this.moveActiveCard(1),
     });
     this.addCommand({
-      id: 'parallel-reader-card-jump',
+      id: 'card-jump',
       name: this.t('cmdCardJump'),
       callback: () => this.jumpActiveCard(),
     });
     this.addCommand({
-      id: 'parallel-reader-batch-generate',
+      id: 'batch-generate',
       name: this.t('cmdBatchGenerate'),
       callback: () => this.runBatchForFolder(),
     });
@@ -219,19 +217,22 @@ class ParallelReaderPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.bindScrollSync()));
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
-        if (file) this.syncViewToFile(file);
+        if (file) void this.syncViewToFile(file);
       }),
     );
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => this.addFileMenuItems(menu, file)));
-    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => this.handleFileRename(file as TFile, oldPath)));
-    this.registerEvent(this.app.vault.on('delete', (file) => this.handleFileDelete(file as TFile)));
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+      if (file instanceof TFile) void this.handleFileRename(file, oldPath);
+    }));
+    this.registerEvent(this.app.vault.on('delete', (file) => {
+      if (file instanceof TFile) void this.handleFileDelete(file);
+    }));
     this.bindScrollSync();
   }
 
-  async onunload() {
-    await this.flushSettingsSave();
-    await this.flushCacheSave();
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_PARALLEL);
+  onunload() {
+    void this.flushSettingsSave();
+    void this.flushCacheSave();
   }
 
   /* ---------- Settings persistence ---------- */
@@ -242,7 +243,7 @@ class ParallelReaderPlugin extends Plugin {
     this.settings = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, settingsBlob));
     this.cacheManager = new CacheManager(
       this.app.vault.adapter,
-      this.app.vault.configDir || '.obsidian',
+      this.app.vault.configDir,
       this.manifest?.id || 'parallel-reader',
       () => this.settings,
     );
@@ -274,7 +275,7 @@ class ParallelReaderPlugin extends Plugin {
 
   /* ---------- Cache delegation ---------- */
 
-  async cacheTouch(filePath: string) {
+  cacheTouch(filePath: string) {
     return this.cacheManager.touch(filePath);
   }
   scheduleCacheSave(delayMs = 5000) {
@@ -302,7 +303,7 @@ class ParallelReaderPlugin extends Plugin {
       leaf = workspace.getRightLeaf(false)!;
       await leaf.setViewState({ type: VIEW_TYPE_PARALLEL, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
     return leaf.view as ParallelReaderView;
   }
 
@@ -363,10 +364,24 @@ class ParallelReaderPlugin extends Plugin {
     else new Notice(this.t('noCancelableJob'));
   }
 
-  confirmRegenerateEditedCards() {
-    const message = this.t('confirmRegenerateEditedCards');
-    if (typeof window !== 'undefined' && typeof window.confirm === 'function') return window.confirm(message);
-    return true;
+  confirmRegenerateEditedCards(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const message = this.t('confirmRegenerateEditedCards');
+      const modal = new Modal(this.app);
+      modal.titleEl.setText(this.t('displayName'));
+      modal.contentEl.createEl('p', { text: message });
+      const btnRow = modal.contentEl.createDiv({ cls: 'modal-button-container' });
+      btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => {
+        modal.close();
+        resolve(false);
+      });
+      btnRow.createEl('button', { text: 'OK', cls: 'mod-cta' }).addEventListener('click', () => {
+        modal.close();
+        resolve(true);
+      });
+      modal.onClose = () => resolve(false);
+      modal.open();
+    });
   }
 
   addFileMenuItems(menu: ObsidianMenu, file: unknown) {
@@ -477,7 +492,7 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('alreadyGenerating'));
       return;
     }
-    if (shouldConfirmRegenerate(this.cacheManager.get(file.path), force) && !this.confirmRegenerateEditedCards()) {
+    if (shouldConfirmRegenerate(this.cacheManager.get(file.path), force) && !(await this.confirmRegenerateEditedCards())) {
       new Notice(this.t('regenerateCancelled'));
       return;
     }
