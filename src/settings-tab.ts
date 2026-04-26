@@ -1,6 +1,6 @@
 'use strict';
 
-import { Notice, PluginSettingTab, requestUrl, Setting } from 'obsidian';
+import { type App, Notice, type Plugin, PluginSettingTab, requestUrl, Setting } from 'obsidian';
 import { resolveCliPath, runCli } from './cli';
 import { testApiBackend } from './providers';
 import {
@@ -36,10 +36,10 @@ async function testBackend(settings) {
 }
 
 export class ParallelReaderSettingTab extends PluginSettingTab {
-  plugin: PluginHost;
+  plugin: Plugin & PluginHost;
 
-  constructor(app, plugin: PluginHost) {
-    super(app, plugin as any);
+  constructor(app: App, plugin: Plugin & PluginHost) {
+    super(app, plugin);
     this.plugin = plugin;
   }
 

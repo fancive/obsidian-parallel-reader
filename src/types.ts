@@ -1,5 +1,7 @@
 'use strict';
 
+import type { App, PluginManifest, TFile } from 'obsidian';
+
 /* ---------- Card types ---------- */
 
 /** Raw card as returned by the LLM and stored in cache (no computed fields). */
@@ -114,16 +116,16 @@ export interface PromptPair {
  * main.ts and the extracted modules.
  */
 export interface PluginHost {
-  app: { vault: any; workspace: any };
+  app: App;
   settings: PluginSettings;
   cache: Record<string, CacheEntry>;
-  manifest?: { id: string };
+  manifest: PluginManifest;
   t(key: string, vars?: Record<string, string | number>): string;
-  isGeneratingFile(file: any): boolean;
-  cancelGenerationForFile(file: any): boolean;
-  runForFile(file: any, force: boolean): Promise<void>;
+  isGeneratingFile(file: TFile | null): boolean;
+  cancelGenerationForFile(file: TFile | null): boolean;
+  runForFile(file: TFile | null, force: boolean): Promise<void>;
   copyCurrentViewMarkdown(): Promise<void>;
-  scrollEditorToLine(line: number, file: any): Promise<void>;
+  scrollEditorToLine(line: number, file: TFile | null): Promise<void>;
   cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;
   saveSettings(): Promise<void>;
   saveSettingsDebounced(delayMs?: number): void;

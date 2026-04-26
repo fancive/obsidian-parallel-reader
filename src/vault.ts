@@ -1,6 +1,8 @@
 'use strict';
 
-export function normalizeVaultPath(path) {
+import type { App } from 'obsidian';
+
+export function normalizeVaultPath(path: string): string {
   return String(path || '')
     .split('/')
     .map((part) => part.trim())
@@ -8,14 +10,14 @@ export function normalizeVaultPath(path) {
     .join('/');
 }
 
-export function folderPathsForTarget(folderPath) {
+export function folderPathsForTarget(folderPath: string): string[] {
   const normalized = normalizeVaultPath(folderPath);
   if (!normalized) return [];
   const parts = normalized.split('/');
   return parts.map((_, idx) => parts.slice(0, idx + 1).join('/'));
 }
 
-export async function ensureVaultFolder(app, folderPath) {
+export async function ensureVaultFolder(app: App, folderPath: string) {
   for (const folder of folderPathsForTarget(folderPath)) {
     if (app.vault.getAbstractFileByPath(folder)) continue;
     try {

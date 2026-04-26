@@ -1,6 +1,6 @@
 'use strict';
 
-import { Modal } from 'obsidian';
+import { type App, Modal } from 'obsidian';
 import type { CardPatch, PluginHost, ResolvedCard } from './types';
 import { addTextButton } from './ui-helpers';
 
@@ -9,7 +9,7 @@ export class CardEditModal extends Modal {
   card: ResolvedCard;
   onSave: (patch: CardPatch) => void | Promise<void>;
 
-  constructor(app, plugin: PluginHost, card: ResolvedCard, onSave: (patch: CardPatch) => void | Promise<void>) {
+  constructor(app: App, plugin: PluginHost, card: ResolvedCard, onSave: (patch: CardPatch) => void | Promise<void>) {
     super(app);
     this.plugin = plugin;
     this.card = card || ({} as ResolvedCard);
