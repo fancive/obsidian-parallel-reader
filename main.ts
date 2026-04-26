@@ -1,5 +1,5 @@
 'use strict';
-import { MarkdownView, Notice, Plugin, requestUrl, TFile } from 'obsidian';
+import { MarkdownView, Modal, Notice, Plugin, requestUrl, TFile } from 'obsidian';
 import { findLineForAnchor } from './src/anchor';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
@@ -207,6 +207,11 @@ class ParallelReaderPlugin extends Plugin {
       id: 'parallel-reader-card-jump',
       name: this.t('cmdCardJump'),
       callback: () => this.jumpActiveCard(),
+    });
+    this.addCommand({
+      id: 'parallel-reader-batch-generate',
+      name: this.t('cmdBatchGenerate'),
+      callback: () => this.runBatchForFolder(),
     });
 
     this.addSettingTab(new ParallelReaderSettingTab(this.app, this));
@@ -549,6 +554,57 @@ class ParallelReaderPlugin extends Plugin {
         if (view && this.viewIsShowingFile(view, file)) await view.renderError(file, e.message || String(e));
         new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: e.message || e }));
       });
+  }
+
+  async runBatchForFolder() {
+    const plugin = this;
+    const folderPath = await new Promise<string | null>((resolve) => {
+      class FolderPromptModal extends Modal {
+        private input!: HTMLInputElement;
+        onOpen() {
+          this.contentEl.createEl('p', { text: plugin.t('batchSelectFolder') });
+          this.input = this.contentEl.createEl('input', { type: 'text' });
+          this.input.placeholder = plugin.t('batchFolderPrompt');
+          this.input.style.width = '100%';
+          this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              resolve(this.input.value.trim());
+              this.close();
+            }
+          });
+          this.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
+            resolve(this.input.value.trim());
+            this.close();
+          });
+        }
+        onClose() {
+          resolve(null);
+        }
+      }
+      new FolderPromptModal(plugin.app).open();
+    });
+    if (folderPath === null) return;
+    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => {
+      if (folderPath === '') return !f.path.includes('/');
+      return f.parent?.path === folderPath;
+    });
+    if (allFiles.length === 0) {
+      new Notice(this.t('batchNoMarkdown'));
+      return;
+    }
+    let skipped = 0;
+    for (let i = 0; i < allFiles.length; i++) {
+      const file = allFiles[i];
+      new Notice(this.t('batchProgress', { current: i + 1, total: allFiles.length }));
+      const content = await this.app.vault.read(file);
+      const entry = this.cacheManager.get(file.path);
+      if (entry && cacheEntryMatches(entry, content, this.settings)) {
+        skipped++;
+        continue;
+      }
+      await this.runForFile(file, false);
+    }
+    new Notice(this.t('batchDone', { total: allFiles.length, skipped }));
   }
 
   resolveCardAnchors(content: string, rawCards: RawCard[]) {
