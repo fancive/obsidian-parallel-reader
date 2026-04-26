@@ -12,22 +12,40 @@ import type { PluginSettings, RawCard } from './types';
 export function resolveCliPath(name: string, override: string): string {
   if (override?.trim()) return override.trim();
   const home = os.homedir();
-  const candidates = [
-    path.join(home, 'bin', name),
-    path.join(home, '.local/bin', name),
-    path.join(home, '.claude/local', name),
-    path.join(home, '.codex/bin', name),
-    path.join(home, '.bun/bin', name),
-    path.join(home, '.npm-global/bin', name),
-    path.join(home, '.cargo/bin', name),
-    '/opt/homebrew/bin/' + name,
-    '/usr/local/bin/' + name,
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch (_) {
-      // Ignore unreadable candidate paths and keep searching.
+  const isWin = process.platform === 'win32';
+  const exts = isWin ? ['.cmd', '.exe', ''] : [''];
+
+  const dirs: string[] = isWin
+    ? [
+        path.join(home, 'AppData', 'Roaming', 'npm'),
+        path.join(home, 'AppData', 'Local', 'Programs', 'claude-code'),
+        path.join(home, 'AppData', 'Local', 'Programs', 'codex'),
+        path.join(home, '.claude', 'local'),
+        path.join(home, '.codex', 'bin'),
+        path.join(home, '.bun', 'bin'),
+        path.join(home, 'scoop', 'shims'),
+        'C:\\Program Files\\nodejs',
+      ]
+    : [
+        path.join(home, 'bin'),
+        path.join(home, '.local', 'bin'),
+        path.join(home, '.claude', 'local'),
+        path.join(home, '.codex', 'bin'),
+        path.join(home, '.bun', 'bin'),
+        path.join(home, '.npm-global', 'bin'),
+        path.join(home, '.cargo', 'bin'),
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+      ];
+
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const p = path.join(dir, name + ext);
+      try {
+        if (fs.existsSync(p)) return p;
+      } catch (_) {
+        // Ignore unreadable candidate paths and keep searching.
+      }
     }
   }
   return name;
