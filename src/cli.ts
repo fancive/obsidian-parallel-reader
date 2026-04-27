@@ -166,10 +166,13 @@ export async function summarizeViaClaudeCode(
   job?: GenerationJob,
 ): Promise<RawCard[]> {
   const cmd = resolveCliPath('claude', settings.cliPath);
+  const maxTokens = Number(settings.apiMaxTokens) || 4096;
   const args = [
     '-p',
     '--output-format',
     'json',
+    '--max-tokens',
+    String(maxTokens),
     '--append-system-prompt',
     system,
     '--disallowed-tools',
