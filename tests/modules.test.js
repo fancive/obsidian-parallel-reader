@@ -804,10 +804,81 @@ async function testRunCliEdgeCases() {
 }
 
 // Wrap the tail in an async runner so module-level tests can include async cases.
+async function testStructuredOutputFallback() {
+  const previousRequestUrlMock = requestUrlMock;
+  let callCount = 0;
+  requestUrlMock = async (params) => {
+    callCount++;
+    if (callCount === 1) {
+      // First call: structured output rejected with 400
+      return {
+        status: 400,
+        json: { error: 'response_format is not supported' },
+        text: JSON.stringify({ error: 'response_format is not supported' }),
+      };
+    }
+    // Second call: fallback succeeds
+    return openAiCardsResponse([
+      { title: 'Fallback', anchor: 'fallback anchor', gist: 'G', bullets: ['B'] },
+    ]);
+  };
+
+  try {
+    const sections = await t.summarizeDocument(
+      'intro\nfallback anchor\nend',
+      {
+        ...baseSettings,
+        streaming: false,
+        promptLanguage: 'en',
+        minCards: 1,
+        maxCards: 3,
+        maxDocChars: 10000,
+      },
+      { phase: 'queued', onCancel: () => {}, throwIfCancelled: () => {}, setPhase: () => {} },
+    );
+    assert.strictEqual(callCount, 2, 'structured output fallback made two requests');
+    assert.strictEqual(sections[0].title, 'Fallback', 'fallback response parsed correctly');
+  } finally {
+    requestUrlMock = previousRequestUrlMock;
+  }
+}
+
+async function testStructuredOutputNonRetryableError() {
+  const previousRequestUrlMock = requestUrlMock;
+  requestUrlMock = async () => ({
+    status: 500,
+    json: { error: 'Internal server error' },
+    text: JSON.stringify({ error: 'Internal server error' }),
+  });
+
+  try {
+    await assert.rejects(
+      () => t.summarizeDocument(
+        'test content',
+        {
+          ...baseSettings,
+          streaming: false,
+          promptLanguage: 'en',
+          minCards: 1,
+          maxCards: 3,
+          maxDocChars: 10000,
+        },
+        { phase: 'queued', onCancel: () => {}, throwIfCancelled: () => {}, setPhase: () => {} },
+      ),
+      /500/,
+      'non-retryable error (500) is not caught by structured fallback',
+    );
+  } finally {
+    requestUrlMock = previousRequestUrlMock;
+  }
+}
+
 (async () => {
   await testRunCliEdgeCases();
   await testCacheManagerMove();
   await testSummarizeDocumentAnchorSorting();
+  await testStructuredOutputFallback();
+  await testStructuredOutputNonRetryableError();
   console.log('modules tests passed');
 })().catch((e) => {
   console.error(e);
