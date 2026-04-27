@@ -221,10 +221,132 @@ async function testStructuredOutputNonRetryableError() {
   }
 }
 
+async function testProviderMissingApiKey() {
+  await assert.rejects(
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('request should not be sent');
+        },
+        'system JSON',
+        'user',
+        { ...baseSettings, apiKey: '', apiKeyEnvVar: '', uiLanguage: 'en' },
+      ),
+    /API key is not set/,
+  );
+}
+
+async function testProviderHeaderJsonError() {
+  await assert.rejects(
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('request should not be sent');
+        },
+        'system JSON',
+        'user',
+        { ...baseSettings, apiHeaders: '{"x":', uiLanguage: 'en' },
+      ),
+    /Custom headers JSON parse failed/,
+  );
+}
+
+async function testProviderResponseNonJson() {
+  await assert.rejects(
+    () =>
+      t.summarizeViaApi(async () => ({ status: 200, text: '<html>not json</html>' }), 'system JSON', 'user', {
+        ...baseSettings,
+        uiLanguage: 'en',
+      }),
+    /OpenAI-compatible Chat returned non-JSON/,
+  );
+}
+
+async function testProviderRequestFailure() {
+  await assert.rejects(
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('network down');
+        },
+        'system JSON',
+        'user',
+        { ...baseSettings, uiLanguage: 'en' },
+      ),
+    /OpenAI-compatible Chat request failed: network down/,
+  );
+}
+
+async function testProviderApiStatusError() {
+  await assert.rejects(
+    () =>
+      t.summarizeViaApi(async () => ({ status: 500, text: 'upstream exploded' }), 'system JSON', 'user', {
+        ...baseSettings,
+        uiLanguage: 'en',
+      }),
+    /OpenAI-compatible Chat API returned HTTP 500: upstream exploded/,
+  );
+}
+
+async function testAnthropicToolUseParsing() {
+  const cards = await t.summarizeViaApi(
+    async (req) => {
+      const body = JSON.parse(req.body);
+      assert.strictEqual(body.tools[0].name, 'record_parallel_reader_cards');
+      return {
+        status: 200,
+        json: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'record_parallel_reader_cards',
+              input: { cards: [{ title: 'A', anchor: 'quote', gist: 'gist', bullets: ['one'] }] },
+            },
+          ],
+        },
+      };
+    },
+    'system JSON',
+    'user',
+    {
+      ...baseSettings,
+      apiProvider: 'anthropic',
+      apiFormat: 'anthropic-messages',
+      apiBaseUrl: 'https://api.anthropic.com/v1',
+      apiAuthType: 'x-api-key',
+      model: 'anthropic/claude-sonnet-4-6',
+    },
+  );
+  assert.deepStrictEqual(cards, [{ title: 'A', anchor: 'quote', gist: 'gist', bullets: ['one'] }]);
+}
+
+// cancellationNoticeKey
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
+  'cancelRequestedApiInFlight',
+  'API cancellation should explain that the in-flight network request cannot be aborted',
+);
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'claude-code' }, { phase: 'generating' }),
+  'cancelRequested',
+  'CLI cancellation can use the generic cancellation notice',
+);
+assert.strictEqual(
+  t.cancellationNoticeKey({ backend: 'api' }, { phase: 'reading' }),
+  'cancelRequested',
+  'API cancellation outside the request phase can use the generic notice',
+);
+
 (async () => {
   await testSummarizeDocumentAnchorSorting();
   await testStructuredOutputFallback();
   await testStructuredOutputNonRetryableError();
+  await testProviderMissingApiKey();
+  await testProviderHeaderJsonError();
+  await testProviderResponseNonJson();
+  await testProviderRequestFailure();
+  await testProviderApiStatusError();
+  await testAnthropicToolUseParsing();
   console.log('providers tests passed');
 })().catch((e) => {
   console.error(e);
