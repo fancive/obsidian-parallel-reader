@@ -138,6 +138,97 @@ async function requireBundledModule(relativePath) {
   assert.ok(persistedPrune.entries['new.md'], 'newest entry persisted after pruning');
   assert.strictEqual(persistedPrune.entries['old.md'], undefined, 'oldest entry not in persisted cache');
 
+  // --- CacheManager.get() ---
+  assert.strictEqual(pruneManager.get('new.md').cards[0].title, 'N', 'CacheManager.get returns existing entry');
+  assert.strictEqual(pruneManager.get('nonexistent.md'), null, 'CacheManager.get returns null for missing entry');
+
+  // --- CacheManager.move() ---
+  const moveAdapter = createFakeAdapter();
+  const moveManager = new cacheManagerModule.CacheManager(moveAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+  await moveManager.load();
+  moveManager.cache = {
+    'a.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [{ title: 'A', anchor: 'a', gist: 'g', bullets: [] }], generatedAt: '2024-01-01T00:00:00.000Z' },
+    'b.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-01-02T00:00:00.000Z' },
+  };
+  await moveManager.save();
+
+  const moveResult = await moveManager.move('a.md', 'renamed.md');
+  assert.strictEqual(moveResult, true, 'CacheManager.move returns true on success');
+  assert.strictEqual(moveManager.get('a.md'), null, 'CacheManager.move removes old path');
+  assert.strictEqual(moveManager.get('renamed.md').cards[0].title, 'A', 'CacheManager.move preserves entry at new path');
+  assert.strictEqual(await moveManager.move('renamed.md', 'b.md'), false, 'CacheManager.move rejects when destination exists');
+  assert.strictEqual(await moveManager.move('b.md', 'b.md'), true, 'CacheManager.move same-path returns true if entry exists');
+  assert.strictEqual(await moveManager.move('gone.md', 'gone.md'), false, 'CacheManager.move same-path returns false if missing');
+  assert.strictEqual(await moveManager.move('gone.md', 'new-gone.md'), false, 'CacheManager.move returns false for missing source');
+  assert.strictEqual(await moveManager.move('', 'dest.md'), false, 'CacheManager.move rejects empty oldPath');
+  assert.strictEqual(await moveManager.move('src.md', ''), false, 'CacheManager.move rejects empty newPath');
+  assert.strictEqual(await moveManager.move('  ', 'dest.md'), false, 'CacheManager.move rejects whitespace oldPath');
+
+  // --- CacheManager.readFile() with corrupt JSON ---
+  const corruptAdapter = createFakeAdapter();
+  const corruptManager = new cacheManagerModule.CacheManager(corruptAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+  corruptAdapter.files.set(corruptManager.filePath(), '{ invalid json !!!');
+  const corruptResult = await corruptManager.readFile();
+  assert.deepStrictEqual(corruptResult, {}, 'CacheManager.readFile returns empty object for corrupt JSON');
+
+  // readFile with valid JSON but no entries field
+  const noEntriesAdapter = createFakeAdapter();
+  const noEntriesManager = new cacheManagerModule.CacheManager(noEntriesAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+  noEntriesAdapter.files.set(noEntriesManager.filePath(), JSON.stringify({ version: 1 }));
+  const noEntriesResult = await noEntriesManager.readFile();
+  assert.deepStrictEqual(noEntriesResult, {}, 'CacheManager.readFile returns empty object when no entries field');
+
+  // --- CacheManager.pruneIfNeeded() ---
+  const pruneNeededAdapter = createFakeAdapter();
+  const pruneNeededManager = new cacheManagerModule.CacheManager(pruneNeededAdapter, '.obsidian', 'parallel-reader', () => ({
+    ...settings.DEFAULT_SETTINGS,
+    maxCacheEntries: 1,
+  }));
+  await pruneNeededManager.load();
+  pruneNeededManager.cache = {
+    'old.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z', lastAccessedAt: '2024-01-01T00:00:00.000Z' },
+    'new.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-06-01T00:00:00.000Z', lastAccessedAt: '2024-06-01T00:00:00.000Z' },
+  };
+  const pruneIfResult = await pruneNeededManager.pruneIfNeeded();
+  assert.strictEqual(pruneIfResult.length, 1, 'CacheManager.pruneIfNeeded returns removed keys');
+  assert.strictEqual(pruneIfResult[0], 'old.md', 'CacheManager.pruneIfNeeded removes oldest');
+  assert.strictEqual(Object.keys(pruneNeededManager.cache).length, 1, 'CacheManager.pruneIfNeeded prunes to limit');
+
+  // pruneIfNeeded with nothing to prune
+  const noPruneAdapter = createFakeAdapter();
+  const noPruneManager = new cacheManagerModule.CacheManager(noPruneAdapter, '.obsidian', 'parallel-reader', () => ({
+    ...settings.DEFAULT_SETTINGS,
+    maxCacheEntries: 100,
+  }));
+  await noPruneManager.load();
+  noPruneManager.cache = {
+    'only.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z' },
+  };
+  const noPruneResult = await noPruneManager.pruneIfNeeded();
+  assert.strictEqual(noPruneResult.length, 0, 'CacheManager.pruneIfNeeded returns empty when nothing to prune');
+
+  // --- CacheManager.replaceCards() with missing entry ---
+  assert.strictEqual(
+    await pruneNeededManager.replaceCards('nonexistent.md', []),
+    false,
+    'CacheManager.replaceCards returns false for missing entry',
+  );
+
+  // --- CacheManager.scheduleSave() + flush() ---
+  const scheduleAdapter = createFakeAdapter();
+  const scheduleManager = new cacheManagerModule.CacheManager(scheduleAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+  await scheduleManager.load();
+  scheduleManager.cache = { 'sched.md': { schemaVersion: 2, contentHash: 'x', settingsHash: 'x', cards: [], generatedAt: '2024-01-01T00:00:00.000Z' } };
+  scheduleManager.scheduleSave(50000);
+  await scheduleManager.flush();
+  const flushedData = JSON.parse(scheduleAdapter.files.get(scheduleManager.filePath()));
+  assert.ok(flushedData.entries['sched.md'], 'CacheManager.flush persists scheduled save immediately');
+
+  // flush when not dirty should be a no-op
+  scheduleAdapter.files.delete(scheduleManager.filePath());
+  await scheduleManager.flush();
+  assert.strictEqual(scheduleAdapter.files.has(scheduleManager.filePath()), false, 'CacheManager.flush is no-op when not dirty');
+
   assert.strictEqual(
     generation.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
     'cancelRequestedApiInFlight',
