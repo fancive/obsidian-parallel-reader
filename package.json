@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check main.ts src/",
     "lint:fix": "biome check --write main.ts src/",
-    "test": "npm run build && npm run typecheck && node tests/main.test.js && node tests/generation-job-manager.test.js && node tests/anchor.test.js && node tests/schema.test.js && node tests/cache.test.js && node tests/cards-nav.test.js && node tests/markdown.test.js && node tests/vault-batch.test.js && node tests/i18n.test.js && node tests/scroll.test.js && node tests/settings.test.js && node tests/providers.test.js && node tests/streaming.test.js && node tests/cli.test.js && node tests/direct-prompt.test.js && node tests/direct-cache.test.js && node tests/direct-providers.test.js && node tests/direct-settings.test.js && node tests/direct-i18n.test.js && node tests/direct-streaming.test.js"
+    "test": "npm run build && npm run typecheck && node tests/main.test.js && node tests/generation-job-manager.test.js && node tests/anchor.test.js && node tests/schema.test.js && node tests/cache.test.js && node tests/cards-nav.test.js && node tests/markdown.test.js && node tests/vault-batch.test.js && node tests/i18n.test.js && node tests/scroll.test.js && node tests/settings.test.js && node tests/providers.test.js && node tests/streaming.test.js && node tests/cli.test.js && node tests/direct-prompt.test.js && node tests/direct-markdown.test.js && node tests/direct-cache.test.js && node tests/direct-providers.test.js && node tests/direct-settings.test.js && node tests/direct-i18n.test.js && node tests/direct-streaming.test.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
