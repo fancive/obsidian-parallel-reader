@@ -2,7 +2,18 @@
 
 export type RafThrottledHandler = (() => void) & { cancel: () => void };
 
-export function visibleTopProbeY(rect: { top?: number; height?: number } | null, maxOffset = 80, ratio = 0.1) {
+/** Default maximum pixel offset from the top of the visible area for scroll probing. */
+const DEFAULT_MAX_OFFSET_PX = 80;
+/** Default ratio of visible height used to cap the scroll probe offset. */
+const DEFAULT_PROBE_RATIO = 0.1;
+/** Fallback frame interval (ms) when requestAnimationFrame is unavailable. */
+const FALLBACK_FRAME_MS = 16;
+
+export function visibleTopProbeY(
+  rect: { top?: number; height?: number } | null,
+  maxOffset = DEFAULT_MAX_OFFSET_PX,
+  ratio = DEFAULT_PROBE_RATIO,
+) {
   const top = Number(rect?.top) || 0;
   const height = Math.max(0, Number(rect?.height) || 0);
   const cappedOffset = Math.min(Number(maxOffset) || 0, height * ratio);
@@ -23,7 +34,7 @@ function wrapId(raw: number | ReturnType<typeof setTimeout>): ScheduleId {
 
 function defaultSchedule(callback: FrameRequestCallback): ScheduleId {
   if (typeof requestAnimationFrame === 'function') return wrapId(requestAnimationFrame(callback));
-  return wrapId(setTimeout(() => callback(Date.now()), 16));
+  return wrapId(setTimeout(() => callback(Date.now()), FALLBACK_FRAME_MS));
 }
 
 function defaultCancel(id: ScheduleId) {
