@@ -41,6 +41,7 @@ async function requireBundledModule(relativePath) {
     const providerParsers = await requireBundledModule('src/provider-parsers.ts');
     const settings = await requireBundledModule('src/settings.ts');
     const streaming = await requireBundledModule('src/streaming.ts');
+    const vault = await requireBundledModule('src/vault.ts');
 
   const cacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z' };
   const touched = cache.touchCacheEntry(cacheEntry, '2024-06-01T00:00:00.000Z');
@@ -363,6 +364,22 @@ async function requireBundledModule(relativePath) {
   // Does not mutate original settings
   assert.strictEqual(anthropicSettings.model, 'claude-sonnet-4-6', 'applyApiProviderPreset does not mutate input');
   assert.strictEqual(anthropicSettings.apiProvider, 'anthropic', 'original provider unchanged');
+
+  // --- vault.ts: normalizeVaultPath and folderPathsForTarget ---
+  assert.strictEqual(vault.normalizeVaultPath('Reading/Articles'), 'Reading/Articles', 'normalizeVaultPath clean path unchanged');
+  assert.strictEqual(vault.normalizeVaultPath(' Reading / Articles '), 'Reading/Articles', 'normalizeVaultPath trims parts');
+  assert.strictEqual(vault.normalizeVaultPath('../bad/../path'), 'bad/path', 'normalizeVaultPath strips .. segments');
+  assert.strictEqual(vault.normalizeVaultPath('./relative/./path'), 'relative/path', 'normalizeVaultPath strips . segments');
+  assert.strictEqual(vault.normalizeVaultPath(''), '', 'normalizeVaultPath handles empty string');
+  assert.strictEqual(vault.normalizeVaultPath(null), '', 'normalizeVaultPath handles null');
+  assert.strictEqual(vault.normalizeVaultPath('single'), 'single', 'normalizeVaultPath handles single segment');
+  assert.strictEqual(vault.normalizeVaultPath('a//b///c'), 'a/b/c', 'normalizeVaultPath collapses empty segments');
+
+  assert.deepStrictEqual(vault.folderPathsForTarget('Reading/Articles'), ['Reading', 'Reading/Articles'], 'folderPathsForTarget returns ancestor chain');
+  assert.deepStrictEqual(vault.folderPathsForTarget('a/b/c'), ['a', 'a/b', 'a/b/c'], 'folderPathsForTarget 3-deep path');
+  assert.deepStrictEqual(vault.folderPathsForTarget('single'), ['single'], 'folderPathsForTarget single segment');
+  assert.deepStrictEqual(vault.folderPathsForTarget(''), [], 'folderPathsForTarget empty returns empty');
+  assert.deepStrictEqual(vault.folderPathsForTarget('../..'), [], 'folderPathsForTarget invalid path returns empty');
 
   // --- i18n.ts: translate and resolveUiLanguage ---
   // translate with explicit language
