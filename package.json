@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check main.ts src/",
     "lint:fix": "biome check --write main.ts src/",
+    "version": "node scripts/bump-version.mjs",
     "test": "npm run build && npm run typecheck && node scripts/run-tests.mjs",
     "test:only": "node scripts/run-tests.mjs"
   },
