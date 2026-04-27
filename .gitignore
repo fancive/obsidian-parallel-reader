@@ -9,10 +9,13 @@ cache.json
 *.swp
 *.swo
 
-# Node (if build tooling is added later)
+# Node
 node_modules/
 dist/
 *.log
+
+# Build artifacts (source maps)
+main.js.map
 
 # Agent state
 .agent/
