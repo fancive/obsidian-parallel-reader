@@ -1,5 +1,5 @@
 'use strict';
-import { MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import {
   type BatchRunState,
   batchProgressVars,
@@ -8,6 +8,7 @@ import {
   hasUnsafeBatchFolderSegments,
   markBatchFileRunning,
   normalizeBatchFolderInput,
+  promptForBatchFolder,
   recordBatchError,
   recordBatchProcessed,
   recordBatchSkip,
@@ -552,29 +553,7 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('batchAlreadyRunning'));
       return;
     }
-    const selectFolderText = this.t('batchSelectFolder');
-    const folderPromptText = this.t('batchFolderPrompt');
-    const folderPath = await new Promise<string | null>((resolve) => {
-      const modal = new Modal(this.app);
-      modal.onOpen = () => {
-        modal.contentEl.createEl('p', { text: selectFolderText });
-        const field = modal.contentEl.createDiv({ cls: 'parallel-reader-modal-field' });
-        const input = field.createEl('input', { type: 'text' });
-        input.placeholder = folderPromptText;
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            resolve(input.value.trim());
-            modal.close();
-          }
-        });
-        modal.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
-          resolve(input.value.trim());
-          modal.close();
-        });
-      };
-      modal.onClose = () => resolve(null);
-      modal.open();
-    });
+    const folderPath = await promptForBatchFolder(this.app, this.t('batchSelectFolder'), this.t('batchFolderPrompt'));
     if (folderPath === null) return;
     const validation = validateBatchFolderInput(folderPath, (path) => {
       const target = this.app.vault.getAbstractFileByPath(path);

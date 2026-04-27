@@ -1,5 +1,6 @@
 'use strict';
 
+import { type App, Modal } from 'obsidian';
 import { cacheEntryMatches } from './settings';
 import type { CacheEntry, PluginSettings } from './types';
 
@@ -101,4 +102,28 @@ export function requestBatchCancel(state: BatchRunState | null): boolean {
   if (!state || state.cancelled) return false;
   state.cancelled = true;
   return true;
+}
+
+export function promptForBatchFolder(app: App, selectText: string, promptText: string): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    const modal = new Modal(app);
+    modal.onOpen = () => {
+      modal.contentEl.createEl('p', { text: selectText });
+      const field = modal.contentEl.createDiv({ cls: 'parallel-reader-modal-field' });
+      const input = field.createEl('input', { type: 'text' });
+      input.placeholder = promptText;
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          resolve(input.value.trim());
+          modal.close();
+        }
+      });
+      modal.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
+        resolve(input.value.trim());
+        modal.close();
+      });
+    };
+    modal.onClose = () => resolve(null);
+    modal.open();
+  });
 }
