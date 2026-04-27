@@ -1,6 +1,5 @@
 'use strict';
 import { MarkdownView, Modal, Notice, Plugin, TFile } from 'obsidian';
-import { findLineForAnchor } from './src/anchor';
 import {
   type BatchRunState,
   batchProgressVars,
@@ -19,7 +18,8 @@ import {
 } from './src/batch';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
-import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './src/cards';
+import { findLineForAnchor } from './src/anchor';
+import { activeIndexAfterCardDelete, removeCardAt, resolveCardAnchors, updateCardAt } from './src/cards';
 import { resolveCliPath, runCli } from './src/cli';
 import { cancellationNoticeKey, summarizeDocument } from './src/generation';
 import {
@@ -30,6 +30,7 @@ import {
 } from './src/generation-job-manager';
 import { translate } from './src/i18n';
 import { cardsToMarkdown } from './src/markdown';
+import { confirmRegenerateEditedCards } from './src/modal';
 import { activeSectionLine, nextCardIndex } from './src/navigation';
 import { buildPrompts } from './src/prompt';
 import {
@@ -62,7 +63,6 @@ import type {
   ObsidianMenu,
   ObsidianMenuItem,
   PluginSettings,
-  RawCard,
   ResolvedCard,
 } from './src/types';
 import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
@@ -353,29 +353,7 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   confirmRegenerateEditedCards(): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-      let settled = false;
-      const settle = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-      const message = this.t('confirmRegenerateEditedCards');
-      const modal = new Modal(this.app);
-      modal.titleEl.setText(this.t('displayName'));
-      modal.contentEl.createEl('p', { text: message });
-      const btnRow = modal.contentEl.createDiv({ cls: 'modal-button-container' });
-      btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => {
-        modal.close();
-        settle(false);
-      });
-      btnRow.createEl('button', { text: 'OK', cls: 'mod-cta' }).addEventListener('click', () => {
-        modal.close();
-        settle(true);
-      });
-      modal.onClose = () => settle(false);
-      modal.open();
-    });
+    return confirmRegenerateEditedCards(this.app, this.t('displayName'), this.t('confirmRegenerateEditedCards'));
   }
 
   addFileMenuItems(menu: ObsidianMenu, file: unknown) {
@@ -513,7 +491,7 @@ class ParallelReaderPlugin extends Plugin {
           if (entry && cacheEntryMatches(entry, content, this.settings)) {
             this.cacheTouch(file.path);
             if (this.activeFileStillMatches(file))
-              view.loadFor(file, this.resolveCardAnchors(content, entry.cards), false);
+              view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
             return;
           }
         }
@@ -649,23 +627,6 @@ class ParallelReaderPlugin extends Plugin {
     else new Notice(this.t('batchDone', batchVars));
   }
 
-  resolveCardAnchors(content: string, rawCards: RawCard[]) {
-    const resolved: ResolvedCard[] = (rawCards || []).map((c: RawCard) => ({
-      title: c.title,
-      level: 2,
-      anchor: c.anchor,
-      gist: c.gist,
-      startLine: findLineForAnchor(content, c.anchor),
-      bullets: c.bullets || [],
-    }));
-    resolved.sort((a, b) => {
-      if (a.startLine < 0 && b.startLine < 0) return 0;
-      if (a.startLine < 0) return 1;
-      if (b.startLine < 0) return -1;
-      return a.startLine - b.startLine;
-    });
-    return resolved;
-  }
 
   /* ---------- Scroll sync ---------- */
 
@@ -685,7 +646,7 @@ class ParallelReaderPlugin extends Plugin {
     if (!this.activeFileStillMatches(file)) return;
     const stale = !cacheEntryMatches(entry, content, this.settings);
     this.cacheTouch(file.path);
-    view.loadFor(file, this.resolveCardAnchors(content, entry.cards), stale);
+    view.loadFor(file, resolveCardAnchors(content, entry.cards), stale);
   }
 
   bindScrollSync() {

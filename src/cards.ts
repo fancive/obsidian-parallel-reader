@@ -1,6 +1,7 @@
 'use strict';
 
-import type { CardPatch, RawCard } from './types';
+import { findLineForAnchor } from './anchor';
+import type { CardPatch, RawCard, ResolvedCard } from './types';
 
 export function removeCardAt<T extends RawCard>(cards: T[], index: number): T[] {
   const next = Array.isArray(cards) ? cards.slice() : [];
@@ -25,4 +26,22 @@ export function updateCardAt<T extends RawCard>(cards: T[], index: number, patch
   if (!Number.isInteger(index) || index < 0 || index >= next.length) return next;
   next[index] = Object.assign({}, next[index], patch || {});
   return next;
+}
+
+export function resolveCardAnchors(content: string, rawCards: RawCard[]): ResolvedCard[] {
+  const resolved: ResolvedCard[] = (rawCards || []).map((c: RawCard) => ({
+    title: c.title,
+    level: 2,
+    anchor: c.anchor,
+    gist: c.gist,
+    startLine: findLineForAnchor(content, c.anchor),
+    bullets: c.bullets || [],
+  }));
+  resolved.sort((a, b) => {
+    if (a.startLine < 0 && b.startLine < 0) return 0;
+    if (a.startLine < 0) return 1;
+    if (b.startLine < 0) return -1;
+    return a.startLine - b.startLine;
+  });
+  return resolved;
 }
