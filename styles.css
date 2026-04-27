@@ -350,6 +350,11 @@
   font-size: 11px;
 }
 
+.parallel-reader-empty .parallel-reader-text-button {
+  display: flex;
+  margin: 12px auto 0;
+}
+
 .parallel-reader-stream-text {
   margin-top: 10px;
   max-height: 200px;

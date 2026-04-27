@@ -52,6 +52,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     noCancelableJob: '当前没有可取消的生成任务',
     cancelRequested: '已请求取消生成',
     cancelRequestedApiInFlight: '已请求取消生成；当前 API 请求无法立即中断，返回后会丢弃结果。',
+    actionGenerate: '生成对照笔记',
     fileMenuGenerate: '生成对照笔记',
     fileMenuRegen: '强制重新生成对照笔记',
     fileMenuClear: '清除对照笔记缓存',
@@ -210,6 +211,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     cancelRequested: 'Cancel requested',
     cancelRequestedApiInFlight:
       'Cancel requested. The in-flight API request cannot be aborted immediately; its result will be ignored.',
+    actionGenerate: 'Generate parallel notes',
     fileMenuGenerate: 'Generate parallel notes',
     fileMenuRegen: 'Regenerate parallel notes',
     fileMenuClear: 'Clear parallel-note cache',

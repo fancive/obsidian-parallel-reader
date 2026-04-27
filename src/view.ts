@@ -148,6 +148,10 @@ export class ParallelReaderView extends ItemView {
     hint.createEl('h3', { text: file.basename });
     hint.createEl('p', { text: this.plugin.t('emptyNoCache') });
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
+    addTextButton(hint, null, this.plugin.t('actionGenerate'), () => {
+      if (this.plugin.isGeneratingFile(file)) return;
+      this.plugin.runForFile(file, false);
+    });
   }
 
   render() {
