@@ -1,30 +1,6 @@
 const assert = require('assert');
 const { EventEmitter } = require('events');
-const Module = require('module');
-
-const originalLoad = Module._load;
-let requestUrlMock = async () => ({ status: 200, json: {}, text: '{}' });
-
-Module._load = function load(request, parent, isMain) {
-  if (request === 'obsidian') {
-    class Plugin {}
-    class ItemView { constructor(leaf) { this.leaf = leaf; this.containerEl = { children: [{}, {}] }; } }
-    class PluginSettingTab {}
-    class Setting {}
-    class Notice {}
-    class MarkdownView {}
-    class TFile {}
-    class Menu {}
-    class Modal {}
-    return {
-      Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal,
-      MarkdownRenderer: { render: async () => {} },
-      requestUrl: (params) => requestUrlMock(params),
-      setIcon: () => {},
-    };
-  }
-  return originalLoad.call(this, request, parent, isMain);
-};
+const { getRequestUrlMock, setRequestUrlMock } = require('./obsidian-mock');
 
 const t = require('../main.js').__test;
 
@@ -56,6 +32,6 @@ module.exports = {
   t,
   baseSettings,
   openAiCardsResponse,
-  getRequestUrlMock() { return requestUrlMock; },
-  setRequestUrlMock(fn) { requestUrlMock = fn; },
+  getRequestUrlMock,
+  setRequestUrlMock,
 };

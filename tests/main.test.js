@@ -2,42 +2,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const Module = require('module');
-
-const originalLoad = Module._load;
-Module._load = function load(request, parent, isMain) {
-  if (request === 'obsidian') {
-    class Plugin {}
-    class ItemView {
-      constructor(leaf) {
-        this.leaf = leaf;
-        this.containerEl = { children: [{}, {}] };
-      }
-    }
-    class PluginSettingTab {}
-    class Setting {}
-    class Notice {}
-    class MarkdownView {}
-    class TFile {}
-    class Menu {}
-    class Modal {}
-    return {
-      Plugin,
-      ItemView,
-      PluginSettingTab,
-      Setting,
-      Notice,
-      MarkdownView,
-      TFile,
-      Menu,
-      Modal,
-      MarkdownRenderer: { render: async () => {} },
-      requestUrl: async () => ({ status: 200, json: {}, text: '{}' }),
-      setIcon: () => {},
-    };
-  }
-  return originalLoad.call(this, request, parent, isMain);
-};
+require('./obsidian-mock');
 
 const plugin = require('../main.js');
 const t = plugin.__test;
