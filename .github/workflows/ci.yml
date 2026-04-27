@@ -27,7 +27,7 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: node tests/main.test.js && node tests/generation-job-manager.test.js && node tests/modules.test.js && node tests/direct-modules.test.js
+        run: npm test
 
       - name: Lint
         run: npm run lint
