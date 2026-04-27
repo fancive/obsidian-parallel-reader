@@ -1,5 +1,6 @@
 'use strict';
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { findLineForAnchor } from './src/anchor';
 import {
   type BatchRunState,
   batchProgressVars,
@@ -19,7 +20,6 @@ import {
 } from './src/batch';
 import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
 import { CacheManager } from './src/cache-manager';
-import { findLineForAnchor } from './src/anchor';
 import { activeIndexAfterCardDelete, removeCardAt, resolveCardAnchors, updateCardAt } from './src/cards';
 import { resolveCliPath, runCli } from './src/cli';
 import { cancellationNoticeKey, summarizeDocument } from './src/generation';
@@ -43,7 +43,12 @@ import {
   supportsStreaming,
   tokenLimitFieldForOpenAiChat,
 } from './src/providers';
-import { collectJsonObjectCandidates, extractJson, normalizeCardsPayload, repairTruncatedCardsJson } from './src/schema';
+import {
+  collectJsonObjectCandidates,
+  extractJson,
+  normalizeCardsPayload,
+  repairTruncatedCardsJson,
+} from './src/schema';
 import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import {
   CACHE_SCHEMA_VERSION,
@@ -491,8 +496,7 @@ class ParallelReaderPlugin extends Plugin {
           const entry = this.cacheManager.get(file.path);
           if (entry && cacheEntryMatches(entry, content, this.settings)) {
             this.cacheTouch(file.path);
-            if (this.activeFileStillMatches(file))
-              view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
+            if (this.activeFileStillMatches(file)) view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
             return;
           }
         }
@@ -605,7 +609,6 @@ class ParallelReaderPlugin extends Plugin {
     if (batch.cancelled) new Notice(this.t('batchCancelled', batchVars));
     else new Notice(this.t('batchDone', batchVars));
   }
-
 
   /* ---------- Scroll sync ---------- */
 
