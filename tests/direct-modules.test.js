@@ -246,6 +246,67 @@ async function requireBundledModule(relativePath) {
       'streamingFetch rejects on timeout',
     );
     assert.strictEqual(timeout.activeListeners(), 0, 'streamingFetch removes abort listener after timeout');
+
+    // Abort before fetch starts (pre-aborted signal)
+    const preAborted = trackedSignal();
+    preAborted.controller.abort();
+    globalThis.fetch = async (_url, opts) => {
+      if (opts?.signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
+      throw new Error('should not reach');
+    };
+    await assert.rejects(
+      () =>
+        streaming.streamingFetch(
+          'https://example.test',
+          {},
+          {},
+          streaming.deltaExtractorForFormat('openai-chat'),
+          undefined,
+          preAborted.signal,
+          { streamingTimeoutMs: 5000 },
+        ),
+      /abort/i,
+      'streamingFetch rejects when signal is pre-aborted',
+    );
+    assert.strictEqual(preAborted.activeListeners(), 0, 'streamingFetch cleans up listeners on pre-aborted signal');
+
+    // Abort during read (signal aborted while reading body)
+    const abortDuringRead = trackedSignal();
+    globalThis.fetch = async (_url, opts) => {
+      const fetchSignal = opts?.signal;
+      const stream = new ReadableStream({
+        async pull(ctrl) {
+          const encoder = new TextEncoder();
+          // First chunk succeeds
+          ctrl.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"first"}}]}\n\n'));
+          // Abort after first chunk
+          abortDuringRead.controller.abort();
+          // Wait a tick so the abort propagates
+          await new Promise((r) => setTimeout(r, 5));
+          if (fetchSignal?.aborted) {
+            ctrl.error(new DOMException('The operation was aborted.', 'AbortError'));
+            return;
+          }
+          ctrl.close();
+        },
+      });
+      return { ok: true, status: 200, body: stream, text: async () => '' };
+    };
+    await assert.rejects(
+      () =>
+        streaming.streamingFetch(
+          'https://example.test',
+          {},
+          {},
+          streaming.deltaExtractorForFormat('openai-chat'),
+          undefined,
+          abortDuringRead.signal,
+          { streamingTimeoutMs: 5000 },
+        ),
+      /abort/i,
+      'streamingFetch rejects when signal is aborted during read',
+    );
+    assert.strictEqual(abortDuringRead.activeListeners(), 0, 'streamingFetch cleans up listeners after mid-read abort');
   } finally {
     globalThis.fetch = originalFetch;
   }
