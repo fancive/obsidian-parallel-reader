@@ -13,7 +13,7 @@
         "noImplicitAnyLet": "error"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "error",
         "useConst": "warn",
         "useNodejsImportProtocol": "off",
         "useTemplate": "off"
