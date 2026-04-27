@@ -10,7 +10,7 @@
       "suspicious": {
         "noExplicitAny": "error",
         "noRedundantUseStrict": "off",
-        "noImplicitAnyLet": "off"
+        "noImplicitAnyLet": "error"
       },
       "style": {
         "noNonNullAssertion": "warn",

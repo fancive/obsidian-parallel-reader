@@ -104,7 +104,7 @@ export function repairTruncatedCardsJson(text: string): string | null {
 
 export function parseCardsJson(text: string, settings?: PluginSettings | null): RawCard[] {
   const jsonText = extractJson(text);
-  let parsed;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(jsonText);
   } catch (_e) {
@@ -133,8 +133,9 @@ export function parseCardsJson(text: string, settings?: PluginSettings | null): 
   return normalizeCardsPayload(parsed);
 }
 
-export function normalizeCardsPayload(parsed: { cards?: unknown[] }): RawCard[] {
-  const raw = parsed && Array.isArray(parsed.cards) ? parsed.cards : [];
+export function normalizeCardsPayload(parsed: unknown): RawCard[] {
+  const obj = parsed as { cards?: unknown[] } | null | undefined;
+  const raw = obj && Array.isArray(obj.cards) ? obj.cards : [];
   return raw
     .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
     .map((c) => ({
