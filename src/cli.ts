@@ -164,21 +164,19 @@ export async function summarizeViaClaudeCode(
   user: string,
   settings: PluginSettings,
   job?: GenerationJob,
+  spawnImpl?: typeof spawn,
 ): Promise<RawCard[]> {
   const cmd = resolveCliPath('claude', settings.cliPath);
-  const maxTokens = Number(settings.apiMaxTokens) || 4096;
   const args = [
     '-p',
     '--output-format',
     'json',
-    '--max-tokens',
-    String(maxTokens),
     '--append-system-prompt',
     system,
     '--disallowed-tools',
     'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
   ];
-  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job);
+  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl);
 
   // --output-format json produces a JSON array of event objects.
   // Find the "result" entry and extract its .result text field.
@@ -211,10 +209,11 @@ export async function summarizeViaCodex(
   user: string,
   settings: PluginSettings,
   job?: GenerationJob,
+  spawnImpl?: typeof spawn,
 ): Promise<RawCard[]> {
   const cmd = resolveCliPath('codex', settings.cliPath);
   const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
   const args = ['exec', '--skip-git-repo-check', '-'];
-  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job);
+  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl);
   return parseCardsJson(stdout, settings);
 }

@@ -19,7 +19,7 @@ export {
 export { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './cache';
 export { CacheManager } from './cache-manager';
 export { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
-export { resolveCliPath, runCli } from './cli';
+export { resolveCliPath, runCli, summarizeViaClaudeCode, summarizeViaCodex } from './cli';
 export { cancellationNoticeKey, summarizeDocument } from './generation';
 export {
   classifyGenerationError,

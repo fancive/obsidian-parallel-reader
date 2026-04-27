@@ -76,6 +76,132 @@ async function testRunCliEdgeCases() {
   );
 }
 
+// ── summarizeViaClaudeCode args validation ──
+
+// Known flags supported by the Claude Code CLI (from `claude --help`).
+const VALID_CLAUDE_FLAGS = new Set([
+  '--add-dir', '--agent', '--agents', '--allow-dangerously-skip-permissions',
+  '--allowedTools', '--allowed-tools', '--append-system-prompt', '--bare',
+  '--betas', '--brief', '--chrome', '--dangerously-skip-permissions',
+  '--debug-file', '--disable-slash-commands', '--disallowedTools',
+  '--disallowed-tools', '--effort', '--exclude-dynamic-system-prompt-sections',
+  '--fallback-model', '--file', '--fork-session', '--from-pr', '--ide',
+  '--include-hook-events', '--include-partial-messages', '--input-format',
+  '--json-schema', '--max-budget-usd', '--mcp-config', '--mcp-debug',
+  '--model', '--no-chrome', '--no-session-persistence', '--output-format',
+  '--permission-mode', '--plugin-dir', '--remote-control-session-name-prefix',
+  '--replay-user-messages', '--session-id', '--setting-sources', '--settings',
+  '--strict-mcp-config', '--system-prompt', '--tmux', '--tools', '--verbose',
+  '-p', '-c', '-d', '-h', '-n', '-r', '-v', '-w',
+]);
+
+async function testClaudeCodeArgs() {
+  let capturedArgs = null;
+  const resultJson = JSON.stringify([{ type: 'result', result: '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}' }]);
+  const fakeSpawn = (_cmd, args) => {
+    capturedArgs = args;
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(resultJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  const settings = {
+    backend: 'claude-code',
+    cliPath: '/usr/bin/claude',
+    apiMaxTokens: 8192,
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 5,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+
+  await t.summarizeViaClaudeCode('system prompt', 'user content', settings, undefined, fakeSpawn);
+
+  assert.ok(capturedArgs, 'summarizeViaClaudeCode should have called spawn');
+
+  // Verify every --flag in the args is a valid Claude CLI flag
+  const flags = capturedArgs.filter(a => a.startsWith('-'));
+  for (const flag of flags) {
+    assert.ok(
+      VALID_CLAUDE_FLAGS.has(flag),
+      `summarizeViaClaudeCode passes unsupported flag "${flag}" to claude CLI`,
+    );
+  }
+
+  // Verify key expected flags are present
+  assert.ok(capturedArgs.includes('-p'), 'should include -p (print mode)');
+  assert.ok(capturedArgs.includes('--output-format'), 'should include --output-format');
+  assert.ok(capturedArgs.includes('--append-system-prompt'), 'should include --append-system-prompt');
+  assert.ok(capturedArgs.includes('--disallowed-tools'), 'should include --disallowed-tools');
+
+  // Verify --max-tokens is NOT present (it's not a valid claude CLI flag)
+  assert.ok(!capturedArgs.includes('--max-tokens'), 'should NOT include --max-tokens');
+}
+
+// ── summarizeViaCodex args validation ──
+
+// Known flags/subcommands supported by `codex exec` (from `codex exec --help`).
+const VALID_CODEX_EXEC_FLAGS = new Set([
+  '-c', '--config', '--enable', '--disable', '-i', '--image',
+  '-m', '--model', '--oss', '--local-provider', '-p', '--profile',
+  '-s', '--sandbox', '--full-auto', '--dangerously-bypass-approvals-and-sandbox',
+  '-C', '--cd', '--add-dir', '--skip-git-repo-check', '--ephemeral',
+  '--ignore-user-config', '--ignore-rules', '--output-schema', '--color',
+  '--json', '-o', '--output-last-message', '-h', '--help', '-V', '--version',
+]);
+
+async function testCodexArgs() {
+  let capturedArgs = null;
+  const resultJson = '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}';
+  const fakeSpawn = (_cmd, args) => {
+    capturedArgs = args;
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(resultJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  const settings = {
+    backend: 'codex',
+    cliPath: '/usr/bin/codex',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 5,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+
+  await t.summarizeViaCodex('system prompt', 'user content', settings, undefined, fakeSpawn);
+
+  assert.ok(capturedArgs, 'summarizeViaCodex should have called spawn');
+
+  // First arg must be the 'exec' subcommand
+  assert.strictEqual(capturedArgs[0], 'exec', 'first arg should be exec subcommand');
+
+  // Verify every --flag (after 'exec') is valid for `codex exec`
+  const flags = capturedArgs.slice(1).filter(a => a.startsWith('-') && a !== '-');
+  for (const flag of flags) {
+    assert.ok(
+      VALID_CODEX_EXEC_FLAGS.has(flag),
+      `summarizeViaCodex passes unsupported flag "${flag}" to codex exec`,
+    );
+  }
+
+  // Verify key expected flags are present
+  assert.ok(capturedArgs.includes('--skip-git-repo-check'), 'should include --skip-git-repo-check');
+  // '-' means read prompt from stdin
+  assert.ok(capturedArgs.includes('-'), 'should include - (read from stdin)');
+
+  // Verify stdin content combines system and user prompts
+  assert.ok(capturedArgs.includes('exec'), 'should include exec subcommand');
+}
+
 // ── classifyGenerationError ──
 
 assert.strictEqual(t.classifyGenerationError(new Error('API key 未设置')), 'auth');
@@ -92,6 +218,8 @@ assert.strictEqual(t.classifyGenerationError('string error'), 'unknown', 'string
 
 (async () => {
   await testRunCliEdgeCases();
+  await testClaudeCodeArgs();
+  await testCodexArgs();
   console.log('cli tests passed');
 })().catch((e) => {
   console.error(e);
