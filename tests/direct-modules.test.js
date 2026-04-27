@@ -36,6 +36,7 @@ async function requireBundledModule(relativePath) {
   try {
     const cache = await requireBundledModule('src/cache.ts');
     const cacheManagerModule = await requireBundledModule('src/cache-manager.ts');
+    const cards = await requireBundledModule('src/cards.ts');
     const generation = await requireBundledModule('src/generation.ts');
     const i18n = await requireBundledModule('src/i18n.ts');
     const providerParsers = await requireBundledModule('src/provider-parsers.ts');
@@ -364,6 +365,43 @@ async function requireBundledModule(relativePath) {
   // Does not mutate original settings
   assert.strictEqual(anthropicSettings.model, 'claude-sonnet-4-6', 'applyApiProviderPreset does not mutate input');
   assert.strictEqual(anthropicSettings.apiProvider, 'anthropic', 'original provider unchanged');
+
+  // --- cards.ts: resolveCardAnchors ---
+  const content = 'line0 hello\nline1 world\nline2 anchor here\nline3 end';
+  const rawCards = [
+    { title: 'A', anchor: 'anchor here', gist: 'gA', bullets: ['b1'] },
+    { title: 'B', anchor: 'hello', gist: 'gB', bullets: [] },
+    { title: 'C', anchor: 'not_found', gist: 'gC', bullets: [] },
+  ];
+  const resolved = cards.resolveCardAnchors(content, rawCards);
+  assert.strictEqual(resolved.length, 3, 'resolveCardAnchors returns all cards');
+  // B (line 0) should come first, then A (line 2), then C (unanchored, pushed to end)
+  assert.strictEqual(resolved[0].title, 'B', 'resolveCardAnchors: earliest anchor first');
+  assert.strictEqual(resolved[0].startLine, 0, 'resolveCardAnchors: B at line 0');
+  assert.strictEqual(resolved[1].title, 'A', 'resolveCardAnchors: second anchor');
+  assert.strictEqual(resolved[1].startLine, 2, 'resolveCardAnchors: A at line 2');
+  assert.strictEqual(resolved[2].title, 'C', 'resolveCardAnchors: unanchored pushed to end');
+  assert.ok(resolved[2].startLine < 0, 'resolveCardAnchors: unanchored has negative startLine');
+
+  // Empty input
+  assert.deepStrictEqual(cards.resolveCardAnchors('', []), [], 'resolveCardAnchors: empty input');
+  assert.deepStrictEqual(cards.resolveCardAnchors('some content', []), [], 'resolveCardAnchors: no cards');
+
+  // Null/undefined cards
+  assert.deepStrictEqual(cards.resolveCardAnchors('content', null), [], 'resolveCardAnchors: null cards');
+  assert.deepStrictEqual(cards.resolveCardAnchors('content', undefined), [], 'resolveCardAnchors: undefined cards');
+
+  // All unanchored cards maintain relative order (both at -1)
+  const allUnanchored = cards.resolveCardAnchors('content', [
+    { title: 'X', anchor: 'zzz', gist: '', bullets: [] },
+    { title: 'Y', anchor: 'qqq', gist: '', bullets: [] },
+  ]);
+  assert.strictEqual(allUnanchored.length, 2, 'resolveCardAnchors: all unanchored');
+  assert.ok(allUnanchored[0].startLine < 0, 'resolveCardAnchors: X unanchored');
+  assert.ok(allUnanchored[1].startLine < 0, 'resolveCardAnchors: Y unanchored');
+
+  // Card level defaults to 2
+  assert.strictEqual(resolved[0].level, 2, 'resolveCardAnchors: level defaults to 2');
 
   // --- vault.ts: normalizeVaultPath and folderPathsForTarget ---
   assert.strictEqual(vault.normalizeVaultPath('Reading/Articles'), 'Reading/Articles', 'normalizeVaultPath clean path unchanged');
