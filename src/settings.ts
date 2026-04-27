@@ -330,35 +330,35 @@ export function applyApiProviderPreset(settings: Readonly<PluginSettings>, provi
   };
 }
 
-export function normalizeSettings(settings: PluginSettings): PluginSettings {
-  if (!(UI_LANGUAGES as Record<string, string>)[settings.uiLanguage]) settings.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
-  if (!settings.apiProvider || !API_PROVIDER_PRESETS[settings.apiProvider]) {
-    settings.apiProvider = 'anthropic';
+export function normalizeSettings(settings: Readonly<PluginSettings>): PluginSettings {
+  const out: PluginSettings = { ...settings };
+  if (!(UI_LANGUAGES as Record<string, string>)[out.uiLanguage]) out.uiLanguage = DEFAULT_SETTINGS.uiLanguage;
+  if (!out.apiProvider || !API_PROVIDER_PRESETS[out.apiProvider]) {
+    out.apiProvider = 'anthropic';
   }
-  const preset = getApiPreset(settings);
-  if (!settings.apiFormat || !API_FORMATS[settings.apiFormat]) settings.apiFormat = preset.format;
-  if (!settings.apiAuthType || !(API_AUTH_TYPES as Record<string, string>)[settings.apiAuthType])
-    settings.apiAuthType = 'auto';
-  if (settings.backend === 'anthropic-api') {
-    settings.apiProvider = settings.apiProvider || 'anthropic';
-    settings.apiFormat = settings.apiFormat || 'anthropic-messages';
-    settings.apiBaseUrl = settings.apiBaseUrl || API_PROVIDER_PRESETS.anthropic.baseUrl;
-    settings.apiAuthType = settings.apiAuthType || 'x-api-key';
-    settings.apiKeyEnvVar = settings.apiKeyEnvVar || 'ANTHROPIC_API_KEY';
+  const preset = getApiPreset(out);
+  if (!out.apiFormat || !API_FORMATS[out.apiFormat]) out.apiFormat = preset.format;
+  if (!out.apiAuthType || !(API_AUTH_TYPES as Record<string, string>)[out.apiAuthType]) out.apiAuthType = 'auto';
+  if (out.backend === 'anthropic-api') {
+    out.apiProvider = out.apiProvider || 'anthropic';
+    out.apiFormat = out.apiFormat || 'anthropic-messages';
+    out.apiBaseUrl = out.apiBaseUrl || API_PROVIDER_PRESETS.anthropic.baseUrl;
+    out.apiAuthType = out.apiAuthType || 'x-api-key';
+    out.apiKeyEnvVar = out.apiKeyEnvVar || 'ANTHROPIC_API_KEY';
   }
-  const n = Number(settings.apiMaxTokens);
-  if (!Number.isFinite(n) || n <= 0) settings.apiMaxTokens = DEFAULT_SETTINGS.apiMaxTokens;
-  const maxDocChars = Number(settings.maxDocChars);
-  if (!Number.isFinite(maxDocChars) || maxDocChars < 1000) settings.maxDocChars = DEFAULT_SETTINGS.maxDocChars;
-  settings.maxCacheEntries = normalizeMaxCacheEntries(settings.maxCacheEntries);
-  if (!(PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage])
-    settings.promptLanguage = DEFAULT_SETTINGS.promptLanguage;
-  settings.minCards = normalizeCardCount(settings.minCards, DEFAULT_SETTINGS.minCards);
-  settings.maxCards = normalizeCardCount(settings.maxCards, DEFAULT_SETTINGS.maxCards);
-  if (settings.maxCards < settings.minCards) settings.maxCards = settings.minCards;
-  settings.streamingTimeoutMs = normalizeStreamingTimeoutMs(settings.streamingTimeoutMs);
-  if (typeof settings.customSystemPrompt !== 'string') settings.customSystemPrompt = '';
-  return settings;
+  const n = Number(out.apiMaxTokens);
+  if (!Number.isFinite(n) || n <= 0) out.apiMaxTokens = DEFAULT_SETTINGS.apiMaxTokens;
+  const maxDocChars = Number(out.maxDocChars);
+  if (!Number.isFinite(maxDocChars) || maxDocChars < 1000) out.maxDocChars = DEFAULT_SETTINGS.maxDocChars;
+  out.maxCacheEntries = normalizeMaxCacheEntries(out.maxCacheEntries);
+  if (!(PROMPT_LANGUAGES as Record<string, string>)[out.promptLanguage])
+    out.promptLanguage = DEFAULT_SETTINGS.promptLanguage;
+  out.minCards = normalizeCardCount(out.minCards, DEFAULT_SETTINGS.minCards);
+  out.maxCards = normalizeCardCount(out.maxCards, DEFAULT_SETTINGS.maxCards);
+  if (out.maxCards < out.minCards) out.maxCards = out.minCards;
+  out.streamingTimeoutMs = normalizeStreamingTimeoutMs(out.streamingTimeoutMs);
+  if (typeof out.customSystemPrompt !== 'string') out.customSystemPrompt = '';
+  return out;
 }
 
 export function normalizeCardCount(value: unknown, fallback: number): number {

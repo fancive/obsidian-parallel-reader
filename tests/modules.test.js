@@ -387,6 +387,15 @@ assert.strictEqual(
   'normalizeSettings protects invalid streaming timeout values',
 );
 
+// normalizeSettings does not mutate its input
+const settingsInput = { ...baseSettings, streamingTimeoutMs: 500, minCards: -1, maxCards: 999 };
+const settingsInputCopy = JSON.parse(JSON.stringify(settingsInput));
+const normalized = t.normalizeSettings(settingsInput);
+assert.deepStrictEqual(settingsInput, settingsInputCopy, 'normalizeSettings does not mutate input object');
+assert.notStrictEqual(normalized, settingsInput, 'normalizeSettings returns a new object');
+assert.strictEqual(normalized.minCards, 1, 'normalizeSettings clamps minCards');
+assert.strictEqual(normalized.maxCards, 30, 'normalizeSettings clamps maxCards to max 30');
+
 // cacheEntryMatches
 const crypto = require('crypto');
 const hash = crypto.createHash('sha1').update('test', 'utf8').digest('hex');
