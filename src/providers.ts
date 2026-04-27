@@ -94,7 +94,7 @@ function endpointUrl(baseUrl: string, suffixes: string[]) {
   return base + suffixes[0];
 }
 
-function parseApiHeaders(raw: string, settings?: PluginSettings | null): Record<string, string> {
+export function parseApiHeaders(raw: string, settings?: PluginSettings | null): Record<string, string> {
   const text = (raw || '').trim();
   if (!text) return {};
   if (text.startsWith('{')) {

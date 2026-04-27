@@ -753,6 +753,68 @@ assert.strictEqual(
 // missing key fallback chain: should return the key itself
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, '__no_such_key__'), '__no_such_key__', 'missing key returns key');
 
+// ── parseApiHeaders ──
+
+// JSON object input
+assert.deepStrictEqual(
+  t.parseApiHeaders('{"X-Custom": "value", "Authorization": "Bearer tok"}'),
+  { 'X-Custom': 'value', 'Authorization': 'Bearer tok' },
+  'parseApiHeaders: JSON object input',
+);
+
+// Empty string
+assert.deepStrictEqual(t.parseApiHeaders(''), {}, 'parseApiHeaders: empty string returns empty object');
+assert.deepStrictEqual(t.parseApiHeaders('  '), {}, 'parseApiHeaders: whitespace-only returns empty object');
+
+// Line-based input
+assert.deepStrictEqual(
+  t.parseApiHeaders('X-Custom: value\nAuthorization: Bearer tok'),
+  { 'X-Custom': 'value', 'Authorization': 'Bearer tok' },
+  'parseApiHeaders: line-based input',
+);
+
+// Line-based with comments and blank lines
+assert.deepStrictEqual(
+  t.parseApiHeaders('# comment\nX-Key: val\n\n# another\nY-Key: val2'),
+  { 'X-Key': 'val', 'Y-Key': 'val2' },
+  'parseApiHeaders: comments and blank lines skipped',
+);
+
+// Malformed JSON throws
+assert.throws(
+  () => t.parseApiHeaders('{ invalid json }', baseSettings),
+  /parse failed|JSON/i,
+  'parseApiHeaders: malformed JSON throws',
+);
+
+// JSON array falls to line-based parsing and throws format error
+assert.throws(
+  () => t.parseApiHeaders('[1, 2, 3]', baseSettings),
+  /Header.*value|format/i,
+  'parseApiHeaders: JSON array input throws line format error',
+);
+
+// Line-based missing colon throws
+assert.throws(
+  () => t.parseApiHeaders('InvalidHeader', baseSettings),
+  /Header.*value|format/i,
+  'parseApiHeaders: missing colon throws',
+);
+
+// JSON with non-string values filters them out
+assert.deepStrictEqual(
+  t.parseApiHeaders('{"valid": "yes", "number": 42, "null": null}'),
+  { valid: 'yes' },
+  'parseApiHeaders: non-string values filtered from JSON',
+);
+
+// Line-based with value containing colons
+assert.deepStrictEqual(
+  t.parseApiHeaders('Authorization: Bearer abc:def:ghi'),
+  { 'Authorization': 'Bearer abc:def:ghi' },
+  'parseApiHeaders: value with colons preserved',
+);
+
 // ── cli.ts: resolveCliPath ──
 
 // Override path: should return the trimmed override immediately
