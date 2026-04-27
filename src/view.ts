@@ -158,6 +158,20 @@ export class ParallelReaderView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
 
+    this.renderHeader(container);
+    if (this.stale) this.renderStaleBanner(container);
+    if (this.loadingMessage) {
+      this.renderLoadingState(container);
+      return;
+    }
+    if (this.errorMessage) {
+      this.renderErrorState(container);
+      return;
+    }
+    this.renderCardList(container);
+  }
+
+  private renderHeader(container: Element) {
     const header = container.createDiv({ cls: 'parallel-reader-header' });
     const headerRow = header.createDiv({ cls: 'parallel-reader-header-row' });
     headerRow.createEl('div', { text: this.sourceFile?.basename || '', cls: 'parallel-reader-title' });
@@ -175,52 +189,52 @@ export class ParallelReaderView extends ItemView {
       addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => this.plugin.copyCurrentViewMarkdown());
       addIconButton(actions, 'download', this.plugin.t('actionExport'), () => this.exportToVault());
     }
+  }
 
-    if (this.stale) {
-      const banner = container.createDiv({ cls: 'parallel-reader-stale-banner' });
-      banner.createSpan({ text: this.plugin.t('staleBanner') });
-      addTextButton(
-        banner,
-        'refresh-cw',
-        this.plugin.t('actionRegenerate'),
-        () => this.plugin.runForFile(this.sourceFile, true),
-        'parallel-reader-stale-button',
-      );
-    }
+  private renderStaleBanner(container: Element) {
+    const banner = container.createDiv({ cls: 'parallel-reader-stale-banner' });
+    banner.createSpan({ text: this.plugin.t('staleBanner') });
+    addTextButton(
+      banner,
+      'refresh-cw',
+      this.plugin.t('actionRegenerate'),
+      () => this.plugin.runForFile(this.sourceFile, true),
+      'parallel-reader-stale-button',
+    );
+  }
 
-    if (this.loadingMessage) {
-      const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-loading' });
-      state.createDiv({ cls: 'parallel-reader-spinner' });
-      state.createEl('div', { text: this.loadingMessage, cls: 'parallel-reader-state-title' });
-      state.createEl('div', { text: this.plugin.t('loadingSubtitle'), cls: 'parallel-reader-state-subtitle' });
-      return;
-    }
+  private renderLoadingState(container: Element) {
+    const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-loading' });
+    state.createDiv({ cls: 'parallel-reader-spinner' });
+    state.createEl('div', { text: this.loadingMessage, cls: 'parallel-reader-state-title' });
+    state.createEl('div', { text: this.plugin.t('loadingSubtitle'), cls: 'parallel-reader-state-subtitle' });
+  }
 
-    if (this.errorMessage) {
-      const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-error' });
-      state.createEl('div', { text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
-      state.createEl('div', {
-        text: this.errorMessage,
-        cls: 'parallel-reader-state-subtitle parallel-reader-selectable',
-      });
-      const actions = state.createDiv({ cls: 'parallel-reader-error-actions' });
-      addTextButton(
-        actions,
-        'refresh-cw',
-        this.plugin.t('actionRegenerate'),
-        () => this.plugin.runForFile(this.sourceFile, true),
-        'parallel-reader-text-button',
-      );
-      addTextButton(
-        actions,
-        'copy',
-        this.plugin.t('actionCopyError'),
-        () => copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
-        'parallel-reader-text-button',
-      );
-      return;
-    }
+  private renderErrorState(container: Element) {
+    const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-error' });
+    state.createEl('div', { text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
+    state.createEl('div', {
+      text: this.errorMessage,
+      cls: 'parallel-reader-state-subtitle parallel-reader-selectable',
+    });
+    const actions = state.createDiv({ cls: 'parallel-reader-error-actions' });
+    addTextButton(
+      actions,
+      'refresh-cw',
+      this.plugin.t('actionRegenerate'),
+      () => this.plugin.runForFile(this.sourceFile, true),
+      'parallel-reader-text-button',
+    );
+    addTextButton(
+      actions,
+      'copy',
+      this.plugin.t('actionCopyError'),
+      () => copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
+      'parallel-reader-text-button',
+    );
+  }
 
+  private renderCardList(container: Element) {
     const list = container.createDiv({ cls: 'parallel-reader-cards' });
     this.cards = [];
     const sourcePath = this.sourceFile?.path || '';
