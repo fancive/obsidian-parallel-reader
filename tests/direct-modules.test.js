@@ -273,6 +273,63 @@ async function requireBundledModule(relativePath) {
     'direct provider parser import extracts Anthropic tool-use cards',
   );
 
+  // --- Provider parser edge cases ---
+
+  // textFromProviderContent: string input
+  assert.strictEqual(providerParsers.textFromProviderContent('hello'), 'hello', 'textFromProviderContent handles string');
+  // textFromProviderContent: object with output_text
+  assert.strictEqual(providerParsers.textFromProviderContent({ output_text: 'ot' }), 'ot', 'textFromProviderContent handles output_text object');
+  // textFromProviderContent: array with mixed items
+  assert.strictEqual(providerParsers.textFromProviderContent(['a', { text: 'b' }, { output_text: 'c' }, 42]), 'abc', 'textFromProviderContent handles mixed array');
+  // textFromProviderContent: null/undefined
+  assert.strictEqual(providerParsers.textFromProviderContent(null), '', 'textFromProviderContent handles null');
+  assert.strictEqual(providerParsers.textFromProviderContent(undefined), '', 'textFromProviderContent handles undefined');
+  // textFromProviderContent: object with neither text nor output_text
+  assert.strictEqual(providerParsers.textFromProviderContent({ foo: 'bar' }), '', 'textFromProviderContent handles object with no text fields');
+
+  // textFromOpenAiChatResponse: empty choices
+  assert.strictEqual(providerParsers.textFromOpenAiChatResponse({}), '', 'OpenAI Chat parser handles empty response');
+  assert.strictEqual(providerParsers.textFromOpenAiChatResponse({ choices: [] }), '', 'OpenAI Chat parser handles empty choices');
+  // textFromOpenAiChatResponse: text fallback (old completions format)
+  assert.strictEqual(providerParsers.textFromOpenAiChatResponse({ choices: [{ text: 'legacy' }] }), 'legacy', 'OpenAI Chat parser handles legacy text field');
+
+  // textFromAnthropicMessagesResponse: empty content
+  assert.strictEqual(providerParsers.textFromAnthropicMessagesResponse({}), '', 'Anthropic parser handles empty response');
+  assert.strictEqual(providerParsers.textFromAnthropicMessagesResponse({ content: [] }), '', 'Anthropic parser handles empty content');
+  // textFromAnthropicMessagesResponse: multiple content blocks
+  assert.strictEqual(
+    providerParsers.textFromAnthropicMessagesResponse({ content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }),
+    'ab',
+    'Anthropic parser concatenates multiple text blocks',
+  );
+
+  // textFromGoogleGenerativeAiResponse: empty candidates
+  assert.strictEqual(providerParsers.textFromGoogleGenerativeAiResponse({}), '', 'Gemini parser handles empty response');
+  assert.strictEqual(providerParsers.textFromGoogleGenerativeAiResponse({ candidates: [] }), '', 'Gemini parser handles empty candidates');
+  assert.strictEqual(
+    providerParsers.textFromGoogleGenerativeAiResponse({ candidates: [{ content: {} }] }),
+    '',
+    'Gemini parser handles candidate with no parts',
+  );
+
+  // textFromOpenAiResponsesResponse: output_text shortcut
+  assert.strictEqual(providerParsers.textFromOpenAiResponsesResponse({ output_text: 'direct' }), 'direct', 'OpenAI Responses parser handles output_text shortcut');
+  // textFromOpenAiResponsesResponse: nested content with type output_text
+  assert.strictEqual(
+    providerParsers.textFromOpenAiResponsesResponse({ output: [{ content: [{ type: 'output_text', content: 'nested' }] }] }),
+    'nested',
+    'OpenAI Responses parser handles nested output_text content',
+  );
+  // textFromOpenAiResponsesResponse: empty output
+  assert.strictEqual(providerParsers.textFromOpenAiResponsesResponse({}), '', 'OpenAI Responses parser handles empty response');
+
+  // cardsFromAnthropicToolUse: no tool_use block
+  assert.strictEqual(providerParsers.cardsFromAnthropicToolUse({ content: [{ type: 'text', text: 'hello' }] }), null, 'Anthropic tool-use returns null when no tool_use block');
+  // cardsFromAnthropicToolUse: wrong tool name
+  assert.strictEqual(providerParsers.cardsFromAnthropicToolUse({ content: [{ type: 'tool_use', name: 'other_tool', input: {} }] }), null, 'Anthropic tool-use returns null for wrong tool name');
+  // cardsFromAnthropicToolUse: no content array
+  assert.strictEqual(providerParsers.cardsFromAnthropicToolUse({}), null, 'Anthropic tool-use returns null for missing content');
+
   assert.notStrictEqual(
     settings.generationFingerprint({ ...settings.DEFAULT_SETTINGS, model: 'a' }),
     settings.generationFingerprint({ ...settings.DEFAULT_SETTINGS, model: 'b' }),
