@@ -69,7 +69,11 @@ export function parseApiHeaders(raw: string, settings?: PluginSettings | null): 
     try {
       parsed = JSON.parse(text);
     } catch (e: unknown) {
-      throw new Error(translate(settings || null, 'errorCustomHeadersJsonParse', { error: (e as Error).message }));
+      throw new Error(
+        translate(settings || null, 'errorCustomHeadersJsonParse', {
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(translate(settings || null, 'errorCustomHeadersJsonObject'));
@@ -160,7 +164,7 @@ async function requestJsonBody(
     throw new Error(
       translate(settings || null, 'errorProviderRequestFailed', {
         label,
-        error: (e as Error).message || String(e),
+        error: e instanceof Error ? e.message : String(e),
       }),
     );
   }
@@ -178,7 +182,7 @@ async function requestJsonBody(
 }
 
 function shouldRetryWithoutStructuredOutput(error: unknown): boolean {
-  const message = String((error as Error)?.message ?? error);
+  const message = error instanceof Error ? error.message : String(error);
   if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message))
     return false;
   return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(

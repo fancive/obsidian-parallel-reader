@@ -92,7 +92,7 @@ export function runCli(
         },
       });
     } catch (e: unknown) {
-      return reject(new Error(`Failed to start ${cmd}: ${(e as Error).message}`));
+      return reject(new Error(`Failed to start ${cmd}: ${e instanceof Error ? e.message : String(e)}`));
     }
 
     let stdout = '';
