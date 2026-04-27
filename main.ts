@@ -1,14 +1,11 @@
 'use strict';
 import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
-import { findLineForAnchor } from './src/anchor';
 import {
   type BatchRunState,
   batchProgressVars,
   createBatchRunState,
   createBatchStats,
-  hasUnsafeBatchFolderSegments,
   markBatchFileRunning,
-  normalizeBatchFolderInput,
   promptForBatchFolder,
   recordBatchError,
   recordBatchProcessed,
@@ -18,10 +15,9 @@ import {
   shouldSkipBatchFile,
   validateBatchFolderInput,
 } from './src/batch';
-import { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './src/cache';
+import { shouldConfirmRegenerate } from './src/cache';
 import { CacheManager } from './src/cache-manager';
-import { activeIndexAfterCardDelete, removeCardAt, resolveCardAnchors, updateCardAt } from './src/cards';
-import { resolveCliPath, runCli } from './src/cli';
+import { resolveCardAnchors } from './src/cards';
 import { cancellationNoticeKey, summarizeDocument } from './src/generation';
 import {
   classifyGenerationError,
@@ -32,38 +28,11 @@ import {
 import { translate } from './src/i18n';
 import { cardsToMarkdown } from './src/markdown';
 import { confirmRegenerateEditedCards } from './src/modal';
-import { activeSectionLine, nextCardIndex } from './src/navigation';
-import { buildPrompts } from './src/prompt';
-import {
-  buildAnthropicMessagesBody,
-  buildGeminiBody,
-  buildOpenAiChatBody,
-  buildOpenAiResponsesBody,
-  parseApiHeaders,
-  summarizeViaApi,
-  supportsStreaming,
-  tokenLimitFieldForOpenAiChat,
-} from './src/providers';
-import {
-  collectJsonObjectCandidates,
-  extractJson,
-  normalizeCardsPayload,
-  repairTruncatedCardsJson,
-} from './src/schema';
 import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
-import {
-  CACHE_SCHEMA_VERSION,
-  cacheEntryMatches,
-  DEFAULT_SETTINGS,
-  generationFingerprint,
-  getApiBaseUrl,
-  modelForApi,
-  normalizeSettings,
-  normalizeStreamingTimeoutMs,
-  pruneCacheEntries,
-} from './src/settings';
+import { cacheEntryMatches, DEFAULT_SETTINGS, normalizeSettings } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
-import { deltaExtractorForFormat, parseSseBuffer, type StreamProgress } from './src/streaming';
+import type { StreamProgress } from './src/streaming';
+import * as testExports from './src/test-exports';
 import type {
   CacheEntry,
   ObsidianEditorWithCm,
@@ -72,8 +41,7 @@ import type {
   PluginSettings,
   ResolvedCard,
 } from './src/types';
-import { addIconButton, addTextButton, copyToClipboard } from './src/ui-helpers';
-import { folderPathsForTarget } from './src/vault';
+import { copyToClipboard } from './src/ui-helpers';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
 
 /* ---------- Plugin ---------- */
@@ -722,67 +690,4 @@ class ParallelReaderPlugin extends Plugin {
 }
 
 export default ParallelReaderPlugin;
-export const __test = {
-  CACHE_SCHEMA_VERSION,
-  GenerationJobAlreadyRunningError,
-  GenerationJobCancelledError,
-  GenerationJobManager,
-  addIconButton,
-  addTextButton,
-  activeIndexAfterCardDelete,
-  activeSectionLine,
-  buildAnthropicMessagesBody,
-  buildGeminiBody,
-  buildOpenAiChatBody,
-  buildOpenAiResponsesBody,
-  batchProgressVars,
-  buildPrompts,
-  cardsToMarkdown,
-  CacheManager,
-  cacheEntryMatches,
-  cancellationNoticeKey,
-  classifyGenerationError,
-  collectJsonObjectCandidates,
-  copyToClipboard,
-  createRafThrottledHandler,
-  createBatchRunState,
-  extractJson,
-  repairTruncatedCardsJson,
-  findLineForAnchor,
-  folderPathsForTarget,
-  createBatchStats,
-  generationFingerprint,
-  getApiBaseUrl,
-  hasUnsafeBatchFolderSegments,
-  markBatchFileRunning,
-  modelForApi,
-  normalizeBatchFolderInput,
-  normalizeCardsPayload,
-  parseApiHeaders,
-  normalizeSettings,
-  normalizeStreamingTimeoutMs,
-  nextCardIndex,
-  pruneCacheEntries,
-  recordBatchError,
-  recordBatchProcessed,
-  recordBatchSkip,
-  requestBatchCancel,
-  removeCardAt,
-  resolveCliPath,
-  runCli,
-  serializeCacheFile,
-  shouldConfirmRegenerate,
-  shouldSkipBatchFile,
-  selectBatchFiles,
-  summarizeDocument,
-  summarizeViaApi,
-  touchCacheEntry,
-  translate,
-  tokenLimitFieldForOpenAiChat,
-  updateCardAt,
-  validateBatchFolderInput,
-  visibleTopProbeY,
-  supportsStreaming,
-  deltaExtractorForFormat,
-  parseSseBuffer,
-};
+export const __test = testExports;
