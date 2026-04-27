@@ -352,6 +352,12 @@ class ParallelReaderPlugin extends Plugin {
 
   confirmRegenerateEditedCards(): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const settle = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
       const message = this.t('confirmRegenerateEditedCards');
       const modal = new Modal(this.app);
       modal.titleEl.setText(this.t('displayName'));
@@ -359,13 +365,13 @@ class ParallelReaderPlugin extends Plugin {
       const btnRow = modal.contentEl.createDiv({ cls: 'modal-button-container' });
       btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => {
         modal.close();
-        resolve(false);
+        settle(false);
       });
       btnRow.createEl('button', { text: 'OK', cls: 'mod-cta' }).addEventListener('click', () => {
         modal.close();
-        resolve(true);
+        settle(true);
       });
-      modal.onClose = () => resolve(false);
+      modal.onClose = () => settle(false);
       modal.open();
     });
   }
