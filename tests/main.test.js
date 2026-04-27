@@ -1,13 +1,7 @@
-const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-require('./obsidian-mock');
-
-const plugin = require('../main.js');
-const t = plugin.__test;
-
-assert.ok(t, 'test helpers should be exported');
+const { assert, t } = require('./test-setup');
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.ts'), 'utf8');
 const viewSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'view.ts'), 'utf8');
 assert.ok(!/\basync\s+onOpen\s*\(/.test(viewSource), 'ParallelReaderView.onOpen should not be async without await');

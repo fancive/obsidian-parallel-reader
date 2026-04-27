@@ -32,7 +32,6 @@ import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import { cacheEntryMatches, DEFAULT_SETTINGS, normalizeSettings } from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
 import type { StreamProgress } from './src/streaming';
-import * as testExports from './src/test-exports';
 import type {
   CacheEntry,
   ObsidianEditorWithCm,
@@ -690,4 +689,3 @@ class ParallelReaderPlugin extends Plugin {
 }
 
 export default ParallelReaderPlugin;
-export const __test = testExports;

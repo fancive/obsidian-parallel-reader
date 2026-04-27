@@ -1,8 +1,7 @@
-const assert = require('assert');
-require('./obsidian-mock');
+const { assert, t } = require('./test-setup');
 
 const { GenerationJobAlreadyRunningError, GenerationJobCancelledError, GenerationJobManager, classifyGenerationError } =
-  require('../main.js').__test;
+  t;
 
 async function testSingleFlightAndCleanup() {
   const manager = new GenerationJobManager();
