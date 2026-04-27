@@ -4,29 +4,30 @@ const { assert, t, baseSettings } = require('./test-setup');
 
 assert.strictEqual(
   t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'openai-chat' }),
-  true, 'OpenAI Chat supports streaming'
+  true,
+  'OpenAI Chat supports streaming',
 );
 assert.strictEqual(
   t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'anthropic-messages', apiProvider: 'anthropic' }),
-  true, 'Anthropic Messages supports streaming'
+  true,
+  'Anthropic Messages supports streaming',
 );
 assert.strictEqual(
   t.supportsStreaming({ ...baseSettings, streaming: true, apiFormat: 'google-generative-ai', apiProvider: 'google' }),
-  false, 'Gemini does not support streaming'
+  false,
+  'Gemini does not support streaming',
 );
 assert.strictEqual(
   t.supportsStreaming({ ...baseSettings, streaming: false, apiFormat: 'openai-chat' }),
-  false, 'streaming disabled returns false'
+  false,
+  'streaming disabled returns false',
 );
 
 // ── deltaExtractorForFormat ──
 
 const openaiExtract = t.deltaExtractorForFormat('openai-chat');
 assert.ok(openaiExtract, 'openai-chat extractor exists');
-assert.strictEqual(
-  openaiExtract({ choices: [{ delta: { content: 'hello' } }] }),
-  'hello', 'extracts OpenAI delta'
-);
+assert.strictEqual(openaiExtract({ choices: [{ delta: { content: 'hello' } }] }), 'hello', 'extracts OpenAI delta');
 assert.strictEqual(openaiExtract({ choices: [{ delta: {} }] }), '', 'empty delta');
 assert.strictEqual(openaiExtract({}), '', 'missing choices');
 
@@ -34,12 +35,10 @@ const anthropicExtract = t.deltaExtractorForFormat('anthropic-messages');
 assert.ok(anthropicExtract, 'anthropic extractor exists');
 assert.strictEqual(
   anthropicExtract({ type: 'content_block_delta', delta: { text: 'world' } }),
-  'world', 'extracts Anthropic delta'
+  'world',
+  'extracts Anthropic delta',
 );
-assert.strictEqual(
-  anthropicExtract({ type: 'message_start' }),
-  '', 'non-delta event returns empty'
-);
+assert.strictEqual(anthropicExtract({ type: 'message_start' }), '', 'non-delta event returns empty');
 
 assert.strictEqual(t.deltaExtractorForFormat('google-generative-ai'), null, 'no extractor for gemini');
 
@@ -79,10 +78,7 @@ const sseMultilineData = t.parseSseBuffer(
 );
 assert.deepStrictEqual(sseMultilineData.deltas, ['joined'], 'consecutive data lines are merged into one event');
 
-const ssePartialEvent = t.parseSseBuffer(
-  'data: {"choices":[{"delta":{"content":"wait"}}]}\n',
-  openaiExtract,
-);
+const ssePartialEvent = t.parseSseBuffer('data: {"choices":[{"delta":{"content":"wait"}}]}\n', openaiExtract);
 assert.deepStrictEqual(ssePartialEvent.deltas, [], 'event without blank-line terminator is retained');
 assert.strictEqual(ssePartialEvent.rest.includes('"wait"'), true, 'partial event remains in rest');
 

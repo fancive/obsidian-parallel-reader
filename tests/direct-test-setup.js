@@ -22,7 +22,8 @@ async function requireBundledModule(relativePath) {
         setup(build) {
           build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian-stub', namespace: 'stub' }));
           build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-            contents: 'module.exports = { requestUrl: async () => { throw new Error("requestUrl not available in direct module tests"); } };',
+            contents:
+              'module.exports = { requestUrl: async () => { throw new Error("requestUrl not available in direct module tests"); } };',
             loader: 'js',
           }));
         },

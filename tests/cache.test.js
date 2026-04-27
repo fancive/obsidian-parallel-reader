@@ -5,7 +5,11 @@ const { assert, t } = require('./test-setup');
 assert.strictEqual(t.touchCacheEntry(null), null, 'touchCacheEntry on null returns null');
 const entry = { generatedAt: '2024-01-01T00:00:00.000Z' };
 const touched = t.touchCacheEntry(entry, '2024-06-01T00:00:00.000Z');
-assert.strictEqual(touched.lastAccessedAt, '2024-06-01T00:00:00.000Z', 'touchCacheEntry sets lastAccessedAt on returned entry');
+assert.strictEqual(
+  touched.lastAccessedAt,
+  '2024-06-01T00:00:00.000Z',
+  'touchCacheEntry sets lastAccessedAt on returned entry',
+);
 assert.strictEqual(entry.lastAccessedAt, undefined, 'touchCacheEntry does not mutate original entry');
 
 const serialized = t.serializeCacheFile({ 'a.md': { cards: [] } });
@@ -45,7 +49,11 @@ async function testCacheManagerMove() {
   assert.strictEqual(await manager.move('  ', 'new.md'), false, 'blank source path is rejected');
   assert.strictEqual(await manager.move('old.md', '   '), false, 'blank target path is rejected');
   assert.strictEqual(await manager.move('old.md', 'old.md'), true, 'same-path move is a no-op success');
-  assert.strictEqual(await manager.move('old.md', 'other.md'), false, 'move does not overwrite an existing target path');
+  assert.strictEqual(
+    await manager.move('old.md', 'other.md'),
+    false,
+    'move does not overwrite an existing target path',
+  );
   assert.strictEqual(writes.length, 0, 'no-op and rejected cache moves are not persisted');
   assert.strictEqual(await manager.move('old.md', 'new.md'), true, 'existing cache move returns true');
   assert.strictEqual(manager.cache['old.md'], undefined, 'old cache path is removed');

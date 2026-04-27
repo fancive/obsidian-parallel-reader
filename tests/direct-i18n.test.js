@@ -6,10 +6,20 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
 
     assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'displayName'), 'Parallel Reader');
     assert.strictEqual(i18n.translate({ uiLanguage: 'zh' }, 'displayName'), '对照阅读笔记');
-    assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'cacheClearedFile', { name: 'test.md' }), 'Cleared cache: test.md');
-    assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'generationDone', { count: 5, suffix: '' }), 'Generated 5 sections');
     assert.strictEqual(
-      i18n.translate({ uiLanguage: 'en' }, 'errorProviderApiStatus', { label: 'OpenAI', status: 429, excerpt: 'rate limited' }),
+      i18n.translate({ uiLanguage: 'en' }, 'cacheClearedFile', { name: 'test.md' }),
+      'Cleared cache: test.md',
+    );
+    assert.strictEqual(
+      i18n.translate({ uiLanguage: 'en' }, 'generationDone', { count: 5, suffix: '' }),
+      'Generated 5 sections',
+    );
+    assert.strictEqual(
+      i18n.translate({ uiLanguage: 'en' }, 'errorProviderApiStatus', {
+        label: 'OpenAI',
+        status: 429,
+        excerpt: 'rate limited',
+      }),
       'OpenAI API returned HTTP 429: rate limited',
     );
     assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'nonExistentKey123'), 'nonExistentKey123');
@@ -34,4 +44,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

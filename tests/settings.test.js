@@ -9,20 +9,28 @@ assert.throws(() => t.modelForApi({ ...baseSettings, model: '' }), /Model/, 'emp
 assert.strictEqual(
   t.getApiBaseUrl({ ...baseSettings, apiBaseUrl: 'https://custom.ai/v1/' }),
   'https://custom.ai/v1',
-  'strips trailing slash'
+  'strips trailing slash',
 );
 assert.throws(
   () => t.getApiBaseUrl({ ...baseSettings, apiProvider: 'custom-openai', apiBaseUrl: '' }),
   /Custom provider/,
-  'custom provider without url throws'
+  'custom provider without url throws',
 );
 
 // generationFingerprint stability
 const fp1 = t.generationFingerprint(baseSettings);
 const fp2 = t.generationFingerprint({ ...baseSettings });
 assert.strictEqual(fp1, fp2, 'same settings = same fingerprint');
-assert.notStrictEqual(fp1, t.generationFingerprint({ ...baseSettings, model: 'other' }), 'different model = different fp');
-assert.notStrictEqual(fp1, t.generationFingerprint({ ...baseSettings, apiMaxTokens: 8192 }), 'different tokens = different fp');
+assert.notStrictEqual(
+  fp1,
+  t.generationFingerprint({ ...baseSettings, model: 'other' }),
+  'different model = different fp',
+);
+assert.notStrictEqual(
+  fp1,
+  t.generationFingerprint({ ...baseSettings, apiMaxTokens: 8192 }),
+  'different tokens = different fp',
+);
 assert.strictEqual(t.normalizeStreamingTimeoutMs('30000'), 30000, 'streaming timeout accepts numeric strings');
 assert.strictEqual(t.normalizeStreamingTimeoutMs(999), 120000, 'streaming timeout below minimum falls back');
 assert.strictEqual(t.normalizeStreamingTimeoutMs('bad'), 120000, 'streaming timeout rejects non-numeric values');
@@ -45,20 +53,29 @@ assert.strictEqual(normalized.maxCards, 30, 'normalizeSettings clamps maxCards t
 const crypto = require('crypto');
 const hash = crypto.createHash('sha1').update('test', 'utf8').digest('hex');
 assert.strictEqual(
-  t.cacheEntryMatches({
-    schemaVersion: t.CACHE_SCHEMA_VERSION,
-    contentHash: hash,
-    settingsHash: t.generationFingerprint(baseSettings),
-  }, 'test', baseSettings),
-  true, 'matching entry returns true'
+  t.cacheEntryMatches(
+    {
+      schemaVersion: t.CACHE_SCHEMA_VERSION,
+      contentHash: hash,
+      settingsHash: t.generationFingerprint(baseSettings),
+    },
+    'test',
+    baseSettings,
+  ),
+  true,
+  'matching entry returns true',
 );
 assert.strictEqual(t.cacheEntryMatches(null, 'test', baseSettings), false, 'null entry returns false');
 assert.strictEqual(
-  t.shouldSkipBatchFile({
-    schemaVersion: t.CACHE_SCHEMA_VERSION,
-    contentHash: hash,
-    settingsHash: t.generationFingerprint(baseSettings),
-  }, 'test', baseSettings),
+  t.shouldSkipBatchFile(
+    {
+      schemaVersion: t.CACHE_SCHEMA_VERSION,
+      contentHash: hash,
+      settingsHash: t.generationFingerprint(baseSettings),
+    },
+    'test',
+    baseSettings,
+  ),
   true,
   'fresh cache entry is skipped during batch',
 );

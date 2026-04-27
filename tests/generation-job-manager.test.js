@@ -1,19 +1,17 @@
 const assert = require('assert');
 require('./obsidian-mock');
 
-const {
-  GenerationJobAlreadyRunningError,
-  GenerationJobCancelledError,
-  GenerationJobManager,
-  classifyGenerationError,
-} = require('../main.js').__test;
+const { GenerationJobAlreadyRunningError, GenerationJobCancelledError, GenerationJobManager, classifyGenerationError } =
+  require('../main.js').__test;
 
 async function testSingleFlightAndCleanup() {
   const manager = new GenerationJobManager();
   let release;
-  const blocker = new Promise(resolve => { release = resolve; });
+  const blocker = new Promise((resolve) => {
+    release = resolve;
+  });
 
-  const first = manager.start('note.md', async job => {
+  const first = manager.start('note.md', async (job) => {
     job.setPhase('reading');
     await blocker;
     job.setPhase('done');
@@ -22,10 +20,7 @@ async function testSingleFlightAndCleanup() {
 
   assert.strictEqual(manager.isRunning('note.md'), true);
   assert.strictEqual(manager.get('note.md').phase, 'reading');
-  await assert.rejects(
-    () => manager.start('note.md', async () => 'duplicate'),
-    GenerationJobAlreadyRunningError
-  );
+  await assert.rejects(() => manager.start('note.md', async () => 'duplicate'), GenerationJobAlreadyRunningError);
 
   release();
   assert.strictEqual(await first, 'ok');
@@ -37,8 +32,10 @@ async function testCancelSignalsRunnerAndCleansUp() {
   const manager = new GenerationJobManager();
   let cancelHookCalled = false;
 
-  const running = manager.start('cancel.md', async job => {
-    job.onCancel(() => { cancelHookCalled = true; });
+  const running = manager.start('cancel.md', async (job) => {
+    job.onCancel(() => {
+      cancelHookCalled = true;
+    });
     await Promise.resolve();
     job.throwIfCancelled();
     return 'should-not-complete';

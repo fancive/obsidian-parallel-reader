@@ -13,15 +13,24 @@ const viewSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'view.ts'),
 assert.ok(!/\basync\s+onOpen\s*\(/.test(viewSource), 'ParallelReaderView.onOpen should not be async without await');
 assert.ok(!/\basync\s+onClose\s*\(\)\s*\{\s*\}/.test(viewSource), 'empty onClose should not be async');
 assert.ok(/focusSummaryPane\s*\(\)/.test(viewSource), 'summary pane should expose a focus helper');
-assert.ok(/\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(viewSource), 'summary pane focus should not scroll the page');
+assert.ok(
+  /\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(viewSource),
+  'summary pane focus should not scroll the page',
+);
 assert.ok(/moveActiveSection[\s\S]*focusSummaryPane/.test(viewSource), 'card navigation should focus the summary pane');
 assert.ok(/scheduleCacheSave\s*\(/.test(mainSource), 'cache touch should use a debounced cache save path');
 assert.ok(/flushCacheSave\s*\(/.test(mainSource), 'pending cache touches should be flushable');
 assert.ok(/onunload[\s\S]*flushCacheSave/.test(mainSource), 'plugin unload should flush pending cache touches');
 assert.ok(/cacheTouch[\s\S]*scheduleCacheSave/.test(mainSource), 'cacheTouch should schedule a cache save');
-assert.ok(!/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource), 'cacheTouch should not synchronously write cache.json');
+assert.ok(
+  !/cacheTouch[\s\S]{0,220}await this\.saveCache/.test(mainSource),
+  'cacheTouch should not synchronously write cache.json',
+);
 assert.ok(/handleFileRename[\s\S]*cacheManager\.move/.test(mainSource), 'file rename should delegate cache moves');
-assert.ok(!/handleFileRename[\s\S]*cacheManager\.cache\[/.test(mainSource), 'file rename should not mutate cache directly');
+assert.ok(
+  !/handleFileRename[\s\S]*cacheManager\.cache\[/.test(mainSource),
+  'file rename should not mutate cache directly',
+);
 assert.ok(!/function addIconButton/.test(mainSource), 'UI icon helper should live outside main.ts');
 assert.ok(!/function addTextButton/.test(mainSource), 'UI text-button helper should live outside main.ts');
 assert.ok(!/function copyToClipboard/.test(mainSource), 'clipboard helper should live outside main.ts');
@@ -75,92 +84,105 @@ const baseSettings = {
 assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, model: 'openai/gpt-5.2' }),
-  'cache fingerprint should change when model changes'
+  'cache fingerprint should change when model changes',
 );
 assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, maxDocChars: 50000 }),
-  'cache fingerprint should change when input truncation limit changes'
+  'cache fingerprint should change when input truncation limit changes',
 );
 assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, promptLanguage: 'en' }),
-  'cache fingerprint should change when prompt language changes'
+  'cache fingerprint should change when prompt language changes',
 );
 assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, minCards: 3, maxCards: 8 }),
-  'cache fingerprint should change when card count range changes'
+  'cache fingerprint should change when card count range changes',
 );
 assert.notStrictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, customSystemPrompt: 'custom prompt' }),
-  'cache fingerprint should change when custom prompt changes'
+  'cache fingerprint should change when custom prompt changes',
 );
 assert.strictEqual(
   t.generationFingerprint(baseSettings),
   t.generationFingerprint({ ...baseSettings, uiLanguage: 'en' }),
-  'cache fingerprint should not change when UI language changes'
+  'cache fingerprint should not change when UI language changes',
 );
 assert.strictEqual(
   t.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
   'cancelRequestedApiInFlight',
-  'API cancellation should explain that the in-flight network request cannot be aborted'
+  'API cancellation should explain that the in-flight network request cannot be aborted',
 );
 assert.strictEqual(
   t.cancellationNoticeKey({ backend: 'claude-code' }, { phase: 'generating' }),
   'cancelRequested',
-  'CLI cancellation can use the generic cancellation notice'
+  'CLI cancellation can use the generic cancellation notice',
 );
 assert.strictEqual(
   t.cancellationNoticeKey({ backend: 'api' }, { phase: 'reading' }),
   'cancelRequested',
-  'API cancellation outside the request phase can use the generic notice'
+  'API cancellation outside the request phase can use the generic notice',
 );
 assert.strictEqual(t.resolveCliPath('codex', '  /tmp/codex  '), '/tmp/codex');
 assert.throws(
   () => t.modelForApi({ ...baseSettings, model: '', uiLanguage: 'en' }),
   /Model is not set/,
-  'settings errors should respect English UI mode'
+  'settings errors should respect English UI mode',
 );
 assert.throws(
-  () => t.getApiBaseUrl({
-    ...baseSettings,
-    apiProvider: 'custom-openai-compatible',
-    apiBaseUrl: '',
-    uiLanguage: 'en',
-  }),
+  () =>
+    t.getApiBaseUrl({
+      ...baseSettings,
+      apiProvider: 'custom-openai-compatible',
+      apiBaseUrl: '',
+      uiLanguage: 'en',
+    }),
   /Custom provider requires an API Base URL/,
-  'custom provider base URL errors should respect English UI mode'
+  'custom provider base URL errors should respect English UI mode',
 );
 
 const contentHash = crypto.createHash('sha1').update('hello', 'utf8').digest('hex');
 assert.strictEqual(
-  t.cacheEntryMatches({
-    schemaVersion: t.CACHE_SCHEMA_VERSION,
-    contentHash,
-    settingsHash: t.generationFingerprint(baseSettings),
-  }, 'hello', baseSettings),
+  t.cacheEntryMatches(
+    {
+      schemaVersion: t.CACHE_SCHEMA_VERSION,
+      contentHash,
+      settingsHash: t.generationFingerprint(baseSettings),
+    },
+    'hello',
+    baseSettings,
+  ),
   true,
-  'cache should match content, schema version, and generation fingerprint'
+  'cache should match content, schema version, and generation fingerprint',
 );
 assert.strictEqual(
-  t.cacheEntryMatches({
-    schemaVersion: t.CACHE_SCHEMA_VERSION,
-    contentHash,
-    settingsHash: t.generationFingerprint({ ...baseSettings, model: 'openai/gpt-5.2' }),
-  }, 'hello', baseSettings),
+  t.cacheEntryMatches(
+    {
+      schemaVersion: t.CACHE_SCHEMA_VERSION,
+      contentHash,
+      settingsHash: t.generationFingerprint({ ...baseSettings, model: 'openai/gpt-5.2' }),
+    },
+    'hello',
+    baseSettings,
+  ),
   false,
-  'cache should miss when generation settings change'
+  'cache should miss when generation settings change',
 );
 assert.strictEqual(
-  t.cacheEntryMatches({
-    schemaVersion: t.CACHE_SCHEMA_VERSION - 1,
-    contentHash,
-    settingsHash: t.generationFingerprint(baseSettings),
-  }, 'hello', baseSettings),
+  t.cacheEntryMatches(
+    {
+      schemaVersion: t.CACHE_SCHEMA_VERSION - 1,
+      contentHash,
+      settingsHash: t.generationFingerprint(baseSettings),
+    },
+    'hello',
+    baseSettings,
+  ),
   false,
-  'cache should miss when schema version changes'
+  'cache should miss when schema version changes',
 );
 
 const cacheForPrune = {
@@ -177,7 +199,7 @@ assert.deepStrictEqual(Object.keys(cacheForPrune).sort(), ['new.md', 'touched.md
 assert.strictEqual(
   t.findLineForAnchor('intro\nAlpha   beta\nGamma\tDelta\nlast', 'Alpha beta Gamma Delta'),
   1,
-  'whitespace-normalized anchor fallback should map back to the original source line'
+  'whitespace-normalized anchor fallback should map back to the original source line',
 );
 
 const englishPrompt = t.buildPrompts('Hello world', {
@@ -219,10 +241,15 @@ assert.strictEqual(t.activeSectionLine([{ startLine: -1 }], 0), -1);
 assert.strictEqual(t.activeSectionLine([{ startLine: 3 }], 1), -1);
 const scheduledFrames = [];
 let throttledCalls = 0;
-const throttled = t.createRafThrottledHandler(() => { throttledCalls += 1; }, cb => {
-  scheduledFrames.push(cb);
-  return scheduledFrames.length;
-});
+const throttled = t.createRafThrottledHandler(
+  () => {
+    throttledCalls += 1;
+  },
+  (cb) => {
+    scheduledFrames.push(cb);
+    return scheduledFrames.length;
+  },
+);
 throttled();
 throttled();
 throttled();
@@ -240,13 +267,22 @@ assert.deepStrictEqual(t.removeCardAt(cardList, -1), cardList);
 assert.deepStrictEqual(t.removeCardAt(cardList, 3), cardList);
 assert.notStrictEqual(t.removeCardAt(cardList, 3), cardList);
 assert.strictEqual(t.activeIndexAfterCardDelete(1, 3, 1), 1, 'deleting active card should select the next card');
-assert.strictEqual(t.activeIndexAfterCardDelete(2, 3, 2), 1, 'deleting the last active card should select the previous card');
-assert.strictEqual(t.activeIndexAfterCardDelete(1, 3, 2), 1, 'deleting before active card should shift active index left');
-assert.strictEqual(t.activeIndexAfterCardDelete(2, 3, 0), 0, 'deleting after active card should keep active index');
-assert.deepStrictEqual(
-  t.updateCardAt(cardList, 1, { title: 'B2', gist: 'G', bullets: ['x'] }),
-  [{ title: 'A' }, { title: 'B2', gist: 'G', bullets: ['x'] }, { title: 'C' }]
+assert.strictEqual(
+  t.activeIndexAfterCardDelete(2, 3, 2),
+  1,
+  'deleting the last active card should select the previous card',
 );
+assert.strictEqual(
+  t.activeIndexAfterCardDelete(1, 3, 2),
+  1,
+  'deleting before active card should shift active index left',
+);
+assert.strictEqual(t.activeIndexAfterCardDelete(2, 3, 0), 0, 'deleting after active card should keep active index');
+assert.deepStrictEqual(t.updateCardAt(cardList, 1, { title: 'B2', gist: 'G', bullets: ['x'] }), [
+  { title: 'A' },
+  { title: 'B2', gist: 'G', bullets: ['x'] },
+  { title: 'C' },
+]);
 assert.deepStrictEqual(t.updateCardAt(cardList, -1, { title: 'X' }), cardList);
 assert.deepStrictEqual(t.updateCardAt(cardList, 3, { title: 'X' }), cardList);
 assert.notStrictEqual(t.updateCardAt(cardList, 3, { title: 'X' }), cardList);
@@ -270,7 +306,8 @@ const serializedCache = t.serializeCacheFile({
 assert.strictEqual(serializedCache.includes('\n'), false, 'cache.json should be compact');
 assert.deepStrictEqual(JSON.parse(serializedCache).entries['note.md'].cards, [{ title: 'A' }]);
 
-const noisyJson = '说明文字 {"cards":[{"title":"A","anchor":"保留 { 花括号 } 字符","gist":"G","bullets":["B"]}]} trailing';
+const noisyJson =
+  '说明文字 {"cards":[{"title":"A","anchor":"保留 { 花括号 } 字符","gist":"G","bullets":["B"]}]} trailing';
 const extracted = t.extractJson(noisyJson);
 assert.deepStrictEqual(JSON.parse(extracted).cards[0].bullets, ['B']);
 
@@ -309,22 +346,24 @@ assert.strictEqual(anthropicBody.tools[0].name, 'record_parallel_reader_cards');
 assert.strictEqual(anthropicBody.tool_choice.name, 'record_parallel_reader_cards');
 assert.strictEqual(
   t.buildAnthropicMessagesBody('system JSON', 'user', baseSettings, { structured: false }).tools,
-  undefined
+  undefined,
 );
 
-const markdown = t.cardsToMarkdown('Example', [{
-  title: '第一段',
-  anchor: '原文引用',
-  gist: '核心摘要',
-  bullets: ['要点 A', '要点 B'],
-}]);
+const markdown = t.cardsToMarkdown('Example', [
+  {
+    title: '第一段',
+    anchor: '原文引用',
+    gist: '核心摘要',
+    bullets: ['要点 A', '要点 B'],
+  },
+]);
 assert.ok(markdown.includes('# Example'));
 assert.ok(markdown.includes('## 第一段'));
 assert.ok(markdown.includes('- 要点 A'));
 
 async function testOpenAiStructuredFallback() {
   const calls = [];
-  const requestUrlImpl = async req => {
+  const requestUrlImpl = async (req) => {
     const body = JSON.parse(req.body);
     calls.push(body);
     if (calls.length === 1) {
@@ -333,11 +372,13 @@ async function testOpenAiStructuredFallback() {
     return {
       status: 200,
       json: {
-        choices: [{
-          message: {
-            content: '{"cards":[{"title":"T","anchor":"A","gist":"G","bullets":["B"]}]}',
+        choices: [
+          {
+            message: {
+              content: '{"cards":[{"title":"T","anchor":"A","gist":"G","bullets":["B"]}]}',
+            },
           },
-        }],
+        ],
       },
     };
   };
@@ -358,103 +399,143 @@ async function testOpenAiStructuredFallback() {
 
 async function testProviderMissingApiKeyUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => {
-      throw new Error('request should not be sent');
-    }, 'system JSON', 'user', {
-      ...baseSettings,
-      apiKey: '',
-      apiKeyEnvVar: '',
-      uiLanguage: 'en',
-    }),
-    /API key is not set/
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('request should not be sent');
+        },
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          apiKey: '',
+          apiKeyEnvVar: '',
+          uiLanguage: 'en',
+        },
+      ),
+    /API key is not set/,
   );
 }
 
 async function testProviderHeaderJsonErrorUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => {
-      throw new Error('request should not be sent');
-    }, 'system JSON', 'user', {
-      ...baseSettings,
-      apiHeaders: '{"x":',
-      uiLanguage: 'en',
-    }),
-    /Custom headers JSON parse failed/
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('request should not be sent');
+        },
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          apiHeaders: '{"x":',
+          uiLanguage: 'en',
+        },
+      ),
+    /Custom headers JSON parse failed/,
   );
 }
 
 async function testProviderResponseNonJsonUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => ({
-      status: 200,
-      text: '<html>not json</html>',
-    }), 'system JSON', 'user', {
-      ...baseSettings,
-      uiLanguage: 'en',
-    }),
-    /OpenAI-compatible Chat returned non-JSON/
+    () =>
+      t.summarizeViaApi(
+        async () => ({
+          status: 200,
+          text: '<html>not json</html>',
+        }),
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          uiLanguage: 'en',
+        },
+      ),
+    /OpenAI-compatible Chat returned non-JSON/,
   );
 }
 
 async function testProviderRequestFailureUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => {
-      throw new Error('network down');
-    }, 'system JSON', 'user', {
-      ...baseSettings,
-      uiLanguage: 'en',
-    }),
-    /OpenAI-compatible Chat request failed: network down/
+    () =>
+      t.summarizeViaApi(
+        async () => {
+          throw new Error('network down');
+        },
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          uiLanguage: 'en',
+        },
+      ),
+    /OpenAI-compatible Chat request failed: network down/,
   );
 }
 
 async function testProviderApiStatusErrorUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => ({
-      status: 500,
-      text: 'upstream exploded',
-    }), 'system JSON', 'user', {
-      ...baseSettings,
-      uiLanguage: 'en',
-    }),
-    /OpenAI-compatible Chat API returned HTTP 500: upstream exploded/
+    () =>
+      t.summarizeViaApi(
+        async () => ({
+          status: 500,
+          text: 'upstream exploded',
+        }),
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          uiLanguage: 'en',
+        },
+      ),
+    /OpenAI-compatible Chat API returned HTTP 500: upstream exploded/,
   );
 }
 
 async function testSchemaNonJsonErrorUsesEnglishUi() {
   await assert.rejects(
-    () => t.summarizeViaApi(async () => ({
-      status: 200,
-      json: {
-        choices: [{
-          message: {
-            content: 'not json',
+    () =>
+      t.summarizeViaApi(
+        async () => ({
+          status: 200,
+          json: {
+            choices: [
+              {
+                message: {
+                  content: 'not json',
+                },
+              },
+            ],
           },
-        }],
-      },
-    }), 'system JSON', 'user', {
-      ...baseSettings,
-      uiLanguage: 'en',
-    }),
-    /LLM returned non-JSON/
+        }),
+        'system JSON',
+        'user',
+        {
+          ...baseSettings,
+          uiLanguage: 'en',
+        },
+      ),
+    /LLM returned non-JSON/,
   );
 }
 
 async function testAnthropicToolUseParsing() {
-  const requestUrlImpl = async req => {
+  const requestUrlImpl = async (req) => {
     const body = JSON.parse(req.body);
     assert.strictEqual(body.tools[0].name, 'record_parallel_reader_cards');
     assert.strictEqual(body.tool_choice.name, 'record_parallel_reader_cards');
     return {
       status: 200,
       json: {
-        content: [{
-          type: 'tool_use',
-          name: 'record_parallel_reader_cards',
-          input: {
-            cards: [{ title: 'A', anchor: 'quote', gist: 'gist', bullets: ['one'] }],
+        content: [
+          {
+            type: 'tool_use',
+            name: 'record_parallel_reader_cards',
+            input: {
+              cards: [{ title: 'A', anchor: 'quote', gist: 'gist', bullets: ['one'] }],
+            },
           },
-        }],
+        ],
       },
     };
   };
@@ -480,7 +561,7 @@ async function testAnthropicToolUseParsing() {
   await testSchemaNonJsonErrorUsesEnglishUi();
   await testAnthropicToolUseParsing();
   console.log('tests passed');
-})().catch(e => {
+})().catch((e) => {
   console.error(e);
   process.exit(1);
 });

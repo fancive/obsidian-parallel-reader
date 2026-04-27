@@ -48,8 +48,14 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const envVarName = '__PARALLEL_READER_TEST_KEY__';
     process.env[envVarName] = 'env-key-val';
     try {
-      assert.strictEqual(settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: '', apiKeyEnvVar: envVarName }), 'env-key-val');
-      assert.strictEqual(settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: 'direct', apiKeyEnvVar: envVarName }), 'direct');
+      assert.strictEqual(
+        settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: '', apiKeyEnvVar: envVarName }),
+        'env-key-val',
+      );
+      assert.strictEqual(
+        settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: 'direct', apiKeyEnvVar: envVarName }),
+        'direct',
+      );
     } finally {
       delete process.env[envVarName];
     }
@@ -61,12 +67,19 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
       schemaVersion: settings.CACHE_SCHEMA_VERSION,
       contentHash: settings.hashContent(testContent),
       settingsHash: settings.generationFingerprint(testSettings),
-      cards: [], generatedAt: '2024-01-01T00:00:00.000Z',
+      cards: [],
+      generatedAt: '2024-01-01T00:00:00.000Z',
     };
     assert.strictEqual(settings.cacheEntryMatches(validEntry, testContent, testSettings), true);
     assert.strictEqual(settings.cacheEntryMatches(null, testContent, testSettings), false);
-    assert.strictEqual(settings.cacheEntryMatches({ ...validEntry, contentHash: 'wrong' }, testContent, testSettings), false);
-    assert.strictEqual(settings.cacheEntryMatches({ ...validEntry, schemaVersion: 999 }, testContent, testSettings), false);
+    assert.strictEqual(
+      settings.cacheEntryMatches({ ...validEntry, contentHash: 'wrong' }, testContent, testSettings),
+      false,
+    );
+    assert.strictEqual(
+      settings.cacheEntryMatches({ ...validEntry, schemaVersion: 999 }, testContent, testSettings),
+      false,
+    );
     assert.strictEqual(settings.cacheEntryMatches(validEntry, 'different content', testSettings), false);
 
     // ── cards.ts: resolveCardAnchors ──
@@ -100,4 +113,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

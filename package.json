@@ -7,8 +7,8 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check main.ts src/",
-    "lint:fix": "biome check --write main.ts src/",
+    "lint": "biome check main.ts src/ tests/ scripts/",
+    "lint:fix": "biome check --write main.ts src/ tests/ scripts/",
     "version": "node scripts/bump-version.mjs",
     "test": "npm run build && npm run typecheck && node scripts/run-tests.mjs",
     "test:only": "node scripts/run-tests.mjs"

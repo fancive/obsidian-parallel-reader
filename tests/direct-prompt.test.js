@@ -9,8 +9,15 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     // ── promptLanguageInstruction ──
     assert.strictEqual(prompt.promptLanguageInstruction('en'), 'Write title, gist, and bullets in English.');
     assert.strictEqual(prompt.promptLanguageInstruction('zh'), '用中文输出 title、gist 和 bullets。');
-    assert.strictEqual(prompt.promptLanguageInstruction('auto'), 'Write title, gist, and bullets in the main language of the source document.');
-    assert.strictEqual(prompt.promptLanguageInstruction('fr'), '用中文输出 title、gist 和 bullets。', 'unknown language falls to zh');
+    assert.strictEqual(
+      prompt.promptLanguageInstruction('auto'),
+      'Write title, gist, and bullets in the main language of the source document.',
+    );
+    assert.strictEqual(
+      prompt.promptLanguageInstruction('fr'),
+      '用中文输出 title、gist 和 bullets。',
+      'unknown language falls to zh',
+    );
 
     // ── promptSchemaExample ──
     const enExample = prompt.promptSchemaExample('en');
@@ -94,4 +101,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

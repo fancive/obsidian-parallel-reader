@@ -7,7 +7,13 @@ assert.strictEqual(t.visibleTopProbeY({ top: 100, height: 300 }), 130, 'small re
 assert.strictEqual(t.visibleTopProbeY({ top: 100, height: 1200 }), 180, 'large rect capped at 80');
 
 const frames = [];
-const throttled = t.createRafThrottledHandler(() => {}, cb => { frames.push(cb); return frames.length; });
+const throttled = t.createRafThrottledHandler(
+  () => {},
+  (cb) => {
+    frames.push(cb);
+    return frames.length;
+  },
+);
 throttled();
 assert.strictEqual(frames.length, 1);
 throttled.cancel();

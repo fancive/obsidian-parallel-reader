@@ -16,7 +16,11 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     assert.strictEqual(settings.stableStringify({ b: 2, a: 1 }), '{"a":1,"b":2}', 'object keys sorted');
     assert.strictEqual(settings.stableStringify({}), '{}', 'empty object');
     // Nested objects
-    assert.strictEqual(settings.stableStringify({ z: { b: 2, a: 1 }, a: 3 }), '{"a":3,"z":{"a":1,"b":2}}', 'nested keys sorted');
+    assert.strictEqual(
+      settings.stableStringify({ z: { b: 2, a: 1 }, a: 3 }),
+      '{"a":3,"z":{"a":1,"b":2}}',
+      'nested keys sorted',
+    );
     // Same data different order produces same string
     assert.strictEqual(
       settings.stableStringify({ x: 1, y: 2 }),
@@ -49,11 +53,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     );
 
     // ── getApiAuthType ──
-    assert.strictEqual(
-      settings.getApiAuthType({ ...base, apiAuthType: 'bearer' }),
-      'bearer',
-      'explicit auth type',
-    );
+    assert.strictEqual(settings.getApiAuthType({ ...base, apiAuthType: 'bearer' }), 'bearer', 'explicit auth type');
     assert.strictEqual(
       settings.getApiAuthType({ ...base, apiProvider: 'anthropic', apiAuthType: 'auto' }),
       'x-api-key',
@@ -108,4 +108,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

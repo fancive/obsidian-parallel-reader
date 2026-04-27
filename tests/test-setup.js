@@ -6,11 +6,13 @@ const t = require('../main.js').__test;
 
 function openAiCardsResponse(cards) {
   const json = {
-    choices: [{
-      message: {
-        content: JSON.stringify({ cards }),
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({ cards }),
+        },
       },
-    }],
+    ],
   };
   return { status: 200, json, text: JSON.stringify(json) };
 }

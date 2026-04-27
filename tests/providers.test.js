@@ -82,26 +82,26 @@ assert.strictEqual(gemBody.generationConfig.responseMimeType, 'application/json'
 assert.strictEqual(
   t.tokenLimitFieldForOpenAiChat({ ...baseSettings, apiProvider: 'openai' }),
   'max_completion_tokens',
-  'OpenAI uses max_completion_tokens'
+  'OpenAI uses max_completion_tokens',
 );
 assert.strictEqual(
   t.tokenLimitFieldForOpenAiChat({ ...baseSettings, apiProvider: 'openrouter' }),
   'max_tokens',
-  'OpenRouter uses max_tokens'
+  'OpenRouter uses max_tokens',
 );
 
 // ── parseApiHeaders ──
 
 assert.deepStrictEqual(
   t.parseApiHeaders('{"X-Custom": "value", "Authorization": "Bearer tok"}'),
-  { 'X-Custom': 'value', 'Authorization': 'Bearer tok' },
+  { 'X-Custom': 'value', Authorization: 'Bearer tok' },
   'parseApiHeaders: JSON object input',
 );
 assert.deepStrictEqual(t.parseApiHeaders(''), {}, 'parseApiHeaders: empty string returns empty object');
 assert.deepStrictEqual(t.parseApiHeaders('  '), {}, 'parseApiHeaders: whitespace-only returns empty object');
 assert.deepStrictEqual(
   t.parseApiHeaders('X-Custom: value\nAuthorization: Bearer tok'),
-  { 'X-Custom': 'value', 'Authorization': 'Bearer tok' },
+  { 'X-Custom': 'value', Authorization: 'Bearer tok' },
   'parseApiHeaders: line-based input',
 );
 assert.deepStrictEqual(
@@ -131,7 +131,7 @@ assert.deepStrictEqual(
 );
 assert.deepStrictEqual(
   t.parseApiHeaders('Authorization: Bearer abc:def:ghi'),
-  { 'Authorization': 'Bearer abc:def:ghi' },
+  { Authorization: 'Bearer abc:def:ghi' },
   'parseApiHeaders: value with colons preserved',
 );
 
@@ -157,8 +157,16 @@ async function testSummarizeDocumentAnchorSorting() {
     setRequestUrlMock(prev);
   }
 
-  assert.deepStrictEqual(sections.map((s) => s.title), ['First', 'Second'], 'sorts by anchor line');
-  assert.deepStrictEqual(sections.map((s) => s.startLine), [1, 3], 'resolves anchor lines');
+  assert.deepStrictEqual(
+    sections.map((s) => s.title),
+    ['First', 'Second'],
+    'sorts by anchor line',
+  );
+  assert.deepStrictEqual(
+    sections.map((s) => s.startLine),
+    [1, 3],
+    'resolves anchor lines',
+  );
 }
 
 async function testStructuredOutputFallback() {
@@ -173,9 +181,7 @@ async function testStructuredOutputFallback() {
         text: JSON.stringify({ error: 'response_format is not supported' }),
       };
     }
-    return openAiCardsResponse([
-      { title: 'Fallback', anchor: 'fallback anchor', gist: 'G', bullets: ['B'] },
-    ]);
+    return openAiCardsResponse([{ title: 'Fallback', anchor: 'fallback anchor', gist: 'G', bullets: ['B'] }]);
   });
 
   try {
@@ -201,11 +207,12 @@ async function testStructuredOutputNonRetryableError() {
 
   try {
     await assert.rejects(
-      () => t.summarizeDocument(
-        'test content',
-        { ...baseSettings, streaming: false, promptLanguage: 'en', minCards: 1, maxCards: 3, maxDocChars: 10000 },
-        { phase: 'queued', onCancel: () => {}, throwIfCancelled: () => {}, setPhase: () => {} },
-      ),
+      () =>
+        t.summarizeDocument(
+          'test content',
+          { ...baseSettings, streaming: false, promptLanguage: 'en', minCards: 1, maxCards: 3, maxDocChars: 10000 },
+          { phase: 'queued', onCancel: () => {}, throwIfCancelled: () => {}, setPhase: () => {} },
+        ),
       /500/,
       'non-retryable error (500) is not caught by structured fallback',
     );

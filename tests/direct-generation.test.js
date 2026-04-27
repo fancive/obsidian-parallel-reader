@@ -61,14 +61,13 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
       'cancelRequested',
       'null job = simple cancel',
     );
-    assert.strictEqual(
-      generation.cancellationNoticeKey(null, null),
-      'cancelRequested',
-      'both null = simple cancel',
-    );
+    assert.strictEqual(generation.cancellationNoticeKey(null, null), 'cancelRequested', 'both null = simple cancel');
 
     console.log('direct generation tests passed');
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

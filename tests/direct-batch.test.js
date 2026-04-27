@@ -5,11 +5,31 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const batch = await requireBundledModule('src/batch.ts');
 
     // ── isFileInBatchFolder (not tested directly before) ──
-    assert.strictEqual(batch.isFileInBatchFolder({ path: 'root.md', parent: null }, ''), true, 'root file in root folder');
-    assert.strictEqual(batch.isFileInBatchFolder({ path: 'sub/note.md', parent: { path: 'sub' } }, ''), false, 'subfolder file NOT in root folder');
-    assert.strictEqual(batch.isFileInBatchFolder({ path: 'sub/note.md', parent: { path: 'sub' } }, 'sub'), true, 'file in matching folder');
-    assert.strictEqual(batch.isFileInBatchFolder({ path: 'sub/deep/note.md', parent: { path: 'sub/deep' } }, 'sub'), false, 'nested file NOT in parent');
-    assert.strictEqual(batch.isFileInBatchFolder({ path: 'note.md', parent: undefined }, ''), true, 'undefined parent in root');
+    assert.strictEqual(
+      batch.isFileInBatchFolder({ path: 'root.md', parent: null }, ''),
+      true,
+      'root file in root folder',
+    );
+    assert.strictEqual(
+      batch.isFileInBatchFolder({ path: 'sub/note.md', parent: { path: 'sub' } }, ''),
+      false,
+      'subfolder file NOT in root folder',
+    );
+    assert.strictEqual(
+      batch.isFileInBatchFolder({ path: 'sub/note.md', parent: { path: 'sub' } }, 'sub'),
+      true,
+      'file in matching folder',
+    );
+    assert.strictEqual(
+      batch.isFileInBatchFolder({ path: 'sub/deep/note.md', parent: { path: 'sub/deep' } }, 'sub'),
+      false,
+      'nested file NOT in parent',
+    );
+    assert.strictEqual(
+      batch.isFileInBatchFolder({ path: 'note.md', parent: undefined }, ''),
+      true,
+      'undefined parent in root',
+    );
 
     // ── normalizeBatchFolderInput edge cases ──
     assert.strictEqual(batch.normalizeBatchFolderInput(null), '', 'null input');
@@ -57,4 +77,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

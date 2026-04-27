@@ -34,11 +34,18 @@ function createFakeChild() {
   child.stdin = {
     written: '',
     ended: false,
-    write(value) { this.written += value; },
-    end() { this.ended = true; },
+    write(value) {
+      this.written += value;
+    },
+    end() {
+      this.ended = true;
+    },
   };
   child.killedWith = null;
-  child.kill = (signal) => { child.killedWith = signal; return true; };
+  child.kill = (signal) => {
+    child.killedWith = signal;
+    return true;
+  };
   return child;
 }
 
@@ -58,7 +65,12 @@ async function testRunCliEdgeCases() {
     [],
     '',
     1000,
-    { key: 'cancel.md', onCancel: (handler) => { cancelHandler = handler; } },
+    {
+      key: 'cancel.md',
+      onCancel: (handler) => {
+        cancelHandler = handler;
+      },
+    },
     () => cancelChild,
   );
   cancelHandler();
@@ -80,24 +92,70 @@ async function testRunCliEdgeCases() {
 
 // Known flags supported by the Claude Code CLI (from `claude --help`).
 const VALID_CLAUDE_FLAGS = new Set([
-  '--add-dir', '--agent', '--agents', '--allow-dangerously-skip-permissions',
-  '--allowedTools', '--allowed-tools', '--append-system-prompt', '--bare',
-  '--betas', '--brief', '--chrome', '--dangerously-skip-permissions',
-  '--debug-file', '--disable-slash-commands', '--disallowedTools',
-  '--disallowed-tools', '--effort', '--exclude-dynamic-system-prompt-sections',
-  '--fallback-model', '--file', '--fork-session', '--from-pr', '--ide',
-  '--include-hook-events', '--include-partial-messages', '--input-format',
-  '--json-schema', '--max-budget-usd', '--mcp-config', '--mcp-debug',
-  '--model', '--no-chrome', '--no-session-persistence', '--output-format',
-  '--permission-mode', '--plugin-dir', '--remote-control-session-name-prefix',
-  '--replay-user-messages', '--session-id', '--setting-sources', '--settings',
-  '--strict-mcp-config', '--system-prompt', '--tmux', '--tools', '--verbose',
-  '-p', '-c', '-d', '-h', '-n', '-r', '-v', '-w',
+  '--add-dir',
+  '--agent',
+  '--agents',
+  '--allow-dangerously-skip-permissions',
+  '--allowedTools',
+  '--allowed-tools',
+  '--append-system-prompt',
+  '--bare',
+  '--betas',
+  '--brief',
+  '--chrome',
+  '--dangerously-skip-permissions',
+  '--debug-file',
+  '--disable-slash-commands',
+  '--disallowedTools',
+  '--disallowed-tools',
+  '--effort',
+  '--exclude-dynamic-system-prompt-sections',
+  '--fallback-model',
+  '--file',
+  '--fork-session',
+  '--from-pr',
+  '--ide',
+  '--include-hook-events',
+  '--include-partial-messages',
+  '--input-format',
+  '--json-schema',
+  '--max-budget-usd',
+  '--mcp-config',
+  '--mcp-debug',
+  '--model',
+  '--no-chrome',
+  '--no-session-persistence',
+  '--output-format',
+  '--permission-mode',
+  '--plugin-dir',
+  '--remote-control-session-name-prefix',
+  '--replay-user-messages',
+  '--session-id',
+  '--setting-sources',
+  '--settings',
+  '--strict-mcp-config',
+  '--system-prompt',
+  '--tmux',
+  '--tools',
+  '--verbose',
+  '-p',
+  '-c',
+  '-d',
+  '-h',
+  '-n',
+  '-r',
+  '-v',
+  '-w',
 ]);
 
 async function testClaudeCodeArgs() {
   let capturedArgs = null;
-  const resultJson = JSON.stringify([{ type: 'result', result: '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}' }]);
+  const resultJson = JSON.stringify([
+    {
+      type: 'result',
+      result: '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    },
+  ]);
   const fakeSpawn = (_cmd, args) => {
     capturedArgs = args;
     const child = createFakeChild();
@@ -124,12 +182,9 @@ async function testClaudeCodeArgs() {
   assert.ok(capturedArgs, 'summarizeViaClaudeCode should have called spawn');
 
   // Verify every --flag in the args is a valid Claude CLI flag
-  const flags = capturedArgs.filter(a => a.startsWith('-'));
+  const flags = capturedArgs.filter((a) => a.startsWith('-'));
   for (const flag of flags) {
-    assert.ok(
-      VALID_CLAUDE_FLAGS.has(flag),
-      `summarizeViaClaudeCode passes unsupported flag "${flag}" to claude CLI`,
-    );
+    assert.ok(VALID_CLAUDE_FLAGS.has(flag), `summarizeViaClaudeCode passes unsupported flag "${flag}" to claude CLI`);
   }
 
   // Verify key expected flags are present
@@ -146,12 +201,38 @@ async function testClaudeCodeArgs() {
 
 // Known flags/subcommands supported by `codex exec` (from `codex exec --help`).
 const VALID_CODEX_EXEC_FLAGS = new Set([
-  '-c', '--config', '--enable', '--disable', '-i', '--image',
-  '-m', '--model', '--oss', '--local-provider', '-p', '--profile',
-  '-s', '--sandbox', '--full-auto', '--dangerously-bypass-approvals-and-sandbox',
-  '-C', '--cd', '--add-dir', '--skip-git-repo-check', '--ephemeral',
-  '--ignore-user-config', '--ignore-rules', '--output-schema', '--color',
-  '--json', '-o', '--output-last-message', '-h', '--help', '-V', '--version',
+  '-c',
+  '--config',
+  '--enable',
+  '--disable',
+  '-i',
+  '--image',
+  '-m',
+  '--model',
+  '--oss',
+  '--local-provider',
+  '-p',
+  '--profile',
+  '-s',
+  '--sandbox',
+  '--full-auto',
+  '--dangerously-bypass-approvals-and-sandbox',
+  '-C',
+  '--cd',
+  '--add-dir',
+  '--skip-git-repo-check',
+  '--ephemeral',
+  '--ignore-user-config',
+  '--ignore-rules',
+  '--output-schema',
+  '--color',
+  '--json',
+  '-o',
+  '--output-last-message',
+  '-h',
+  '--help',
+  '-V',
+  '--version',
 ]);
 
 async function testCodexArgs() {
@@ -185,12 +266,9 @@ async function testCodexArgs() {
   assert.strictEqual(capturedArgs[0], 'exec', 'first arg should be exec subcommand');
 
   // Verify every --flag (after 'exec') is valid for `codex exec`
-  const flags = capturedArgs.slice(1).filter(a => a.startsWith('-') && a !== '-');
+  const flags = capturedArgs.slice(1).filter((a) => a.startsWith('-') && a !== '-');
   for (const flag of flags) {
-    assert.ok(
-      VALID_CODEX_EXEC_FLAGS.has(flag),
-      `summarizeViaCodex passes unsupported flag "${flag}" to codex exec`,
-    );
+    assert.ok(VALID_CODEX_EXEC_FLAGS.has(flag), `summarizeViaCodex passes unsupported flag "${flag}" to codex exec`);
   }
 
   // Verify key expected flags are present

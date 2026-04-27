@@ -41,7 +41,11 @@ const batchFiles = [
   { path: 'Reading/note.md', parent: { path: 'Reading' } },
   { path: 'Reading/Deep/nested.md', parent: { path: 'Reading/Deep' } },
 ];
-assert.deepStrictEqual(t.selectBatchFiles(batchFiles, '').map((file) => file.path), ['root.md'], 'root folder only');
+assert.deepStrictEqual(
+  t.selectBatchFiles(batchFiles, '').map((file) => file.path),
+  ['root.md'],
+  'root folder only',
+);
 assert.deepStrictEqual(
   t.selectBatchFiles(batchFiles, '/Reading/').map((file) => file.path),
   ['Reading/note.md'],
@@ -54,7 +58,11 @@ const processedStats = t.recordBatchProcessed(skippedStats);
 const errorStats = t.recordBatchError(processedStats);
 assert.deepStrictEqual(batchStats, { total: 3, processed: 0, skipped: 0, errors: 0 }, 'batch stats are immutable');
 assert.deepStrictEqual(skippedStats, { total: 3, processed: 1, skipped: 1, errors: 0 }, 'batch skip updates progress');
-assert.deepStrictEqual(processedStats, { total: 3, processed: 2, skipped: 1, errors: 0 }, 'batch processed count accumulates');
+assert.deepStrictEqual(
+  processedStats,
+  { total: 3, processed: 2, skipped: 1, errors: 0 },
+  'batch processed count accumulates',
+);
 assert.deepStrictEqual(errorStats, { total: 3, processed: 3, skipped: 1, errors: 1 }, 'batch error count accumulates');
 
 const batchState = t.createBatchRunState();

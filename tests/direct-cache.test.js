@@ -8,7 +8,9 @@ function createFakeAdapter() {
     dirs,
     writes: [],
     exists: async (filePath) => dirs.has(filePath) || files.has(filePath),
-    mkdir: async (filePath) => { dirs.add(filePath); },
+    mkdir: async (filePath) => {
+      dirs.add(filePath);
+    },
     read: async (filePath) => {
       if (!files.has(filePath)) throw new Error('not found');
       return files.get(filePath);
@@ -36,16 +38,24 @@ function createFakeAdapter() {
     // ── CacheManager: load + prune ──
     const adapter = createFakeAdapter();
     const manager = new cacheManagerModule.CacheManager(adapter, '.obsidian', 'parallel-reader', () => ({
-      ...settings.DEFAULT_SETTINGS, maxCacheEntries: 2,
+      ...settings.DEFAULT_SETTINGS,
+      maxCacheEntries: 2,
     }));
-    adapter.files.set(manager.filePath(), JSON.stringify({
-      version: 1,
-      entries: {
-        'old.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [] },
-        'fresh.md': { generatedAt: '2024-01-02T00:00:00.000Z', cards: [] },
-        'touched.md': { generatedAt: '2024-01-03T00:00:00.000Z', lastAccessedAt: '2024-02-01T00:00:00.000Z', cards: [] },
-      },
-    }));
+    adapter.files.set(
+      manager.filePath(),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          'old.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [] },
+          'fresh.md': { generatedAt: '2024-01-02T00:00:00.000Z', cards: [] },
+          'touched.md': {
+            generatedAt: '2024-01-03T00:00:00.000Z',
+            lastAccessedAt: '2024-02-01T00:00:00.000Z',
+            cards: [],
+          },
+        },
+      }),
+    );
     await manager.load();
     assert.strictEqual(manager.cache['old.md'], undefined, 'CacheManager.load prunes old entries');
     assert.ok(adapter.files.get(manager.filePath()).includes('fresh.md'), 'CacheManager.load persists prune results');
@@ -56,8 +66,11 @@ function createFakeAdapter() {
     assert.ok(JSON.parse(adapter.files.get(manager.filePath())).entries['fresh.md'].lastAccessedAt);
 
     assert.strictEqual(
-      await manager.replaceCards('fresh.md', [{ title: 'New', anchor: 'A', gist: 'G', bullets: ['B'], level: 2, startLine: 1 }]),
-      true, 'CacheManager.replaceCards updates existing entries',
+      await manager.replaceCards('fresh.md', [
+        { title: 'New', anchor: 'A', gist: 'G', bullets: ['B'], level: 2, startLine: 1 },
+      ]),
+      true,
+      'CacheManager.replaceCards updates existing entries',
     );
     assert.strictEqual(JSON.parse(adapter.files.get(manager.filePath())).entries['fresh.md'].cards[0].title, 'New');
 
@@ -73,14 +86,34 @@ function createFakeAdapter() {
     // ── Cache pruning interleaved with put ──
     const pruneAdapter = createFakeAdapter();
     const pruneManager = new cacheManagerModule.CacheManager(pruneAdapter, '.obsidian', 'parallel-reader', () => ({
-      ...settings.DEFAULT_SETTINGS, maxCacheEntries: 2,
+      ...settings.DEFAULT_SETTINGS,
+      maxCacheEntries: 2,
     }));
     await pruneManager.load();
     pruneManager.cache = {
-      'old.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z', lastAccessedAt: '2024-01-01T00:00:00.000Z' },
-      'mid.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-06-01T00:00:00.000Z', lastAccessedAt: '2024-06-01T00:00:00.000Z' },
+      'old.md': {
+        schemaVersion: 2,
+        contentHash: 'a',
+        settingsHash: 'a',
+        cards: [],
+        generatedAt: '2024-01-01T00:00:00.000Z',
+        lastAccessedAt: '2024-01-01T00:00:00.000Z',
+      },
+      'mid.md': {
+        schemaVersion: 2,
+        contentHash: 'b',
+        settingsHash: 'b',
+        cards: [],
+        generatedAt: '2024-06-01T00:00:00.000Z',
+        lastAccessedAt: '2024-06-01T00:00:00.000Z',
+      },
     };
-    await pruneManager.put('new.md', 'new content', [{ title: 'N', anchor: 'n', gist: 'g', bullets: [] }], settings.DEFAULT_SETTINGS);
+    await pruneManager.put(
+      'new.md',
+      'new content',
+      [{ title: 'N', anchor: 'n', gist: 'g', bullets: [] }],
+      settings.DEFAULT_SETTINGS,
+    );
     assert.strictEqual(Object.keys(pruneManager.cache).length, 2, 'cache pruned to max entries after put');
     assert.ok(pruneManager.cache['new.md'], 'newest entry survives pruning');
     assert.strictEqual(pruneManager.cache['old.md'], undefined, 'oldest entry pruned by timestamp');
@@ -93,11 +126,28 @@ function createFakeAdapter() {
 
     // ── CacheManager.move() ──
     const moveAdapter = createFakeAdapter();
-    const moveManager = new cacheManagerModule.CacheManager(moveAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+    const moveManager = new cacheManagerModule.CacheManager(
+      moveAdapter,
+      '.obsidian',
+      'parallel-reader',
+      () => settings.DEFAULT_SETTINGS,
+    );
     await moveManager.load();
     moveManager.cache = {
-      'a.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [{ title: 'A', anchor: 'a', gist: 'g', bullets: [] }], generatedAt: '2024-01-01T00:00:00.000Z' },
-      'b.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-01-02T00:00:00.000Z' },
+      'a.md': {
+        schemaVersion: 2,
+        contentHash: 'a',
+        settingsHash: 'a',
+        cards: [{ title: 'A', anchor: 'a', gist: 'g', bullets: [] }],
+        generatedAt: '2024-01-01T00:00:00.000Z',
+      },
+      'b.md': {
+        schemaVersion: 2,
+        contentHash: 'b',
+        settingsHash: 'b',
+        cards: [],
+        generatedAt: '2024-01-02T00:00:00.000Z',
+      },
     };
     await moveManager.save();
     assert.strictEqual(await moveManager.move('a.md', 'renamed.md'), true, 'move returns true on success');
@@ -111,24 +161,58 @@ function createFakeAdapter() {
 
     // ── CacheManager.readFile() with corrupt JSON ──
     const corruptAdapter = createFakeAdapter();
-    const corruptManager = new cacheManagerModule.CacheManager(corruptAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+    const corruptManager = new cacheManagerModule.CacheManager(
+      corruptAdapter,
+      '.obsidian',
+      'parallel-reader',
+      () => settings.DEFAULT_SETTINGS,
+    );
     corruptAdapter.files.set(corruptManager.filePath(), '{ invalid json !!!');
     assert.deepStrictEqual(await corruptManager.readFile(), {}, 'readFile returns empty object for corrupt JSON');
 
     const noEntriesAdapter = createFakeAdapter();
-    const noEntriesManager = new cacheManagerModule.CacheManager(noEntriesAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+    const noEntriesManager = new cacheManagerModule.CacheManager(
+      noEntriesAdapter,
+      '.obsidian',
+      'parallel-reader',
+      () => settings.DEFAULT_SETTINGS,
+    );
     noEntriesAdapter.files.set(noEntriesManager.filePath(), JSON.stringify({ version: 1 }));
-    assert.deepStrictEqual(await noEntriesManager.readFile(), {}, 'readFile returns empty object when no entries field');
+    assert.deepStrictEqual(
+      await noEntriesManager.readFile(),
+      {},
+      'readFile returns empty object when no entries field',
+    );
 
     // ── CacheManager.pruneIfNeeded() ──
     const pruneNeededAdapter = createFakeAdapter();
-    const pruneNeededManager = new cacheManagerModule.CacheManager(pruneNeededAdapter, '.obsidian', 'parallel-reader', () => ({
-      ...settings.DEFAULT_SETTINGS, maxCacheEntries: 1,
-    }));
+    const pruneNeededManager = new cacheManagerModule.CacheManager(
+      pruneNeededAdapter,
+      '.obsidian',
+      'parallel-reader',
+      () => ({
+        ...settings.DEFAULT_SETTINGS,
+        maxCacheEntries: 1,
+      }),
+    );
     await pruneNeededManager.load();
     pruneNeededManager.cache = {
-      'old.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z', lastAccessedAt: '2024-01-01T00:00:00.000Z' },
-      'new.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-06-01T00:00:00.000Z', lastAccessedAt: '2024-06-01T00:00:00.000Z' },
+      'old.md': {
+        schemaVersion: 2,
+        contentHash: 'a',
+        settingsHash: 'a',
+        cards: [],
+        generatedAt: '2024-01-01T00:00:00.000Z',
+        lastAccessedAt: '2024-01-01T00:00:00.000Z',
+      },
+      'new.md': {
+        schemaVersion: 2,
+        contentHash: 'b',
+        settingsHash: 'b',
+        cards: [],
+        generatedAt: '2024-06-01T00:00:00.000Z',
+        lastAccessedAt: '2024-06-01T00:00:00.000Z',
+      },
     };
     const pruneIfResult = await pruneNeededManager.pruneIfNeeded();
     assert.strictEqual(pruneIfResult.length, 1, 'pruneIfNeeded returns removed keys');
@@ -136,22 +220,55 @@ function createFakeAdapter() {
 
     const noPruneAdapter = createFakeAdapter();
     const noPruneManager = new cacheManagerModule.CacheManager(noPruneAdapter, '.obsidian', 'parallel-reader', () => ({
-      ...settings.DEFAULT_SETTINGS, maxCacheEntries: 100,
+      ...settings.DEFAULT_SETTINGS,
+      maxCacheEntries: 100,
     }));
     await noPruneManager.load();
-    noPruneManager.cache = { 'only.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z' } };
-    assert.strictEqual((await noPruneManager.pruneIfNeeded()).length, 0, 'pruneIfNeeded returns empty when nothing to prune');
+    noPruneManager.cache = {
+      'only.md': {
+        schemaVersion: 2,
+        contentHash: 'a',
+        settingsHash: 'a',
+        cards: [],
+        generatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    };
+    assert.strictEqual(
+      (await noPruneManager.pruneIfNeeded()).length,
+      0,
+      'pruneIfNeeded returns empty when nothing to prune',
+    );
 
-    assert.strictEqual(await pruneNeededManager.replaceCards('nonexistent.md', []), false, 'replaceCards returns false for missing entry');
+    assert.strictEqual(
+      await pruneNeededManager.replaceCards('nonexistent.md', []),
+      false,
+      'replaceCards returns false for missing entry',
+    );
 
     // ── CacheManager.scheduleSave() + flush() ──
     const scheduleAdapter = createFakeAdapter();
-    const scheduleManager = new cacheManagerModule.CacheManager(scheduleAdapter, '.obsidian', 'parallel-reader', () => settings.DEFAULT_SETTINGS);
+    const scheduleManager = new cacheManagerModule.CacheManager(
+      scheduleAdapter,
+      '.obsidian',
+      'parallel-reader',
+      () => settings.DEFAULT_SETTINGS,
+    );
     await scheduleManager.load();
-    scheduleManager.cache = { 'sched.md': { schemaVersion: 2, contentHash: 'x', settingsHash: 'x', cards: [], generatedAt: '2024-01-01T00:00:00.000Z' } };
+    scheduleManager.cache = {
+      'sched.md': {
+        schemaVersion: 2,
+        contentHash: 'x',
+        settingsHash: 'x',
+        cards: [],
+        generatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    };
     scheduleManager.scheduleSave(50000);
     await scheduleManager.flush();
-    assert.ok(JSON.parse(scheduleAdapter.files.get(scheduleManager.filePath())).entries['sched.md'], 'flush persists scheduled save');
+    assert.ok(
+      JSON.parse(scheduleAdapter.files.get(scheduleManager.filePath())).entries['sched.md'],
+      'flush persists scheduled save',
+    );
 
     scheduleAdapter.files.delete(scheduleManager.filePath());
     await scheduleManager.flush();
@@ -161,4 +278,7 @@ function createFakeAdapter() {
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

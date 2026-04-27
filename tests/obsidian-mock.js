@@ -25,7 +25,15 @@ Module._load = function load(request, parent, isMain) {
     class Menu {}
     class Modal {}
     return {
-      Plugin, ItemView, PluginSettingTab, Setting, Notice, MarkdownView, TFile, Menu, Modal,
+      Plugin,
+      ItemView,
+      PluginSettingTab,
+      Setting,
+      Notice,
+      MarkdownView,
+      TFile,
+      Menu,
+      Modal,
       MarkdownRenderer: { render: async () => {} },
       requestUrl: (params) => requestUrlMock(params),
       setIcon: () => {},
@@ -35,6 +43,10 @@ Module._load = function load(request, parent, isMain) {
 };
 
 module.exports = {
-  getRequestUrlMock() { return requestUrlMock; },
-  setRequestUrlMock(fn) { requestUrlMock = fn; },
+  getRequestUrlMock() {
+    return requestUrlMock;
+  },
+  setRequestUrlMock(fn) {
+    requestUrlMock = fn;
+  },
 };

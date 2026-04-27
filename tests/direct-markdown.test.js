@@ -29,7 +29,12 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     assert.ok(noGist.includes('> a'), 'anchor present');
     assert.ok(noGist.includes('- b'), 'bullets present');
 
-    const anchorWhitespace = md.cardToMarkdown({ title: 'E', anchor: '  spaces \n tabs \t here  ', gist: '', bullets: [] });
+    const anchorWhitespace = md.cardToMarkdown({
+      title: 'E',
+      anchor: '  spaces \n tabs \t here  ',
+      gist: '',
+      bullets: [],
+    });
     assert.ok(anchorWhitespace.includes('> spaces tabs here'), 'anchor whitespace normalized');
 
     // ── cardToPlain ──
@@ -77,4 +82,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   } finally {
     cleanup();
   }
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

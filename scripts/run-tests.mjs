@@ -1,5 +1,5 @@
-import { readdirSync } from 'fs';
 import { execSync } from 'child_process';
+import { readdirSync } from 'fs';
 import { join } from 'path';
 
 const testsDir = join(import.meta.dirname, '..', 'tests');
