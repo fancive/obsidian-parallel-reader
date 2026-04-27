@@ -403,6 +403,82 @@ async function requireBundledModule(relativePath) {
   // Card level defaults to 2
   assert.strictEqual(resolved[0].level, 2, 'resolveCardAnchors: level defaults to 2');
 
+  // --- settings.ts: getApiKey, cacheEntryMatches, normalizeCardCount ---
+
+  // normalizeCardCount edge cases
+  assert.strictEqual(settings.normalizeCardCount(5, 10), 5, 'normalizeCardCount: normal value');
+  assert.strictEqual(settings.normalizeCardCount(0, 10), 1, 'normalizeCardCount: zero clamps to 1');
+  assert.strictEqual(settings.normalizeCardCount(-5, 10), 1, 'normalizeCardCount: negative clamps to 1');
+  assert.strictEqual(settings.normalizeCardCount(100, 10), 30, 'normalizeCardCount: exceeds max clamps to 30');
+  assert.strictEqual(settings.normalizeCardCount(NaN, 7), 7, 'normalizeCardCount: NaN uses fallback');
+  assert.strictEqual(settings.normalizeCardCount(undefined, 7), 7, 'normalizeCardCount: undefined uses fallback');
+  assert.strictEqual(settings.normalizeCardCount('15', 7), 15, 'normalizeCardCount: string number coerced');
+  assert.strictEqual(settings.normalizeCardCount(1, 5), 1, 'normalizeCardCount: min boundary');
+  assert.strictEqual(settings.normalizeCardCount(30, 5), 30, 'normalizeCardCount: max boundary');
+
+  // getApiKey
+  assert.strictEqual(
+    settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: 'direct-key' }),
+    'direct-key',
+    'getApiKey: direct key takes precedence',
+  );
+  assert.strictEqual(
+    settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: '', apiKeyEnvVar: '' }),
+    '',
+    'getApiKey: no key returns empty string',
+  );
+  assert.strictEqual(
+    settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: '  trimmed  ' }),
+    'trimmed',
+    'getApiKey: trims whitespace from direct key',
+  );
+
+  // getApiKey with env var
+  const envVarName = '__PARALLEL_READER_TEST_KEY__';
+  process.env[envVarName] = 'env-key-val';
+  try {
+    assert.strictEqual(
+      settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: '', apiKeyEnvVar: envVarName }),
+      'env-key-val',
+      'getApiKey: reads from env var when direct key empty',
+    );
+    assert.strictEqual(
+      settings.getApiKey({ ...settings.DEFAULT_SETTINGS, apiKey: 'direct', apiKeyEnvVar: envVarName }),
+      'direct',
+      'getApiKey: direct key wins over env var',
+    );
+  } finally {
+    delete process.env[envVarName];
+  }
+
+  // cacheEntryMatches
+  const testContent = 'hello world';
+  const testSettings = { ...settings.DEFAULT_SETTINGS };
+  const validEntry = {
+    schemaVersion: settings.CACHE_SCHEMA_VERSION,
+    contentHash: settings.hashContent(testContent),
+    settingsHash: settings.generationFingerprint(testSettings),
+    cards: [],
+    generatedAt: '2024-01-01T00:00:00.000Z',
+  };
+  assert.strictEqual(settings.cacheEntryMatches(validEntry, testContent, testSettings), true, 'cacheEntryMatches: valid entry matches');
+  assert.strictEqual(settings.cacheEntryMatches(null, testContent, testSettings), false, 'cacheEntryMatches: null entry returns false');
+  assert.strictEqual(
+    settings.cacheEntryMatches({ ...validEntry, contentHash: 'wrong' }, testContent, testSettings),
+    false,
+    'cacheEntryMatches: wrong content hash returns false',
+  );
+  assert.strictEqual(
+    settings.cacheEntryMatches({ ...validEntry, schemaVersion: 999 }, testContent, testSettings),
+    false,
+    'cacheEntryMatches: wrong schema version returns false',
+  );
+  assert.strictEqual(
+    settings.cacheEntryMatches(validEntry, 'different content', testSettings),
+    false,
+    'cacheEntryMatches: different content returns false',
+  );
+
   // --- vault.ts: normalizeVaultPath and folderPathsForTarget ---
   assert.strictEqual(vault.normalizeVaultPath('Reading/Articles'), 'Reading/Articles', 'normalizeVaultPath clean path unchanged');
   assert.strictEqual(vault.normalizeVaultPath(' Reading / Articles '), 'Reading/Articles', 'normalizeVaultPath trims parts');
