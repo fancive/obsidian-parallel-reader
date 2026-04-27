@@ -114,6 +114,30 @@ async function requireBundledModule(relativePath) {
   await manager.clear();
   assert.deepStrictEqual(manager.cache, {}, 'CacheManager.clear resets cache state');
 
+  // Cache pruning interleaved with put: oldest entry gets pruned
+  const pruneAdapter = createFakeAdapter();
+  const pruneManager = new cacheManagerModule.CacheManager(pruneAdapter, '.obsidian', 'parallel-reader', () => ({
+    ...settings.DEFAULT_SETTINGS,
+    maxCacheEntries: 2,
+  }));
+  await pruneManager.load();
+  // Seed with entries that have distinct timestamps so pruning is deterministic
+  pruneManager.cache = {
+    'old.md': { schemaVersion: 2, contentHash: 'a', settingsHash: 'a', cards: [], generatedAt: '2024-01-01T00:00:00.000Z', lastAccessedAt: '2024-01-01T00:00:00.000Z' },
+    'mid.md': { schemaVersion: 2, contentHash: 'b', settingsHash: 'b', cards: [], generatedAt: '2024-06-01T00:00:00.000Z', lastAccessedAt: '2024-06-01T00:00:00.000Z' },
+  };
+  // Put a third entry — cache now has 3 entries, save triggers prune to max=2
+  await pruneManager.put('new.md', 'new content', [{ title: 'N', anchor: 'n', gist: 'g', bullets: [] }], settings.DEFAULT_SETTINGS);
+  assert.strictEqual(Object.keys(pruneManager.cache).length, 2, 'cache pruned to max entries after put');
+  assert.ok(pruneManager.cache['new.md'], 'newest entry survives pruning');
+  assert.ok(pruneManager.cache['mid.md'], 'middle entry survives pruning');
+  assert.strictEqual(pruneManager.cache['old.md'], undefined, 'oldest entry pruned by timestamp');
+
+  // Verify the persisted file reflects the pruned state
+  const persistedPrune = JSON.parse(pruneAdapter.files.get(pruneManager.filePath()));
+  assert.ok(persistedPrune.entries['new.md'], 'newest entry persisted after pruning');
+  assert.strictEqual(persistedPrune.entries['old.md'], undefined, 'oldest entry not in persisted cache');
+
   assert.strictEqual(
     generation.cancellationNoticeKey({ backend: 'api' }, { phase: 'generating' }),
     'cancelRequestedApiInFlight',
