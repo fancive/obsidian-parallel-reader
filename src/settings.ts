@@ -2,7 +2,10 @@
 
 import crypto from 'crypto';
 import { translate } from './i18n';
+import { API_PROVIDER_PRESETS } from './provider-presets';
 import type { ApiFormat, ApiProviderPreset, CacheEntry, PluginSettings } from './types';
+
+export { API_PROVIDER_PRESETS } from './provider-presets';
 
 export const MAX_DOC_CHARS = 100000;
 export const PROMPT_VERSION = 2;
@@ -76,155 +79,6 @@ export const API_AUTH_TYPES = {
   'x-goog-api-key': 'x-goog-api-key',
   'api-key': 'api-key',
   none: 'None',
-};
-
-export const API_PROVIDER_PRESETS: Record<string, ApiProviderPreset> = {
-  anthropic: {
-    label: 'Anthropic',
-    format: 'anthropic-messages',
-    baseUrl: 'https://api.anthropic.com/v1',
-    authType: 'x-api-key',
-    envVar: 'ANTHROPIC_API_KEY',
-    model: 'claude-sonnet-4-6',
-  },
-  openai: {
-    label: 'OpenAI',
-    format: 'openai-chat',
-    baseUrl: 'https://api.openai.com/v1',
-    authType: 'bearer',
-    envVar: 'OPENAI_API_KEY',
-    tokenLimitField: 'max_completion_tokens',
-    model: 'gpt-5.1',
-  },
-  'openai-responses': {
-    label: 'OpenAI Responses',
-    format: 'openai-responses',
-    baseUrl: 'https://api.openai.com/v1',
-    authType: 'bearer',
-    envVar: 'OPENAI_API_KEY',
-    modelPrefix: 'openai',
-    model: 'gpt-5.1',
-  },
-  google: {
-    label: 'Google Gemini',
-    format: 'google-generative-ai',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    authType: 'x-goog-api-key',
-    envVar: 'GEMINI_API_KEY',
-    model: 'gemini-3-pro-preview',
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    format: 'openai-chat',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    authType: 'bearer',
-    envVar: 'OPENROUTER_API_KEY',
-    model: '',
-  },
-  groq: {
-    label: 'Groq',
-    format: 'openai-chat',
-    baseUrl: 'https://api.groq.com/openai/v1',
-    authType: 'bearer',
-    envVar: 'GROQ_API_KEY',
-    model: '',
-  },
-  deepseek: {
-    label: 'DeepSeek',
-    format: 'openai-chat',
-    baseUrl: 'https://api.deepseek.com',
-    authType: 'bearer',
-    envVar: 'DEEPSEEK_API_KEY',
-    model: 'deepseek-chat',
-  },
-  moonshot: {
-    label: 'Moonshot / Kimi',
-    format: 'openai-chat',
-    baseUrl: 'https://api.moonshot.ai/v1',
-    authType: 'bearer',
-    envVar: 'MOONSHOT_API_KEY',
-    model: 'kimi-k2.5',
-  },
-  qianfan: {
-    label: 'Baidu Qianfan',
-    format: 'openai-chat',
-    baseUrl: 'https://qianfan.baidubce.com/v2',
-    authType: 'bearer',
-    envVar: 'QIANFAN_API_KEY',
-    model: 'deepseek-v3.2',
-  },
-  minimax: {
-    label: 'MiniMax (Anthropic-compatible)',
-    format: 'anthropic-messages',
-    baseUrl: 'https://api.minimax.io/anthropic',
-    authType: 'bearer',
-    envVar: 'MINIMAX_API_KEY',
-    model: 'MiniMax-M2.1',
-  },
-  xai: {
-    label: 'xAI',
-    format: 'openai-chat',
-    baseUrl: 'https://api.x.ai/v1',
-    authType: 'bearer',
-    envVar: 'XAI_API_KEY',
-    model: '',
-  },
-  mistral: {
-    label: 'Mistral',
-    format: 'openai-chat',
-    baseUrl: 'https://api.mistral.ai/v1',
-    authType: 'bearer',
-    envVar: 'MISTRAL_API_KEY',
-    model: '',
-  },
-  cerebras: {
-    label: 'Cerebras',
-    format: 'openai-chat',
-    baseUrl: 'https://api.cerebras.ai/v1',
-    authType: 'bearer',
-    envVar: 'CEREBRAS_API_KEY',
-    model: '',
-  },
-  zai: {
-    label: 'Z.AI / GLM',
-    format: 'openai-chat',
-    baseUrl: 'https://api.z.ai/api/paas/v4',
-    authType: 'bearer',
-    envVar: 'ZAI_API_KEY',
-    model: '',
-  },
-  ollama: {
-    label: 'Ollama (local)',
-    format: 'openai-chat',
-    baseUrl: 'http://127.0.0.1:11434/v1',
-    authType: 'none',
-    envVar: '',
-    model: '',
-  },
-  lmstudio: {
-    label: 'LM Studio (local)',
-    format: 'openai-chat',
-    baseUrl: 'http://127.0.0.1:1234/v1',
-    authType: 'none',
-    envVar: '',
-    model: '',
-  },
-  'custom-openai': {
-    label: 'Custom OpenAI-compatible',
-    format: 'openai-chat',
-    baseUrl: '',
-    authType: 'bearer',
-    envVar: '',
-    model: '',
-  },
-  'custom-anthropic': {
-    label: 'Custom Anthropic-compatible',
-    format: 'anthropic-messages',
-    baseUrl: '',
-    authType: 'x-api-key',
-    envVar: '',
-    model: '',
-  },
 };
 
 export function hashContent(text: string): string {
