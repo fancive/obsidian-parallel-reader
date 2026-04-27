@@ -98,21 +98,28 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
   private renderBackendSection(containerEl: HTMLElement, isCliBacked: boolean) {
     if (isCliBacked) {
-      new Setting(containerEl)
-        .setName(this.tr('settingCliPathName'))
-        .setDesc(this.tr('settingCliPathDesc'))
-        .addText((t) =>
-          t
-            .setPlaceholder(this.tr('settingCliPathPlaceholder'))
-            .setValue(this.plugin.settings.cliPath)
-            .onChange((v) => {
-              this.plugin.settings.cliPath = v.trim();
-              this.plugin.saveSettingsDebounced();
-            }),
-        );
-      return;
+      this.renderCliBackendSettings(containerEl);
+    } else {
+      this.renderApiBackendSettings(containerEl);
     }
+  }
 
+  private renderCliBackendSettings(containerEl: HTMLElement) {
+    new Setting(containerEl)
+      .setName(this.tr('settingCliPathName'))
+      .setDesc(this.tr('settingCliPathDesc'))
+      .addText((t) =>
+        t
+          .setPlaceholder(this.tr('settingCliPathPlaceholder'))
+          .setValue(this.plugin.settings.cliPath)
+          .onChange((v) => {
+            this.plugin.settings.cliPath = v.trim();
+            this.plugin.saveSettingsDebounced();
+          }),
+      );
+  }
+
+  private renderApiBackendSettings(containerEl: HTMLElement) {
     const preset = getApiPreset(this.plugin.settings);
     new Setting(containerEl).setName(this.tr('apiProviderHeader')).setHeading();
 
