@@ -303,6 +303,27 @@ assert.strictEqual(batchState.cancelled, true, 'batch cancellation flag is set')
 assert.strictEqual(t.requestBatchCancel(batchState), false, 'duplicate batch cancellation request is ignored');
 assert.strictEqual(t.requestBatchCancel(null), false, 'missing batch state cannot be cancelled');
 
+// Batch state isolation: two concurrent batches don't interfere
+const batchA = t.createBatchRunState();
+const batchB = t.createBatchRunState();
+t.markBatchFileRunning(batchA, 'folderA/note.md');
+t.markBatchFileRunning(batchB, 'folderB/note.md');
+assert.strictEqual(batchA.currentPath, 'folderA/note.md', 'batch A tracks its own file');
+assert.strictEqual(batchB.currentPath, 'folderB/note.md', 'batch B tracks its own file');
+t.requestBatchCancel(batchA);
+assert.strictEqual(batchA.cancelled, true, 'batch A cancelled');
+assert.strictEqual(batchB.cancelled, false, 'batch B unaffected by A cancellation');
+
+// Batch cancellation mid-iteration: stats accumulate correctly
+const midCancelStats = t.createBatchStats(5);
+const s1 = t.recordBatchProcessed(midCancelStats);
+const s2 = t.recordBatchSkip(s1);
+// "cancelled" at this point — no more processing, stats frozen
+assert.strictEqual(s2.processed, 2, 'two files processed before cancel');
+assert.strictEqual(s2.skipped, 1, 'one skipped before cancel');
+assert.strictEqual(s2.errors, 0, 'no errors before cancel');
+assert.strictEqual(s2.total, 5, 'total unchanged by partial processing');
+
 // ── i18n.ts ──
 
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'appTitle'), '对照阅读笔记', 'zh translation');
