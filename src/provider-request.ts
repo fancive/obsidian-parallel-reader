@@ -27,12 +27,13 @@ export function responseJson(
   if (resp.json && typeof resp.json === 'object') return resp.json as Record<string, unknown>;
   try {
     return JSON.parse(resp.text || '{}') as Record<string, unknown>;
-  } catch (_) {
+  } catch (cause: unknown) {
     throw new Error(
       translate(settings || null, 'errorProviderNonJson', {
         label,
         excerpt: (resp.text || '').slice(0, 500),
       }),
+      { cause },
     );
   }
 }
