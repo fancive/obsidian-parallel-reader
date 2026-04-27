@@ -188,6 +188,33 @@ async function requireBundledModule(relativePath) {
     'direct settings import exposes generation fingerprinting',
   );
 
+  // applyApiProviderPreset: model swap when switching providers
+  const anthropicSettings = { ...settings.DEFAULT_SETTINGS, apiProvider: 'anthropic', model: 'claude-sonnet-4-6' };
+  const switchedToOpenAi = settings.applyApiProviderPreset(anthropicSettings, 'openai');
+  assert.strictEqual(switchedToOpenAi.apiProvider, 'openai', 'provider switched to openai');
+  assert.strictEqual(switchedToOpenAi.apiFormat, 'openai-chat', 'format updated for openai');
+  assert.strictEqual(switchedToOpenAi.model, 'gpt-5.1', 'model swapped to openai preset model');
+
+  // Keep custom model when switching providers
+  const customModelSettings = { ...settings.DEFAULT_SETTINGS, apiProvider: 'anthropic', model: 'my-custom-model' };
+  const switchedKeepModel = settings.applyApiProviderPreset(customModelSettings, 'openai');
+  assert.strictEqual(switchedKeepModel.model, 'my-custom-model', 'custom model preserved when switching providers');
+
+  // Swap model when current model matches previous preset's default
+  const openaiWithPresetModel = { ...settings.DEFAULT_SETTINGS, apiProvider: 'openai', model: 'gpt-5.1' };
+  const switchedToGoogle = settings.applyApiProviderPreset(openaiWithPresetModel, 'google');
+  assert.strictEqual(switchedToGoogle.model, 'gemini-3-pro-preview', 'model swapped when it matched previous preset');
+  assert.strictEqual(switchedToGoogle.apiFormat, 'google-generative-ai', 'format updated for google');
+
+  // Empty model triggers swap
+  const emptyModelSettings = { ...settings.DEFAULT_SETTINGS, apiProvider: 'anthropic', model: '' };
+  const switchedFromEmpty = settings.applyApiProviderPreset(emptyModelSettings, 'deepseek');
+  assert.strictEqual(switchedFromEmpty.model, 'deepseek-chat', 'empty model triggers swap to preset default');
+
+  // Does not mutate original settings
+  assert.strictEqual(anthropicSettings.model, 'claude-sonnet-4-6', 'applyApiProviderPreset does not mutate input');
+  assert.strictEqual(anthropicSettings.apiProvider, 'anthropic', 'original provider unchanged');
+
   function trackedSignal() {
     const controller = new AbortController();
     const signal = controller.signal;
