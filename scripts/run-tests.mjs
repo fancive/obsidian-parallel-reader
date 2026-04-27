@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 
@@ -9,9 +9,9 @@ const files = readdirSync(testsDir)
 
 let failed = 0;
 for (const file of files) {
-  const path = join(testsDir, file);
+  const filePath = join(testsDir, file);
   try {
-    execSync(`node ${path}`, { stdio: 'inherit' });
+    execFileSync('node', [filePath], { stdio: 'inherit' });
   } catch {
     failed++;
   }

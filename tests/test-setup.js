@@ -26,6 +26,15 @@ esbuild.buildSync({
 
 const t = require(outfile);
 
+// Clean up temp bundle on process exit.
+process.on('exit', () => {
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch (_) {
+    // Best-effort cleanup.
+  }
+});
+
 function openAiCardsResponse(cards) {
   const json = {
     choices: [
