@@ -64,8 +64,8 @@ export class GenerationJob {
     for (const handler of this._cancelHandlers.splice(0)) {
       try {
         handler();
-      } catch {
-        /* handler error ignored */
+      } catch (e: unknown) {
+        console.warn('[parallel-reader] cancel handler error', e);
       }
     }
     return true;

@@ -100,8 +100,8 @@ export function runCli(
     timer = setTimeout(() => {
       try {
         child.kill('SIGKILL');
-      } catch (_) {
-        /* ignore */
+      } catch (e: unknown) {
+        console.warn('[parallel-reader] failed to kill timed-out CLI process', e);
       }
       fail(new Error(`CLI timed out (${timeoutMs}ms)`));
     }, timeoutMs);
@@ -109,8 +109,8 @@ export function runCli(
       job.onCancel(() => {
         try {
           child.kill('SIGKILL');
-        } catch (_) {
-          /* ignore */
+        } catch (e: unknown) {
+          console.warn('[parallel-reader] failed to kill cancelled CLI process', e);
         }
         fail(new GenerationJobCancelledError(job.key));
       });
@@ -152,8 +152,8 @@ export function runCli(
     } else {
       try {
         childStdin.end();
-      } catch (_) {
-        /* ignore */
+      } catch (e: unknown) {
+        console.warn('[parallel-reader] failed to close CLI stdin', e);
       }
     }
   });
