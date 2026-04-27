@@ -159,12 +159,9 @@ export async function streamingFetch(
   let abortListener: (() => void) | null = null;
 
   if (signal) {
-    if (signal.aborted) {
-      timeoutController.abort();
-    } else {
-      abortListener = () => timeoutController.abort();
-      signal.addEventListener('abort', abortListener, { once: true });
-    }
+    abortListener = () => timeoutController.abort();
+    signal.addEventListener('abort', abortListener, { once: true });
+    if (signal.aborted) timeoutController.abort();
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
