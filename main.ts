@@ -508,15 +508,7 @@ class ParallelReaderPlugin extends Plugin {
         new Notice(this.t('generatingNotice'));
 
         job.setPhase('generating');
-        const streamingView = view;
-        const streamProgress = streamingView
-          ? (progress: StreamProgress) => {
-              if (!progress.done && this.viewIsShowingFile(streamingView, file)) {
-                streamingView.renderStreamingPreview(file, progress.accumulated);
-              }
-            }
-          : undefined;
-        const sections = await summarizeDocument(content, this.settings, job, streamProgress);
+        const sections = await summarizeDocument(content, this.settings, job, this.streamProgressFor(view, file));
         job.throwIfCancelled();
         if (sections.length === 0) {
           new Notice(this.t('noCardsReturned'));
@@ -535,22 +527,36 @@ class ParallelReaderPlugin extends Plugin {
           }),
         );
       })
-      .catch((e: unknown) => {
-        if (e instanceof GenerationJobAlreadyRunningError) {
-          new Notice(e.message);
-          return;
-        }
-        if (e instanceof GenerationJobCancelledError) {
-          if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('cancelledError'));
-          new Notice(this.t('cancelled'));
-          return;
-        }
-        const kind = classifyGenerationError(e);
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error(e);
-        if (view && this.viewIsShowingFile(view, file)) view.renderError(file, msg);
-        new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: msg }));
-      });
+      .catch((e: unknown) => this.handleGenerationError(e, file, view));
+  }
+
+  private streamProgressFor(
+    view: ParallelReaderView | null,
+    file: TFile,
+  ): ((progress: StreamProgress) => void) | undefined {
+    if (!view) return undefined;
+    return (progress: StreamProgress) => {
+      if (!progress.done && this.viewIsShowingFile(view, file)) {
+        view.renderStreamingPreview(file, progress.accumulated);
+      }
+    };
+  }
+
+  private handleGenerationError(e: unknown, file: TFile, view: ParallelReaderView | null) {
+    if (e instanceof GenerationJobAlreadyRunningError) {
+      new Notice(e.message);
+      return;
+    }
+    if (e instanceof GenerationJobCancelledError) {
+      if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('cancelledError'));
+      new Notice(this.t('cancelled'));
+      return;
+    }
+    const kind = classifyGenerationError(e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(e);
+    if (view && this.viewIsShowingFile(view, file)) view.renderError(file, msg);
+    new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: msg }));
   }
 
   async runBatchForFolder() {
