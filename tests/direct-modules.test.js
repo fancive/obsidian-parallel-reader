@@ -37,6 +37,7 @@ async function requireBundledModule(relativePath) {
     const cache = await requireBundledModule('src/cache.ts');
     const cacheManagerModule = await requireBundledModule('src/cache-manager.ts');
     const generation = await requireBundledModule('src/generation.ts');
+    const i18n = await requireBundledModule('src/i18n.ts');
     const providerParsers = await requireBundledModule('src/provider-parsers.ts');
     const settings = await requireBundledModule('src/settings.ts');
     const streaming = await requireBundledModule('src/streaming.ts');
@@ -362,6 +363,59 @@ async function requireBundledModule(relativePath) {
   // Does not mutate original settings
   assert.strictEqual(anthropicSettings.model, 'claude-sonnet-4-6', 'applyApiProviderPreset does not mutate input');
   assert.strictEqual(anthropicSettings.apiProvider, 'anthropic', 'original provider unchanged');
+
+  // --- i18n.ts: translate and resolveUiLanguage ---
+  // translate with explicit language
+  assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'displayName'), 'Parallel Reader', 'translate returns en string');
+  assert.strictEqual(i18n.translate({ uiLanguage: 'zh' }, 'displayName'), '对照阅读笔记', 'translate returns zh string');
+
+  // translate with variable interpolation
+  assert.strictEqual(
+    i18n.translate({ uiLanguage: 'en' }, 'cacheClearedFile', { name: 'test.md' }),
+    'Cleared cache: test.md',
+    'translate interpolates variables',
+  );
+  assert.strictEqual(
+    i18n.translate({ uiLanguage: 'en' }, 'generationDone', { count: 5, suffix: '' }),
+    'Generated 5 sections',
+    'translate interpolates numeric variables',
+  );
+
+  // translate with multiple variables
+  assert.strictEqual(
+    i18n.translate({ uiLanguage: 'en' }, 'errorProviderApiStatus', { label: 'OpenAI', status: 429, excerpt: 'rate limited' }),
+    'OpenAI API returned HTTP 429: rate limited',
+    'translate interpolates multiple variables',
+  );
+
+  // translate with missing key returns key
+  assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'nonExistentKey123'), 'nonExistentKey123', 'translate returns key for missing translation');
+
+  // translate with null settings defaults to some language
+  assert.ok(i18n.translate(null, 'displayName').length > 0, 'translate with null settings still returns a string');
+
+  // translate preserves unmatched placeholders
+  assert.strictEqual(
+    i18n.translate({ uiLanguage: 'en' }, 'cacheClearedFile'),
+    'Cleared cache: {name}',
+    'translate preserves unmatched placeholders when no vars provided',
+  );
+
+  // resolveUiLanguage
+  assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'en' }), 'en', 'resolveUiLanguage returns en');
+  assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'zh' }), 'zh', 'resolveUiLanguage returns zh');
+  assert.strictEqual(i18n.resolveUiLanguage(null), 'en', 'resolveUiLanguage defaults to en for null');
+  assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'en', 'resolveUiLanguage auto falls back to en in Node');
+
+  // STRINGS structure validation
+  assert.ok(i18n.STRINGS.zh, 'STRINGS has zh locale');
+  assert.ok(i18n.STRINGS.en, 'STRINGS has en locale');
+  const zhKeys = Object.keys(i18n.STRINGS.zh);
+  const enKeys = Object.keys(i18n.STRINGS.en);
+  assert.strictEqual(zhKeys.length, enKeys.length, 'zh and en have same number of keys');
+  for (const key of zhKeys) {
+    assert.ok(i18n.STRINGS.en[key], `en missing key: ${key}`);
+  }
 
   // --- parseSseBuffer unit tests ---
   const openAiExtractor = streaming.deltaExtractorForFormat('openai-chat');
