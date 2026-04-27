@@ -22,7 +22,7 @@ export async function ensureVaultFolder(app: App, folderPath: string) {
     if (app.vault.getAbstractFileByPath(folder)) continue;
     try {
       await app.vault.createFolder(folder);
-    } catch (e) {
+    } catch (e: unknown) {
       if (!app.vault.getAbstractFileByPath(folder)) throw e;
     }
   }

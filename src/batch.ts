@@ -12,6 +12,7 @@ export interface BatchStats {
   total: number;
   processed: number;
   skipped: number;
+  errors: number;
 }
 
 export interface BatchRunState {
@@ -68,7 +69,7 @@ export function batchProgressVars(index: number, total: number): { current: numb
 }
 
 export function createBatchStats(total: number): BatchStats {
-  return { total, processed: 0, skipped: 0 };
+  return { total, processed: 0, skipped: 0, errors: 0 };
 }
 
 export function recordBatchProcessed(stats: BatchStats): BatchStats {
@@ -77,6 +78,10 @@ export function recordBatchProcessed(stats: BatchStats): BatchStats {
 
 export function recordBatchSkip(stats: BatchStats): BatchStats {
   return { ...stats, processed: stats.processed + 1, skipped: stats.skipped + 1 };
+}
+
+export function recordBatchError(stats: BatchStats): BatchStats {
+  return { ...stats, processed: stats.processed + 1, errors: stats.errors + 1 };
 }
 
 export function shouldSkipBatchFile(entry: CacheEntry | null, content: string, settings: PluginSettings): boolean {

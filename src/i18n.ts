@@ -158,8 +158,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     batchFolderNotFound: '文件夹不存在：{path}',
     batchNoMarkdown: '该文件夹下没有 Markdown 文件',
     batchProgress: '批量生成：{current}/{total}',
-    batchDone: '批量生成完成：共处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇',
-    batchCancelled: '批量生成已取消：已处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇',
+    batchDone: '批量生成完成：共处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇，失败 {errors} 篇',
+    batchCancelled: '批量生成已取消：已处理 {processed}/{total} 篇，跳过缓存 {skipped} 篇，失败 {errors} 篇',
   },
   en: {
     appTitle: 'Parallel Reader',
@@ -324,8 +324,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
     batchFolderNotFound: 'Folder not found: {path}',
     batchNoMarkdown: 'No Markdown files found in that folder',
     batchProgress: 'Batch generating: {current}/{total}',
-    batchDone: 'Batch complete: processed {processed}/{total}, skipped {skipped} (cached)',
-    batchCancelled: 'Batch cancelled: processed {processed}/{total}, skipped {skipped} (cached)',
+    batchDone: 'Batch complete: processed {processed}/{total}, skipped {skipped} (cached), errors {errors}',
+    batchCancelled: 'Batch cancelled: processed {processed}/{total}, skipped {skipped} (cached), errors {errors}',
   },
 };
 

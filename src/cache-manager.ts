@@ -89,7 +89,7 @@ export class CacheManager {
     this._timer = setTimeout(() => {
       this._timer = null;
       if (!this._dirty) return;
-      this.save().catch((e) => console.error('[parallel-reader] failed to save cache', e));
+      this.save().catch((e: unknown) => console.error('[parallel-reader] failed to save cache', e));
     }, delayMs);
   }
 

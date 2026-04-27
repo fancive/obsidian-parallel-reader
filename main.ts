@@ -9,6 +9,7 @@ import {
   hasUnsafeBatchFolderSegments,
   markBatchFileRunning,
   normalizeBatchFolderInput,
+  recordBatchError,
   recordBatchProcessed,
   recordBatchSkip,
   requestBatchCancel,
@@ -139,7 +140,10 @@ class ParallelReaderPlugin extends Plugin {
       name: this.t('cmdClearCurrent'),
       callback: async () => {
         const active = this.getActiveView();
-        if (!active?.file) return new Notice(this.t('noCurrentNote'));
+        if (!active?.file) {
+          new Notice(this.t('noCurrentNote'));
+          return;
+        }
         await this.cacheManager.delete(active.file.path);
         new Notice(this.t('cacheClearedFile', { name: active.file.basename }));
       },
@@ -228,7 +232,7 @@ class ParallelReaderPlugin extends Plugin {
     if (this._settingsSaveTimer) clearTimeout(this._settingsSaveTimer);
     this._settingsSaveTimer = setTimeout(() => {
       this._settingsSaveTimer = null;
-      this.saveSettings().catch((e) => console.error('[parallel-reader] failed to save settings', e));
+      this.saveSettings().catch((e: unknown) => console.error('[parallel-reader] failed to save settings', e));
     }, delayMs);
   }
 
@@ -539,7 +543,7 @@ class ParallelReaderPlugin extends Plugin {
           }),
         );
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         if (e instanceof GenerationJobAlreadyRunningError) {
           new Notice(e.message);
           return;
@@ -550,9 +554,10 @@ class ParallelReaderPlugin extends Plugin {
           return;
         }
         const kind = classifyGenerationError(e);
+        const msg = e instanceof Error ? e.message : String(e);
         console.error(e);
-        if (view && this.viewIsShowingFile(view, file)) view.renderError(file, e.message || String(e));
-        new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: e.message || e }));
+        if (view && this.viewIsShowingFile(view, file)) view.renderError(file, msg);
+        new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: msg }));
       });
   }
 
@@ -615,8 +620,13 @@ class ParallelReaderPlugin extends Plugin {
           stats = recordBatchSkip(stats);
           continue;
         }
-        await this.runForFile(file, false);
-        stats = recordBatchProcessed(stats);
+        try {
+          await this.runForFile(file, false);
+          stats = recordBatchProcessed(stats);
+        } catch (e: unknown) {
+          stats = recordBatchError(stats);
+          console.error('[parallel-reader] batch error for', file.path, e);
+        }
       }
     } finally {
       if (this.activeBatch === batch) this.activeBatch = null;
@@ -624,6 +634,7 @@ class ParallelReaderPlugin extends Plugin {
     const batchVars: Record<string, string | number> = {
       processed: stats.processed,
       skipped: stats.skipped,
+      errors: stats.errors,
       total: stats.total,
     };
     if (batch.cancelled) new Notice(this.t('batchCancelled', batchVars));
@@ -790,6 +801,7 @@ export const __test = {
   normalizeStreamingTimeoutMs,
   nextCardIndex,
   pruneCacheEntries,
+  recordBatchError,
   recordBatchProcessed,
   recordBatchSkip,
   requestBatchCancel,

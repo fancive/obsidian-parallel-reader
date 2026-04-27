@@ -230,7 +230,7 @@ async function requestJsonBodyWithStructuredFallback(
 ): Promise<Record<string, unknown>> {
   try {
     return await requestJsonBody(requestUrlImpl, label, url, headers, structuredBody, settings);
-  } catch (e) {
+  } catch (e: unknown) {
     if (!fallbackBody || !shouldRetryWithoutStructuredOutput(e)) throw e;
     console.warn(`[parallel-reader] ${label} structured output rejected; retrying without structured output`, e);
     return requestJsonBody(requestUrlImpl, label + ' fallback', url, headers, fallbackBody, settings);

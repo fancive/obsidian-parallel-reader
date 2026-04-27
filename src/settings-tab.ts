@@ -85,7 +85,10 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           .onChange(async (v) => {
             this.plugin.settings.backend = v;
             if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
-              applyApiProviderPreset(this.plugin.settings, this.plugin.settings.apiProvider || 'anthropic');
+              this.plugin.settings = applyApiProviderPreset(
+                this.plugin.settings,
+                this.plugin.settings.apiProvider || 'anthropic',
+              );
             }
             await this.plugin.saveSettings();
             this.display();
@@ -121,7 +124,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           d.addOption(id, entry.label);
         }
         return d.setValue(this.plugin.settings.apiProvider).onChange(async (v) => {
-          applyApiProviderPreset(this.plugin.settings, v);
+          this.plugin.settings = applyApiProviderPreset(this.plugin.settings, v);
           await this.plugin.saveSettings();
           this.display();
         });

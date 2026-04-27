@@ -310,7 +310,7 @@ export function modelForApi(settings: PluginSettings): string {
   return raw;
 }
 
-export function applyApiProviderPreset(settings: PluginSettings, providerId: string) {
+export function applyApiProviderPreset(settings: Readonly<PluginSettings>, providerId: string): PluginSettings {
   const previousPreset = getApiPreset(settings);
   const preset = API_PROVIDER_PRESETS[providerId] || API_PROVIDER_PRESETS.anthropic;
   const previousModel = (settings.model || '').trim();
@@ -319,12 +319,15 @@ export function applyApiProviderPreset(settings: PluginSettings, providerId: str
     previousModel === DEFAULT_SETTINGS.model ||
     (!!previousPreset.model && previousModel === previousPreset.model);
 
-  settings.apiProvider = providerId;
-  settings.apiFormat = preset.format;
-  settings.apiBaseUrl = preset.baseUrl;
-  settings.apiAuthType = preset.authType || 'auto';
-  settings.apiKeyEnvVar = preset.envVar || '';
-  if (shouldSwapModel) settings.model = preset.model || '';
+  return {
+    ...settings,
+    apiProvider: providerId,
+    apiFormat: preset.format,
+    apiBaseUrl: preset.baseUrl,
+    apiAuthType: preset.authType || 'auto',
+    apiKeyEnvVar: preset.envVar || '',
+    ...(shouldSwapModel ? { model: preset.model || '' } : {}),
+  };
 }
 
 export function normalizeSettings(settings: PluginSettings): PluginSettings {

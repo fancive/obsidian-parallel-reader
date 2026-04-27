@@ -264,9 +264,11 @@ assert.deepStrictEqual(t.batchProgressVars(1, 3), { current: 2, total: 3 }, 'pro
 const batchStats = t.createBatchStats(3);
 const skippedStats = t.recordBatchSkip(batchStats);
 const processedStats = t.recordBatchProcessed(skippedStats);
-assert.deepStrictEqual(batchStats, { total: 3, processed: 0, skipped: 0 }, 'batch stats are immutable');
-assert.deepStrictEqual(skippedStats, { total: 3, processed: 1, skipped: 1 }, 'batch skip updates progress');
-assert.deepStrictEqual(processedStats, { total: 3, processed: 2, skipped: 1 }, 'batch processed count accumulates');
+const errorStats = t.recordBatchError(processedStats);
+assert.deepStrictEqual(batchStats, { total: 3, processed: 0, skipped: 0, errors: 0 }, 'batch stats are immutable');
+assert.deepStrictEqual(skippedStats, { total: 3, processed: 1, skipped: 1, errors: 0 }, 'batch skip updates progress');
+assert.deepStrictEqual(processedStats, { total: 3, processed: 2, skipped: 1, errors: 0 }, 'batch processed count accumulates');
+assert.deepStrictEqual(errorStats, { total: 3, processed: 3, skipped: 1, errors: 1 }, 'batch error count accumulates');
 
 const batchState = t.createBatchRunState();
 assert.deepStrictEqual(batchState, { cancelled: false, currentPath: '' }, 'batch state starts idle');

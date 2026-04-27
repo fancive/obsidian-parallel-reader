@@ -100,7 +100,7 @@ export class GenerationJobManager {
       const result = await runner(job);
       job.throwIfCancelled();
       return result;
-    } catch (err) {
+    } catch (err: unknown) {
       if (job.cancelled && !(err instanceof GenerationJobCancelledError)) {
         throw new GenerationJobCancelledError(key);
       }
