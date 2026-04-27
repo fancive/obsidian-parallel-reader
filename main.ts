@@ -117,7 +117,7 @@ class ParallelReaderPlugin extends Plugin {
         const active = this.getActiveView();
         const view = await this.ensureView();
         if (!view) return;
-        if (active?.file) void this.syncViewToFile(active.file);
+        if (active?.file) await this.syncViewToFile(active.file);
       },
     });
     this.addCommand({
@@ -183,26 +183,28 @@ class ParallelReaderPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.bindScrollSync()));
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
-        if (file) void this.syncViewToFile(file);
+        if (file) this.syncViewToFile(file).catch((e: unknown) => console.error('[parallel-reader] sync view', e));
       }),
     );
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => this.addFileMenuItems(menu, file)));
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
-        if (file instanceof TFile) void this.handleFileRename(file, oldPath);
+        if (file instanceof TFile)
+          this.handleFileRename(file, oldPath).catch((e: unknown) => console.error('[parallel-reader] file rename', e));
       }),
     );
     this.registerEvent(
       this.app.vault.on('delete', (file) => {
-        if (file instanceof TFile) void this.handleFileDelete(file);
+        if (file instanceof TFile)
+          this.handleFileDelete(file).catch((e: unknown) => console.error('[parallel-reader] file delete', e));
       }),
     );
     this.bindScrollSync();
   }
 
   onunload() {
-    void this.flushSettingsSave();
-    void this.flushCacheSave();
+    this.flushSettingsSave().catch((e: unknown) => console.error('[parallel-reader] flush settings on unload', e));
+    this.flushCacheSave().catch((e: unknown) => console.error('[parallel-reader] flush cache on unload', e));
   }
 
   /* ---------- Settings persistence ---------- */

@@ -375,7 +375,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           }
         };
         t.inputEl.addEventListener('change', () => {
-          void commit();
+          commit().catch((e: unknown) => console.error('[parallel-reader] failed to save cache settings', e));
         });
         t.inputEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') t.inputEl.blur();
