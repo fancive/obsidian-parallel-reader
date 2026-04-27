@@ -150,7 +150,7 @@ export class ParallelReaderView extends ItemView {
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
     addTextButton(hint, null, this.plugin.t('actionGenerate'), () => {
       if (this.plugin.isGeneratingFile(file)) return;
-      this.plugin.runForFile(file, false);
+      void this.plugin.runForFile(file, false);
     });
   }
 
@@ -182,12 +182,15 @@ export class ParallelReaderView extends ItemView {
           this.plugin.cancelGenerationForFile(this.sourceFile);
         });
       } else {
-        addIconButton(actions, 'refresh-cw', this.plugin.t('actionRegenerate'), () =>
-          this.plugin.runForFile(this.sourceFile, true),
+        addIconButton(
+          actions,
+          'refresh-cw',
+          this.plugin.t('actionRegenerate'),
+          () => void this.plugin.runForFile(this.sourceFile, true),
         );
       }
-      addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => this.plugin.copyCurrentViewMarkdown());
-      addIconButton(actions, 'download', this.plugin.t('actionExport'), () => this.exportToVault());
+      addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => void this.plugin.copyCurrentViewMarkdown());
+      addIconButton(actions, 'download', this.plugin.t('actionExport'), () => void this.exportToVault());
     }
   }
 
@@ -198,7 +201,7 @@ export class ParallelReaderView extends ItemView {
       banner,
       'refresh-cw',
       this.plugin.t('actionRegenerate'),
-      () => this.plugin.runForFile(this.sourceFile, true),
+      () => void this.plugin.runForFile(this.sourceFile, true),
       'parallel-reader-stale-button',
     );
   }
@@ -222,14 +225,14 @@ export class ParallelReaderView extends ItemView {
       actions,
       'refresh-cw',
       this.plugin.t('actionRegenerate'),
-      () => this.plugin.runForFile(this.sourceFile, true),
+      () => void this.plugin.runForFile(this.sourceFile, true),
       'parallel-reader-text-button',
     );
     addTextButton(
       actions,
       'copy',
       this.plugin.t('actionCopyError'),
-      () => copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
+      () => void copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
       'parallel-reader-text-button',
     );
   }
@@ -297,20 +300,20 @@ export class ParallelReaderView extends ItemView {
       it
         .setTitle(this.plugin.t('menuCopyMarkdown'))
         .setIcon('copy')
-        .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
+        .onClick(() => void copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
     );
     menu.addItem((it) =>
       it
         .setTitle(this.plugin.t('menuCopyPlain'))
         .setIcon('clipboard-copy')
-        .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
+        .onClick(() => void copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
     );
     if (s.anchor) {
       menu.addItem((it) =>
         it
           .setTitle(this.plugin.t('menuCopyAnchor'))
           .setIcon('quote-glyph')
-          .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
+          .onClick(() => void copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
       );
     }
     menu.addSeparator();
@@ -319,7 +322,7 @@ export class ParallelReaderView extends ItemView {
         it
           .setTitle(this.plugin.t('menuJumpSource'))
           .setIcon('arrow-right')
-          .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)),
+          .onClick(() => void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)),
       );
     }
     menu.addSeparator();

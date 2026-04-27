@@ -337,13 +337,13 @@ class ParallelReaderPlugin extends Plugin {
       it
         .setTitle(this.t('fileMenuGenerate'))
         .setIcon('book-open')
-        .onClick(() => this.runForFile(file, false)),
+        .onClick(() => void this.runForFile(file, false)),
     );
     menu.addItem((it: ObsidianMenuItem) =>
       it
         .setTitle(this.t('fileMenuRegen'))
         .setIcon('refresh-cw')
-        .onClick(() => this.runForFile(file, true)),
+        .onClick(() => void this.runForFile(file, true)),
     );
     if (this.cacheManager.get(file.path)) {
       menu.addItem((it: ObsidianMenuItem) =>
