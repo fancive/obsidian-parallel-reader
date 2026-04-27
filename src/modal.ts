@@ -12,7 +12,7 @@ export class CardEditModal extends Modal {
   constructor(app: App, plugin: PluginHost, card: ResolvedCard, onSave: (patch: CardPatch) => void | Promise<void>) {
     super(app);
     this.plugin = plugin;
-    this.card = card || ({} as ResolvedCard);
+    this.card = card;
     this.onSave = onSave;
   }
 
