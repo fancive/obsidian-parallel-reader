@@ -363,6 +363,81 @@ async function requireBundledModule(relativePath) {
   assert.strictEqual(anthropicSettings.model, 'claude-sonnet-4-6', 'applyApiProviderPreset does not mutate input');
   assert.strictEqual(anthropicSettings.apiProvider, 'anthropic', 'original provider unchanged');
 
+  // --- parseSseBuffer unit tests ---
+  const openAiExtractor = streaming.deltaExtractorForFormat('openai-chat');
+  const anthropicExtractor = streaming.deltaExtractorForFormat('anthropic-messages');
+
+  // deltaExtractorForFormat returns correct extractors
+  assert.ok(openAiExtractor, 'deltaExtractorForFormat returns extractor for openai-chat');
+  assert.ok(anthropicExtractor, 'deltaExtractorForFormat returns extractor for anthropic-messages');
+  assert.strictEqual(streaming.deltaExtractorForFormat('unknown-format'), null, 'deltaExtractorForFormat returns null for unknown');
+  assert.strictEqual(streaming.deltaExtractorForFormat('google-generative-ai'), null, 'deltaExtractorForFormat returns null for non-streaming format');
+
+  // OpenAI delta extractor
+  assert.strictEqual(openAiExtractor({ choices: [{ delta: { content: 'hello' } }] }), 'hello', 'openai extractor gets content');
+  assert.strictEqual(openAiExtractor({ choices: [{ delta: {} }] }), '', 'openai extractor handles missing content');
+  assert.strictEqual(openAiExtractor({ choices: [] }), '', 'openai extractor handles empty choices');
+  assert.strictEqual(openAiExtractor({}), '', 'openai extractor handles empty json');
+
+  // Anthropic delta extractor
+  assert.strictEqual(anthropicExtractor({ type: 'content_block_delta', delta: { text: 'world' } }), 'world', 'anthropic extractor gets text');
+  assert.strictEqual(anthropicExtractor({ type: 'content_block_start' }), '', 'anthropic extractor ignores non-delta events');
+  assert.strictEqual(anthropicExtractor({ type: 'content_block_delta', delta: {} }), '', 'anthropic extractor handles empty delta');
+  assert.strictEqual(anthropicExtractor({}), '', 'anthropic extractor handles empty json');
+
+  // parseSseBuffer: basic single event
+  const singleEvent = streaming.parseSseBuffer('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n', openAiExtractor);
+  assert.deepStrictEqual(singleEvent.deltas, ['hi'], 'parseSseBuffer extracts single delta');
+  assert.strictEqual(singleEvent.rest, '', 'parseSseBuffer returns empty rest after complete event');
+
+  // parseSseBuffer: multiple events
+  const multiEvent = streaming.parseSseBuffer(
+    'data: {"choices":[{"delta":{"content":"a"}}]}\n\ndata: {"choices":[{"delta":{"content":"b"}}]}\n\n',
+    openAiExtractor,
+  );
+  assert.deepStrictEqual(multiEvent.deltas, ['a', 'b'], 'parseSseBuffer extracts multiple deltas');
+
+  // parseSseBuffer: incomplete buffer
+  const incomplete = streaming.parseSseBuffer('data: {"choices":[{"delta":{"content":"partial"}}]}', openAiExtractor);
+  assert.deepStrictEqual(incomplete.deltas, [], 'parseSseBuffer returns no deltas for incomplete event');
+  assert.ok(incomplete.rest.length > 0, 'parseSseBuffer returns incomplete data as rest');
+
+  // parseSseBuffer: [DONE] sentinel
+  const withDone = streaming.parseSseBuffer('data: {"choices":[{"delta":{"content":"x"}}]}\n\ndata: [DONE]\n\n', openAiExtractor);
+  assert.deepStrictEqual(withDone.deltas, ['x'], 'parseSseBuffer ignores [DONE] sentinel');
+
+  // parseSseBuffer: non-data lines (comments, event types)
+  const withComments = streaming.parseSseBuffer(': keep-alive\nevent: message\ndata: {"choices":[{"delta":{"content":"ok"}}]}\n\n', openAiExtractor);
+  assert.deepStrictEqual(withComments.deltas, ['ok'], 'parseSseBuffer skips comment and event lines');
+
+  // parseSseBuffer: CRLF line endings
+  const crlfEvent = streaming.parseSseBuffer('data: {"choices":[{"delta":{"content":"crlf"}}]}\r\n\r\n', openAiExtractor);
+  assert.deepStrictEqual(crlfEvent.deltas, ['crlf'], 'parseSseBuffer handles CRLF line endings');
+
+  // parseSseBuffer: multi-line data
+  const multiLine = streaming.parseSseBuffer('data: {"choices":[{"delta":\ndata: {"content":"split"}}]}\n\n', openAiExtractor);
+  assert.deepStrictEqual(multiLine.deltas, ['split'], 'parseSseBuffer joins multi-line data fields');
+
+  // parseSseBuffer: malformed JSON
+  const malformed = streaming.parseSseBuffer('data: not-json\n\ndata: {"choices":[{"delta":{"content":"ok"}}]}\n\n', openAiExtractor);
+  assert.deepStrictEqual(malformed.deltas, ['ok'], 'parseSseBuffer skips malformed JSON events');
+
+  // parseSseBuffer: Anthropic format
+  const anthropicEvent = streaming.parseSseBuffer(
+    'data: {"type":"content_block_delta","delta":{"text":"ant"}}\n\ndata: {"type":"message_stop"}\n\n',
+    anthropicExtractor,
+  );
+  assert.deepStrictEqual(anthropicEvent.deltas, ['ant'], 'parseSseBuffer works with Anthropic format');
+
+  // parseSseBuffer: data: with no space after colon
+  const noSpaceData = streaming.parseSseBuffer('data:{"choices":[{"delta":{"content":"ns"}}]}\n\n', openAiExtractor);
+  assert.deepStrictEqual(noSpaceData.deltas, ['ns'], 'parseSseBuffer handles data: without trailing space');
+
+  // parseSseBuffer: empty buffer
+  const emptyBuf = streaming.parseSseBuffer('', openAiExtractor);
+  assert.deepStrictEqual(emptyBuf.deltas, [], 'parseSseBuffer handles empty buffer');
+  assert.strictEqual(emptyBuf.rest, '', 'parseSseBuffer returns empty rest for empty buffer');
+
   function trackedSignal() {
     const controller = new AbortController();
     const signal = controller.signal;
