@@ -225,95 +225,103 @@ export class ParallelReaderView extends ItemView {
     this.cards = [];
     const sourcePath = this.sourceFile?.path || '';
     this.sections.forEach((s, i) => {
-      const card = list.createDiv({ cls: 'parallel-reader-card' });
-      card.dataset.idx = String(i);
-      if (s.startLine < 0) card.addClass('parallel-reader-card-unanchored');
-
-      const title = card.createEl('div', { cls: 'parallel-reader-card-title' });
-      title.createSpan({ text: s.title });
-      if (s.startLine < 0) {
-        title.createEl('span', { text: ' ⚠', cls: 'parallel-reader-warn', title: this.plugin.t('anchorMismatch') });
-      }
-
-      if (s.gist) {
-        const gistEl = card.createEl('div', { cls: 'parallel-reader-gist' });
-        MarkdownRenderer.render(this.app, s.gist, gistEl, sourcePath, this).catch(() => {
-          gistEl.setText(s.gist);
-        });
-      }
-
-      const bs = s.bullets || [];
-      if (bs.length > 0) {
-        const bulletsEl = card.createEl('div', { cls: 'parallel-reader-bullets-md' });
-        const md = bs.map((b) => `- ${b}`).join('\n');
-        MarkdownRenderer.render(this.app, md, bulletsEl, sourcePath, this).catch(() => {
-          bulletsEl.setText(md);
-        });
-      } else if (!s.gist) {
-        card.createEl('div', { cls: 'parallel-reader-empty-li', text: this.plugin.t('emptyCard') });
-      }
-
-      card.addEventListener('click', (e) => {
-        const sel = window.getSelection();
-        if (sel && sel.toString().length > 0) return;
-        const target = e.target as HTMLElement | null;
-        if (target && target.tagName === 'A') return;
-        if (s.startLine >= 0) void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
-      });
-
-      card.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        const menu = new Menu();
-        menu.addItem((it) =>
-          it
-            .setTitle(this.plugin.t('menuCopyMarkdown'))
-            .setIcon('copy')
-            .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
-        );
-        menu.addItem((it) =>
-          it
-            .setTitle(this.plugin.t('menuCopyPlain'))
-            .setIcon('clipboard-copy')
-            .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
-        );
-        if (s.anchor) {
-          menu.addItem((it) =>
-            it
-              .setTitle(this.plugin.t('menuCopyAnchor'))
-              .setIcon('quote-glyph')
-              .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
-          );
-        }
-        menu.addSeparator();
-        if (s.startLine >= 0) {
-          menu.addItem((it) =>
-            it
-              .setTitle(this.plugin.t('menuJumpSource'))
-              .setIcon('arrow-right')
-              .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)),
-          );
-        }
-        menu.addSeparator();
-        menu.addItem((it) =>
-          it
-            .setTitle(this.plugin.t('menuEditCard'))
-            .setIcon('pencil')
-            .onClick(() => this.openEditCardModal(i)),
-        );
-        menu.addItem((it) =>
-          it
-            .setTitle(this.plugin.t('menuDeleteCard'))
-            .setIcon('trash')
-            .onClick(() => this.deleteCard(i)),
-        );
-        menu.showAtMouseEvent(e);
-      });
-
-      this.cards.push(card);
+      this.cards.push(this.renderCard(list, s, i, sourcePath));
     });
     if (this.activeIdx >= 0 && this.cards[this.activeIdx]) {
       this.cards[this.activeIdx].addClass('is-active');
     }
+  }
+
+  private renderCard(list: Element, s: ResolvedCard, i: number, sourcePath: string): HTMLElement {
+    const card = list.createDiv({ cls: 'parallel-reader-card' });
+    card.dataset.idx = String(i);
+    if (s.startLine < 0) card.addClass('parallel-reader-card-unanchored');
+
+    const title = card.createEl('div', { cls: 'parallel-reader-card-title' });
+    title.createSpan({ text: s.title });
+    if (s.startLine < 0) {
+      title.createEl('span', { text: ' ⚠', cls: 'parallel-reader-warn', title: this.plugin.t('anchorMismatch') });
+    }
+
+    if (s.gist) {
+      const gistEl = card.createEl('div', { cls: 'parallel-reader-gist' });
+      MarkdownRenderer.render(this.app, s.gist, gistEl, sourcePath, this).catch(() => {
+        gistEl.setText(s.gist);
+      });
+    }
+
+    const bs = s.bullets || [];
+    if (bs.length > 0) {
+      const bulletsEl = card.createEl('div', { cls: 'parallel-reader-bullets-md' });
+      const md = bs.map((b) => `- ${b}`).join('\n');
+      MarkdownRenderer.render(this.app, md, bulletsEl, sourcePath, this).catch(() => {
+        bulletsEl.setText(md);
+      });
+    } else if (!s.gist) {
+      card.createEl('div', { cls: 'parallel-reader-empty-li', text: this.plugin.t('emptyCard') });
+    }
+
+    card.addEventListener('click', (e) => {
+      const sel = window.getSelection();
+      if (sel && sel.toString().length > 0) return;
+      const target = e.target as HTMLElement | null;
+      if (target && target.tagName === 'A') return;
+      if (s.startLine >= 0) void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
+    });
+
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.showCardContextMenu(e, s, i);
+    });
+
+    return card;
+  }
+
+  private showCardContextMenu(e: MouseEvent, s: ResolvedCard, i: number) {
+    const menu = new Menu();
+    menu.addItem((it) =>
+      it
+        .setTitle(this.plugin.t('menuCopyMarkdown'))
+        .setIcon('copy')
+        .onClick(() => copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
+    );
+    menu.addItem((it) =>
+      it
+        .setTitle(this.plugin.t('menuCopyPlain'))
+        .setIcon('clipboard-copy')
+        .onClick(() => copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
+    );
+    if (s.anchor) {
+      menu.addItem((it) =>
+        it
+          .setTitle(this.plugin.t('menuCopyAnchor'))
+          .setIcon('quote-glyph')
+          .onClick(() => copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
+      );
+    }
+    menu.addSeparator();
+    if (s.startLine >= 0) {
+      menu.addItem((it) =>
+        it
+          .setTitle(this.plugin.t('menuJumpSource'))
+          .setIcon('arrow-right')
+          .onClick(() => this.plugin.scrollEditorToLine(s.startLine, this.sourceFile)),
+      );
+    }
+    menu.addSeparator();
+    menu.addItem((it) =>
+      it
+        .setTitle(this.plugin.t('menuEditCard'))
+        .setIcon('pencil')
+        .onClick(() => this.openEditCardModal(i)),
+    );
+    menu.addItem((it) =>
+      it
+        .setTitle(this.plugin.t('menuDeleteCard'))
+        .setIcon('trash')
+        .onClick(() => this.deleteCard(i)),
+    );
+    menu.showAtMouseEvent(e);
   }
 
   setActiveSection(idx: number) {
