@@ -196,6 +196,7 @@ export async function summarizeViaClaudeCode(
   }
 
   if (!resultText) {
+    console.warn('[parallel-reader] claude CLI returned no result. Full stdout:', stdout);
     throw new Error('claude CLI returned no result. Output:\n' + stdout.slice(0, 500));
   }
 

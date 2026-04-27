@@ -288,12 +288,25 @@
   line-height: 1.6;
 }
 
+.parallel-reader-selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .parallel-reader-error {
   border-color: var(--text-error, #e06c75);
 }
 
 .parallel-reader-error .parallel-reader-state-title {
   color: var(--text-error, #e06c75);
+}
+
+.parallel-reader-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .parallel-reader-spinner {

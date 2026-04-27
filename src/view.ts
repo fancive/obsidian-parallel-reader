@@ -199,12 +199,23 @@ export class ParallelReaderView extends ItemView {
     if (this.errorMessage) {
       const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-error' });
       state.createEl('div', { text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
-      state.createEl('div', { text: this.errorMessage, cls: 'parallel-reader-state-subtitle' });
+      state.createEl('div', {
+        text: this.errorMessage,
+        cls: 'parallel-reader-state-subtitle parallel-reader-selectable',
+      });
+      const actions = state.createDiv({ cls: 'parallel-reader-error-actions' });
       addTextButton(
-        state,
+        actions,
         'refresh-cw',
         this.plugin.t('actionRegenerate'),
         () => this.plugin.runForFile(this.sourceFile, true),
+        'parallel-reader-text-button',
+      );
+      addTextButton(
+        actions,
+        'copy',
+        this.plugin.t('actionCopyError'),
+        () => copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
         'parallel-reader-text-button',
       );
       return;

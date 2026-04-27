@@ -83,6 +83,30 @@ assert.strictEqual(extractJson('not json at all'), 'not json at all', 'non-JSON 
 const nestedBraces = '{"cards":[{"title":"test {with} braces","anchor":"a","gist":"g","bullets":[]}]}';
 assert.deepStrictEqual(JSON.parse(extractJson(nestedBraces)).cards[0].title, 'test {with} braces');
 
+// ── schema.ts: repairTruncatedCardsJson ──
+
+const { repairTruncatedCardsJson } = t;
+
+assert.strictEqual(repairTruncatedCardsJson('not json'), null, 'non-cards text returns null');
+assert.strictEqual(repairTruncatedCardsJson(''), null, 'empty string returns null');
+assert.strictEqual(repairTruncatedCardsJson('{"cards":['), null, 'no complete cards returns null');
+
+const truncJson = '{"cards":[{"title":"A","anchor":"a","gist":"g","bullets":["b"]},{"title":"B","anchor":"x","gist":"trunc';
+const repaired = repairTruncatedCardsJson(truncJson);
+assert.ok(repaired, 'truncated JSON is repaired');
+const repairedParsed = JSON.parse(repaired);
+assert.strictEqual(repairedParsed.cards.length, 1, 'only complete card is kept');
+assert.strictEqual(repairedParsed.cards[0].title, 'A', 'salvaged card has correct title');
+
+const twoComplete = '{"cards":[{"title":"A","anchor":"a","gist":"g","bullets":["b"]},{"title":"B","anchor":"a2","gist":"g2","bullets":["c"]},{"title":"C","anch';
+const repairedTwo = JSON.parse(repairTruncatedCardsJson(twoComplete));
+assert.strictEqual(repairedTwo.cards.length, 2, 'two complete cards salvaged from three');
+
+// repairTruncatedCardsJson + normalizeCardsPayload integration
+const salvagedCards = normalizeCardsPayload(JSON.parse(repairTruncatedCardsJson(truncJson)));
+assert.strictEqual(salvagedCards.length, 1, 'repair + normalize produces valid cards');
+assert.strictEqual(salvagedCards[0].title, 'A', 'salvaged card has correct fields');
+
 // ── schema.ts: normalizeCardsPayload ──
 
 assert.deepStrictEqual(normalizeCardsPayload(null), [], 'null payload returns empty array');

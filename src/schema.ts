@@ -76,12 +76,54 @@ export function extractJson(text: string): string {
   return raw;
 }
 
+/**
+ * Attempt to salvage cards from truncated JSON.
+ * When the LLM output is cut off mid-card (e.g. token limit), the outer
+ * `{"cards":[...]}` never closes. This function locates the `"cards":[`
+ * array, finds every complete `{...}` object inside it (skipping the
+ * truncated tail), and reconstructs valid JSON.
+ */
+export function repairTruncatedCardsJson(text: string): string | null {
+  const match = text.match(/\{\s*"cards"\s*:\s*\[/);
+  if (!match || match.index === undefined) return null;
+
+  const afterArrayOpen = match.index + match[0].length;
+  const cardCandidates = collectJsonObjectCandidates(text.slice(afterArrayOpen));
+  const validCards: string[] = [];
+  for (const c of cardCandidates) {
+    try {
+      JSON.parse(c);
+      validCards.push(c);
+    } catch (_) {
+      /* skip malformed card */
+    }
+  }
+  if (validCards.length === 0) return null;
+  return '{"cards":[' + validCards.join(',') + ']}';
+}
+
 export function parseCardsJson(text: string, settings?: PluginSettings | null): RawCard[] {
   const jsonText = extractJson(text);
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
   } catch (_e) {
+    // Attempt to salvage complete cards from truncated output
+    const repaired = repairTruncatedCardsJson(text);
+    if (repaired) {
+      try {
+        parsed = JSON.parse(repaired);
+        console.warn(
+          '[parallel-reader] LLM output was truncated; salvaged',
+          (parsed as { cards?: unknown[] }).cards?.length ?? 0,
+          'complete cards. Consider increasing max tokens.',
+        );
+        return normalizeCardsPayload(parsed);
+      } catch (_) {
+        /* repair failed, fall through to error */
+      }
+    }
+    console.warn('[parallel-reader] LLM returned non-JSON. Raw response:', text);
     throw new Error(
       translate(settings || null, 'errorLlmNonJson', {
         excerpt: (text || '').slice(0, 500),
