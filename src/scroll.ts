@@ -9,25 +9,37 @@ export function visibleTopProbeY(rect: { top?: number; height?: number } | null,
   return top + Math.max(0, cappedOffset);
 }
 
-function defaultSchedule(callback: FrameRequestCallback): number {
-  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(callback);
-  return setTimeout(() => callback(Date.now()), 16) as unknown as number;
+/**
+ * Opaque frame/timer ID used by the schedule/cancel pair.
+ * In Electron both RAF and setTimeout return numbers; in Node.js tests
+ * setTimeout returns Timeout. We unify via a branded wrapper so callers
+ * never use `as unknown as`.
+ */
+type ScheduleId = { readonly __brand: 'ScheduleId'; readonly raw: number | ReturnType<typeof setTimeout> };
+
+function wrapId(raw: number | ReturnType<typeof setTimeout>): ScheduleId {
+  return { __brand: 'ScheduleId', raw } as ScheduleId;
 }
 
-function defaultCancel(frameId: number) {
+function defaultSchedule(callback: FrameRequestCallback): ScheduleId {
+  if (typeof requestAnimationFrame === 'function') return wrapId(requestAnimationFrame(callback));
+  return wrapId(setTimeout(() => callback(Date.now()), 16));
+}
+
+function defaultCancel(id: ScheduleId) {
   if (typeof cancelAnimationFrame === 'function') {
-    cancelAnimationFrame(frameId);
+    cancelAnimationFrame(id.raw as number);
     return;
   }
-  clearTimeout(frameId as unknown as ReturnType<typeof setTimeout>);
+  clearTimeout(id.raw as ReturnType<typeof setTimeout>);
 }
 
 export function createRafThrottledHandler(
   callback: () => void,
-  schedule: (callback: FrameRequestCallback) => number = defaultSchedule,
-  cancel: (frameId: number) => void = defaultCancel,
+  schedule: (callback: FrameRequestCallback) => ScheduleId = defaultSchedule,
+  cancel: (id: ScheduleId) => void = defaultCancel,
 ): RafThrottledHandler {
-  let frameId: number | null = null;
+  let frameId: ScheduleId | null = null;
 
   const handler = (() => {
     if (frameId !== null) return;
