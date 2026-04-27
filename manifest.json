@@ -1,10 +1,10 @@
 {
-  "id": "parallel-reader",
-  "name": "Parallel Reader",
-  "version": "1.0.7",
-  "minAppVersion": "1.4.0",
-  "description": "AI-powered split-view reading: source note on the left, LLM-generated summary cards on the right with scroll-sync highlighting.",
-  "author": "lancivez",
-  "fundingUrl": "https://github.com/fancive",
-  "isDesktopOnly": true
+	"id": "parallel-reader",
+	"name": "Parallel Reader",
+	"version": "1.0.8",
+	"minAppVersion": "1.4.0",
+	"description": "AI-powered split-view reading: source note on the left, LLM-generated summary cards on the right with scroll-sync highlighting.",
+	"author": "lancivez",
+	"fundingUrl": "https://github.com/fancive",
+	"isDesktopOnly": true
 }
