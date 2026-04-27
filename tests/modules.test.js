@@ -107,6 +107,41 @@ const salvagedCards = normalizeCardsPayload(JSON.parse(repairTruncatedCardsJson(
 assert.strictEqual(salvagedCards.length, 1, 'repair + normalize produces valid cards');
 assert.strictEqual(salvagedCards[0].title, 'A', 'salvaged card has correct fields');
 
+// repairTruncatedCardsJson edge cases
+// Whitespace variations in the "cards":[ pattern
+const spaced = '{  "cards" : [  {"title":"A","anchor":"a","gist":"g","bullets":[]},{"title":"B","anch';
+const repairedSpaced = repairTruncatedCardsJson(spaced);
+assert.ok(repairedSpaced, 'repair handles whitespace in cards pattern');
+assert.strictEqual(JSON.parse(repairedSpaced).cards.length, 1, 'repair with whitespace keeps complete card');
+
+// Cards with escaped quotes in string values
+const escapedQuotes = '{"cards":[{"title":"A \\"quoted\\"","anchor":"a","gist":"g","bullets":["line \\"1\\""]},{"title":"B","anch';
+const repairedEscaped = repairTruncatedCardsJson(escapedQuotes);
+assert.ok(repairedEscaped, 'repair handles escaped quotes in values');
+assert.strictEqual(JSON.parse(repairedEscaped).cards[0].title, 'A "quoted"', 'escaped quotes preserved');
+
+// Cards with braces in string values
+const bracesInStrings = '{"cards":[{"title":"func() { return }","anchor":"a","gist":"{obj}","bullets":[]},{"incomp';
+const repairedBraces = repairTruncatedCardsJson(bracesInStrings);
+assert.ok(repairedBraces, 'repair handles braces inside strings');
+assert.strictEqual(JSON.parse(repairedBraces).cards[0].title, 'func() { return }', 'braces in string preserved');
+
+// All cards truncated (only partial objects)
+assert.strictEqual(repairTruncatedCardsJson('{"cards":[{"title":"incomp'), null, 'all truncated cards returns null');
+
+// Empty cards array with truncation
+assert.strictEqual(repairTruncatedCardsJson('{"cards":[]'), null, 'empty truncated array returns null');
+
+// collectJsonObjectCandidates edge cases
+const { collectJsonObjectCandidates } = t;
+assert.deepStrictEqual(collectJsonObjectCandidates(''), [], 'empty string gives no candidates');
+assert.deepStrictEqual(collectJsonObjectCandidates('no braces'), [], 'no braces gives no candidates');
+assert.deepStrictEqual(collectJsonObjectCandidates('{"a":1}'), ['{"a":1}'], 'single object extracted');
+assert.deepStrictEqual(collectJsonObjectCandidates('{"a":1} {"b":2}'), ['{"a":1}', '{"b":2}'], 'multiple objects extracted');
+assert.deepStrictEqual(collectJsonObjectCandidates('{"a":{"b":1}}'), ['{"a":{"b":1}}'], 'nested objects extracted as one');
+assert.deepStrictEqual(collectJsonObjectCandidates('{"a":"{}"}'), ['{"a":"{}"}'], 'braces in strings handled correctly');
+assert.deepStrictEqual(collectJsonObjectCandidates('{unclosed'), [], 'unclosed brace gives no candidates');
+
 // ── schema.ts: normalizeCardsPayload ──
 
 assert.deepStrictEqual(normalizeCardsPayload(null), [], 'null payload returns empty array');

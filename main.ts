@@ -43,7 +43,7 @@ import {
   supportsStreaming,
   tokenLimitFieldForOpenAiChat,
 } from './src/providers';
-import { extractJson, normalizeCardsPayload, repairTruncatedCardsJson } from './src/schema';
+import { collectJsonObjectCandidates, extractJson, normalizeCardsPayload, repairTruncatedCardsJson } from './src/schema';
 import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
 import {
   CACHE_SCHEMA_VERSION,
@@ -732,6 +732,7 @@ export const __test = {
   cacheEntryMatches,
   cancellationNoticeKey,
   classifyGenerationError,
+  collectJsonObjectCandidates,
   copyToClipboard,
   createRafThrottledHandler,
   createBatchRunState,
