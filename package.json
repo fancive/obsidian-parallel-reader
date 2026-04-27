@@ -5,7 +5,6 @@
   "main": "main.js",
   "scripts": {
     "build": "node esbuild.config.mjs production",
-    "check:build-artifacts": "node scripts/check-build-artifacts.mjs",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
     "lint": "biome check main.ts src/",

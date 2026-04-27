@@ -14,7 +14,8 @@ node_modules/
 dist/
 *.log
 
-# Build artifacts (source maps)
+# Build artifacts
+main.js
 main.js.map
 
 # Agent state
