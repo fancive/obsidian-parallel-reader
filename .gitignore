@@ -20,3 +20,8 @@ main.js.map
 
 # Agent state
 .agent/
+
+# E2E contract runtime artifacts
+.e2e/artifact.json
+.e2e/artifact.json.sig
+.e2e/results/

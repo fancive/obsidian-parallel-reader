@@ -1,0 +1,14 @@
+schema_version: "2.0"
+
+required_risk_tags:
+  - boundary_io
+  - wiring
+  - failure_path
+  - data_integrity
+  - contract
+  - regression
+
+preconditions: []
+
+provenance:
+  cosign_required: false
