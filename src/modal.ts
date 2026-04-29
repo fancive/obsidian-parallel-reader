@@ -82,17 +82,19 @@ export class CardEditModal extends Modal {
   }
 
   createLabeledInput(parent: HTMLElement, label: string, value: string) {
+    const id = `pr-modal-${Math.random().toString(36).slice(2)}`;
     const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
-    wrapper.createEl('label', { text: label });
-    const input = wrapper.createEl('input', { attr: { type: 'text' } });
+    wrapper.createEl('label', { text: label, attr: { for: id } });
+    const input = wrapper.createEl('input', { attr: { type: 'text', id } });
     input.value = value;
     return input;
   }
 
   createLabeledTextarea(parent: HTMLElement, label: string, value: string, rows: number) {
+    const id = `pr-modal-${Math.random().toString(36).slice(2)}`;
     const wrapper = parent.createDiv({ cls: 'parallel-reader-modal-field' });
-    wrapper.createEl('label', { text: label });
-    const textarea = wrapper.createEl('textarea');
+    wrapper.createEl('label', { text: label, attr: { for: id } });
+    const textarea = wrapper.createEl('textarea', { attr: { id } });
     textarea.rows = rows;
     textarea.value = value;
     return textarea;
