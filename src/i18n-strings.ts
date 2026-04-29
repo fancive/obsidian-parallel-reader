@@ -118,6 +118,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingHeadersName: '额外 headers',
     settingHeadersDesc: '可选。支持 JSON 对象或每行 `Header: value`，用于 Cloudflare AI Gateway 等代理',
     settingMaxTokensName: '最大输出 tokens',
+    settingMaxTokensDesc: 'LLM 单次响应的最大 token 数；设置过低可能导致输出被截断',
     settingModelName: 'Model',
     settingModelDescApi:
       'API 调用的模型 ID；支持 OpenClaw 风格 provider/model，若 provider 前缀匹配当前 preset 会自动剥离',
@@ -284,6 +285,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingHeadersName: 'Extra headers',
     settingHeadersDesc: 'Optional. JSON object or one `Header: value` per line, useful for Cloudflare AI Gateway.',
     settingMaxTokensName: 'Max output tokens',
+    settingMaxTokensDesc: 'Maximum tokens in a single LLM response; setting this too low may cause truncated output',
     settingModelName: 'Model',
     settingModelDescApi:
       'Model ID for API calls. Supports OpenClaw-style provider/model; matching provider prefixes are stripped.',

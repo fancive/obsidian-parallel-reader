@@ -229,15 +229,18 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl).setName(this.tr('settingMaxTokensName')).addText((t) =>
-      t.setValue(String(this.plugin.settings.apiMaxTokens)).onChange((v) => {
-        const n = parseInt(v, 10);
-        if (!Number.isNaN(n) && n > 0) {
-          this.plugin.settings.apiMaxTokens = n;
-          this.plugin.saveSettingsDebounced();
-        }
-      }),
-    );
+    new Setting(containerEl)
+      .setName(this.tr('settingMaxTokensName'))
+      .setDesc(this.tr('settingMaxTokensDesc'))
+      .addText((t) =>
+        t.setValue(String(this.plugin.settings.apiMaxTokens)).onChange((v) => {
+          const n = parseInt(v, 10);
+          if (!Number.isNaN(n) && n > 0) {
+            this.plugin.settings.apiMaxTokens = n;
+            this.plugin.saveSettingsDebounced();
+          }
+        }),
+      );
 
     new Setting(containerEl)
       .setName(this.tr('settingStreamingName'))
