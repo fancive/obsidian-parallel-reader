@@ -39,6 +39,7 @@ import type {
   ObsidianMenuItem,
   PluginSettings,
   ResolvedCard,
+  RunForFileOptions,
 } from './src/types';
 import { copyToClipboard } from './src/ui-helpers';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
@@ -427,7 +428,7 @@ class ParallelReaderPlugin extends Plugin {
     return this.runForFile(mdView.file, force);
   }
 
-  async runForFile(file: TFile | null, force: boolean) {
+  async runForFile(file: TFile | null, force: boolean, options: RunForFileOptions = {}) {
     if (!file) {
       new Notice(this.t('openNoteFirst'));
       return;
@@ -494,7 +495,10 @@ class ParallelReaderPlugin extends Plugin {
           }),
         );
       })
-      .catch((e: unknown) => this.handleGenerationError(e, file, view));
+      .catch((e: unknown) => {
+        this.handleGenerationError(e, file, view);
+        if (options.rethrowErrors) throw e;
+      });
   }
 
   private streamProgressFor(
@@ -564,9 +568,11 @@ class ParallelReaderPlugin extends Plugin {
           continue;
         }
         try {
-          await this.runForFile(file, false);
+          await this.runForFile(file, false, { rethrowErrors: true });
+          if (batch.cancelled) break;
           stats = recordBatchProcessed(stats);
         } catch (e: unknown) {
+          if (batch.cancelled && e instanceof GenerationJobCancelledError) break;
           stats = recordBatchError(stats);
           console.error('[parallel-reader] batch error for', file.path, e);
         }

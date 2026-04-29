@@ -1,5 +1,6 @@
 'use strict';
 
+export { default as ParallelReaderPlugin } from '../main';
 export { findLineForAnchor } from './anchor';
 export {
   batchProgressVars,

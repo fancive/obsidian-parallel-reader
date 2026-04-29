@@ -103,6 +103,10 @@ export type GenerationPhase =
 
 export type ErrorKind = 'auth' | 'timeout' | 'rate-limit' | 'schema' | 'config' | 'cancelled' | 'unknown';
 
+export interface RunForFileOptions {
+  rethrowErrors?: boolean;
+}
+
 /* ---------- Prompt types ---------- */
 
 export interface PromptPair {
@@ -156,7 +160,7 @@ export interface PluginHost {
   t(key: string, vars?: Record<string, string | number>): string;
   isGeneratingFile(file: TFile | null): boolean;
   cancelGenerationForFile(file: TFile | null): boolean;
-  runForFile(file: TFile | null, force: boolean): Promise<void>;
+  runForFile(file: TFile | null, force: boolean, options?: RunForFileOptions): Promise<void>;
   copyCurrentViewMarkdown(): Promise<void>;
   scrollEditorToLine(line: number, file: TFile | null): Promise<void>;
   cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;
