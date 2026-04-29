@@ -25,5 +25,7 @@ assert.strictEqual(
 );
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'appTitle'), '对照阅读笔记', 'zh translation for appTitle');
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, '__no_such_key__'), '__no_such_key__', 'missing key returns key');
+assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'settingTestBackendButton'), '测试');
+assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'confirmRegenerateProceed'), 'Regenerate');
 
 console.log('i18n tests passed');

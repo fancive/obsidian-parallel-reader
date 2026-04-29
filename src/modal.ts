@@ -4,7 +4,13 @@ import { type App, Modal } from 'obsidian';
 import type { CardPatch, PluginHost, ResolvedCard } from './types';
 import { addTextButton } from './ui-helpers';
 
-export function confirmRegenerateEditedCards(app: App, title: string, message: string): Promise<boolean> {
+export function confirmRegenerateEditedCards(
+  app: App,
+  title: string,
+  message: string,
+  cancelText: string,
+  confirmText: string,
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     const settle = (value: boolean) => {
@@ -16,11 +22,11 @@ export function confirmRegenerateEditedCards(app: App, title: string, message: s
     modal.titleEl.setText(title);
     modal.contentEl.createEl('p', { text: message });
     const btnRow = modal.contentEl.createDiv({ cls: 'modal-button-container' });
-    btnRow.createEl('button', { text: 'Cancel' }).addEventListener('click', () => {
+    btnRow.createEl('button', { text: cancelText }).addEventListener('click', () => {
       modal.close();
       settle(false);
     });
-    btnRow.createEl('button', { text: 'OK', cls: 'mod-cta' }).addEventListener('click', () => {
+    btnRow.createEl('button', { text: confirmText, cls: 'mod-cta' }).addEventListener('click', () => {
       modal.close();
       settle(true);
     });

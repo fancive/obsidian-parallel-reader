@@ -342,7 +342,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setName(this.tr('settingTestBackendName'))
       .setDesc(isCliBacked ? this.tr('settingTestBackendDescCli') : this.tr('settingTestBackendDescApi'))
       .addButton((b) =>
-        b.setButtonText('Test').onClick(async () => {
+        b.setButtonText(this.tr('settingTestBackendButton')).onClick(async () => {
           try {
             const result = await testBackend(this.plugin.settings);
             new Notice(`✓ ${result.slice(0, 180)}`, 8000);

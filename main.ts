@@ -328,7 +328,13 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   confirmRegenerateEditedCards(): Promise<boolean> {
-    return confirmRegenerateEditedCards(this.app, this.t('displayName'), this.t('confirmRegenerateEditedCards'));
+    return confirmRegenerateEditedCards(
+      this.app,
+      this.t('displayName'),
+      this.t('confirmRegenerateEditedCards'),
+      this.t('confirmRegenerateCancel'),
+      this.t('confirmRegenerateProceed'),
+    );
   }
 
   addFileMenuItems(menu: ObsidianMenu, file: unknown) {
