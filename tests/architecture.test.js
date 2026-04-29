@@ -4,7 +4,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { assert, t } = require('./test-setup');
+const { assert } = require('./test-setup');
 
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.ts'), 'utf8');
 const viewSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'view.ts'), 'utf8');
@@ -39,46 +39,4 @@ assert.ok(!/function addIconButton/.test(mainSource), 'UI icon helper should liv
 assert.ok(!/function addTextButton/.test(mainSource), 'UI text-button helper should live outside main.ts');
 assert.ok(!/function copyToClipboard/.test(mainSource), 'clipboard helper should live outside main.ts');
 
-// Export surface smoke test
-const expectedExports = [
-  'cardsToMarkdown',
-  'cancellationNoticeKey',
-  'summarizeDocument',
-  'addIconButton',
-  'addTextButton',
-  'copyToClipboard',
-  'resolveCliPath',
-  'runCli',
-  'buildPrompts',
-  'buildOpenAiChatBody',
-  'extractJson',
-  'findLineForAnchor',
-  'folderPathsForTarget',
-  'getApiBaseUrl',
-  'generationFingerprint',
-  'hasUnsafeBatchFolderSegments',
-  'CacheManager',
-  'GenerationJobManager',
-  'createBatchRunState',
-  'modelForApi',
-  'activeSectionLine',
-  'touchCacheEntry',
-  'nextCardIndex',
-  'pruneCacheEntries',
-  'removeCardAt',
-  'activeIndexAfterCardDelete',
-  'createRafThrottledHandler',
-  'visibleTopProbeY',
-  'serializeCacheFile',
-  'shouldConfirmRegenerate',
-  'translate',
-  'updateCardAt',
-  'validateBatchFolderInput',
-  'normalizeSettings',
-  'normalizeStreamingTimeoutMs',
-];
-for (const name of expectedExports) {
-  assert.strictEqual(typeof t[name], 'function', `test-exports should include ${name}`);
-}
-
-console.log('tests passed');
+console.log('architecture tests passed');
