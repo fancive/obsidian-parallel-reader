@@ -418,6 +418,10 @@ export class ParallelReaderView extends ItemView {
 
   async exportToVault() {
     if (!this.sourceFile) return;
+    if (this.sections.length === 0) {
+      new Notice(this.plugin.t('noExportContent'));
+      return;
+    }
     const folder = normalizeVaultPath(this.plugin.settings.exportFolder);
     const name = `${this.sourceFile.basename} - ${this.plugin.t('displayName')}.md`;
     const targetPath = `${folder}/${name}`;
