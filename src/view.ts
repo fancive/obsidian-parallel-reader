@@ -378,6 +378,20 @@ export class ParallelReaderView extends ItemView {
       this.moveActiveSection(1);
       return;
     }
+    if (e.altKey && (e.key === 'e' || e.key === 'E')) {
+      if (this.activeIdx >= 0) {
+        e.preventDefault();
+        this.openEditCardModal(this.activeIdx);
+      }
+      return;
+    }
+    if (e.altKey && e.key === 'Delete') {
+      if (this.activeIdx >= 0) {
+        e.preventDefault();
+        void this.deleteCard(this.activeIdx);
+      }
+      return;
+    }
     if (!e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Enter') {
       const line = this.jumpToActiveSection();
       if (line >= 0) e.preventDefault();
