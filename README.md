@@ -1,15 +1,31 @@
+<h1 align="center">Obsidian Parallel Reader</h1>
+
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/fancive/obsidian-parallel-reader?style=flat-square&color=blue" alt="Release">
-  <img src="https://img.shields.io/github/actions/workflow/status/fancive/obsidian-parallel-reader/ci.yml?style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/github/license/fancive/obsidian-parallel-reader?style=flat-square" alt="License">
-  <img src="https://img.shields.io/github/stars/fancive/obsidian-parallel-reader?style=flat-square" alt="Stars">
+  <em>Split-view reading for Obsidian — your original note on the left, AI-generated summary cards on the right, with scroll-sync highlighting.</em>
 </p>
 
-# Obsidian Parallel Reader
+<p align="center">
+  <a href="https://github.com/fancive/obsidian-parallel-reader/releases/latest"><img src="https://img.shields.io/github/v/release/fancive/obsidian-parallel-reader?style=flat-square&color=4c1" alt="Latest release"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/releases"><img src="https://img.shields.io/github/downloads/fancive/obsidian-parallel-reader/total?style=flat-square&color=4c1" alt="Total downloads"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/fancive/obsidian-parallel-reader/ci.yml?style=flat-square&label=CI" alt="CI status"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/fancive/obsidian-parallel-reader?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/Obsidian-%E2%89%A5%201.4.0-7c3aed?style=flat-square&logo=obsidian&logoColor=white" alt="Obsidian 1.4+">
+</p>
 
-> **[中文文档](./README.zh-CN.md)**
+<p align="center">
+  <a href="https://github.com/fancive/obsidian-parallel-reader/stargazers"><img src="https://img.shields.io/github/stars/fancive/obsidian-parallel-reader?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/issues"><img src="https://img.shields.io/github/issues/fancive/obsidian-parallel-reader?style=flat-square" alt="Open issues"></a>
+  <img src="https://img.shields.io/github/last-commit/fancive/obsidian-parallel-reader?style=flat-square" alt="Last commit">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript strict">
+  <img src="https://img.shields.io/badge/code_style-biome-60a5fa?style=flat-square&logo=biome&logoColor=white" alt="Code style: Biome">
+  <a href="./README.zh-CN.md"><img src="https://img.shields.io/badge/lang-中文-red?style=flat-square" alt="中文文档"></a>
+</p>
 
-Split-view reading for Obsidian — your original note on the left, AI-generated summary cards on the right, with scroll-sync highlighting.
+<p align="center">
+  <b>English</b> · <a href="./README.zh-CN.md">中文</a>
+</p>
+
+---
 
 Inspired by [this reading workflow demo](https://www.bilibili.com/video/BV1FxoGBVETm/).
 
@@ -109,15 +125,26 @@ npm run build     # production build
 npm run typecheck # TypeScript strict mode
 npm run lint      # Biome
 npm test          # build + typecheck + tests
+npm run test:unit
+npm run test:component
+npm run test:contract
+npm run test:e2e  # packaged plugin + disposable Vault smoke
 ```
 
-The project also has a host-neutral e2e contract gate:
+The project also has a host-neutral e2e contract gate for product-shell smoke
+evidence:
 
 ```bash
 bash .e2e/gate.sh --json
 ```
 
 If `e2e_contract_validator` is not installed, set `E2E_CONTRACT_VALIDATOR_PYTHONPATH` to the `claude-code-addons/scripts` directory before running the gate. Runtime evidence such as `.e2e/artifact.json` and `.e2e/results/` is generated locally and ignored by git.
+
+Test classification lives in `tests/catalog.json`. `verify` owns unit,
+component, contract, and local integration checks. Mocked Obsidian/runtime tests
+are classified as component or contract tests, not product e2e. The `.e2e` gate
+intentionally includes only the default product-shell smoke plus optional live
+local Vault/provider checks with `TEST_LIVE=1`.
 
 ## Star History
 

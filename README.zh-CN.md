@@ -1,15 +1,31 @@
+<h1 align="center">Obsidian Parallel Reader</h1>
+
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/fancive/obsidian-parallel-reader?style=flat-square&color=blue" alt="Release">
-  <img src="https://img.shields.io/github/actions/workflow/status/fancive/obsidian-parallel-reader/ci.yml?style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/github/license/fancive/obsidian-parallel-reader?style=flat-square" alt="License">
-  <img src="https://img.shields.io/github/stars/fancive/obsidian-parallel-reader?style=flat-square" alt="Stars">
+  <em>Obsidian 对照阅读插件 — 左边原文、右边 AI 摘要卡片，滚动联动、点击跳转。</em>
 </p>
 
-# Obsidian Parallel Reader
+<p align="center">
+  <a href="https://github.com/fancive/obsidian-parallel-reader/releases/latest"><img src="https://img.shields.io/github/v/release/fancive/obsidian-parallel-reader?style=flat-square&color=4c1" alt="最新版本"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/releases"><img src="https://img.shields.io/github/downloads/fancive/obsidian-parallel-reader/total?style=flat-square&color=4c1" alt="累计下载"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/fancive/obsidian-parallel-reader/ci.yml?style=flat-square&label=CI" alt="CI 状态"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/fancive/obsidian-parallel-reader?style=flat-square" alt="开源协议"></a>
+  <img src="https://img.shields.io/badge/Obsidian-%E2%89%A5%201.4.0-7c3aed?style=flat-square&logo=obsidian&logoColor=white" alt="Obsidian 1.4+">
+</p>
 
-> **[English](./README.md)**
+<p align="center">
+  <a href="https://github.com/fancive/obsidian-parallel-reader/stargazers"><img src="https://img.shields.io/github/stars/fancive/obsidian-parallel-reader?style=flat-square" alt="Star 数"></a>
+  <a href="https://github.com/fancive/obsidian-parallel-reader/issues"><img src="https://img.shields.io/github/issues/fancive/obsidian-parallel-reader?style=flat-square" alt="未关闭 issue"></a>
+  <img src="https://img.shields.io/github/last-commit/fancive/obsidian-parallel-reader?style=flat-square" alt="最近提交">
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript strict">
+  <img src="https://img.shields.io/badge/code_style-biome-60a5fa?style=flat-square&logo=biome&logoColor=white" alt="代码风格 Biome">
+  <a href="./README.md"><img src="https://img.shields.io/badge/lang-English-blue?style=flat-square" alt="English README"></a>
+</p>
 
-Obsidian 对照阅读插件 — 左边原文、右边 AI 摘要卡片，滚动联动、点击跳转。
+<p align="center">
+  <a href="./README.md">English</a> · <b>中文</b>
+</p>
+
+---
 
 灵感来自 [这个 B 站视频](https://www.bilibili.com/video/BV1FxoGBVETm/) 的阅读工作流演示。
 
@@ -109,15 +125,24 @@ npm run build     # 生产构建
 npm run typecheck # TypeScript strict 模式
 npm run lint      # Biome
 npm test          # 构建 + 类型检查 + 测试
+npm run test:unit
+npm run test:component
+npm run test:contract
+npm run test:e2e  # 打包插件 + 临时 Vault smoke
 ```
 
-项目还提供一个与宿主环境解耦的 e2e contract gate：
+项目还提供一个与宿主环境解耦的 e2e contract gate，用于产品壳 smoke 证据：
 
 ```bash
 bash .e2e/gate.sh --json
 ```
 
 如果本机没有安装 `e2e_contract_validator`，运行前把 `E2E_CONTRACT_VALIDATOR_PYTHONPATH` 指向 `claude-code-addons/scripts` 目录。`.e2e/artifact.json`、`.e2e/results/` 等运行证据只在本地生成，并已被 git 忽略。
+
+测试分类的来源是 `tests/catalog.json`。`verify` 负责 unit、component、contract
+和本地 integration 检查。使用 mock Obsidian/runtime 的测试归为 component 或
+contract，不声明为产品 e2e。`.e2e` gate 只包含默认产品壳 smoke，以及通过
+`TEST_LIVE=1` 显式开启的真实本地 Vault/provider 检查。
 
 ## Star History
 
