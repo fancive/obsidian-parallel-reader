@@ -117,6 +117,20 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.plugin.saveSettingsDebounced();
           }),
       );
+
+    new Setting(containerEl)
+      .setName(this.tr('settingCliTimeoutName'))
+      .setDesc(this.tr('settingCliTimeoutDesc'))
+      .addText((t) =>
+        t
+          .setPlaceholder(String(DEFAULT_SETTINGS.cliTimeoutMs))
+          .setValue(String(this.plugin.settings.cliTimeoutMs || DEFAULT_SETTINGS.cliTimeoutMs))
+          .onChange((v) => {
+            const n = parseInt(v, 10);
+            this.plugin.settings.cliTimeoutMs = Number.isFinite(n) && n >= 1000 ? n : DEFAULT_SETTINGS.cliTimeoutMs;
+            this.plugin.saveSettingsDebounced();
+          }),
+      );
   }
 
   private renderApiBackendSettings(containerEl: HTMLElement) {

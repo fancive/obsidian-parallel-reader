@@ -101,6 +101,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingCliPathDesc: '留空则自动探测常见位置；Obsidian GUI 启动时不继承 shell PATH，必要时填绝对路径',
     settingCliPathPlaceholder: '例：/Users/you/bin/codex',
     settingCliTimeoutName: 'CLI 超时 (ms)',
+    settingCliTimeoutDesc: 'CLI 调用的超时时间（毫秒）；低于 1000ms 或非法值会恢复默认值（120000ms）',
     apiProviderHeader: 'API Provider',
     settingProviderPresetName: 'Provider preset',
     settingProviderPresetDesc: '参考 OpenClaw 的 provider/model 思路：preset 只负责协议、base URL 和认证默认值',
@@ -264,6 +265,8 @@ export const STRINGS: Record<string, Record<string, string>> = {
       'Leave blank to auto-detect common paths. Obsidian launched from the GUI may not inherit shell PATH.',
     settingCliPathPlaceholder: 'Example: /Users/you/bin/codex',
     settingCliTimeoutName: 'CLI timeout (ms)',
+    settingCliTimeoutDesc:
+      'Timeout for CLI calls in milliseconds; values below 1000ms or invalid values reset to default (120000ms)',
     apiProviderHeader: 'API Provider',
     settingProviderPresetName: 'Provider preset',
     settingProviderPresetDesc:
