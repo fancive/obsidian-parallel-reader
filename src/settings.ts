@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   apiMaxTokens: 4096,
   maxDocChars: MAX_DOC_CHARS,
   maxCacheEntries: DEFAULT_MAX_CACHE_ENTRIES,
-  promptLanguage: 'zh',
+  promptLanguage: 'auto',
   minCards: 5,
   maxCards: 15,
   customSystemPrompt: '',

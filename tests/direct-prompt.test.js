@@ -83,7 +83,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
 
     // ── buildPrompts: invalid promptLanguage falls back ──
     const badLang = prompt.buildPrompts('doc', { ...base, promptLanguage: 'xyz' });
-    assert.ok(badLang.system.includes('中文'), 'invalid promptLanguage falls back to zh default');
+    assert.ok(badLang.system.includes('main language'), 'invalid promptLanguage falls back to auto default');
 
     // ── buildPrompts: card count normalization ──
     // 0 is falsy so || picks DEFAULT (5), then Math.max(1, 5) = 5
