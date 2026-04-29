@@ -31,5 +31,6 @@ assert.strictEqual(
   t.translate({ uiLanguage: 'en' }, 'confirmExportOverwrite', { path: 'Reading/A.md' }),
   'Export file already exists: Reading/A.md\nOverwrite it?',
 );
+assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'batchFolderConfirm'), '确定');
 
 console.log('i18n tests passed');

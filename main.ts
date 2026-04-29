@@ -541,7 +541,12 @@ class ParallelReaderPlugin extends Plugin {
       new Notice(this.t('batchAlreadyRunning'));
       return;
     }
-    const folderPath = await promptForBatchFolder(this.app, this.t('batchSelectFolder'), this.t('batchFolderPrompt'));
+    const folderPath = await promptForBatchFolder(
+      this.app,
+      this.t('batchSelectFolder'),
+      this.t('batchFolderPrompt'),
+      this.t('batchFolderConfirm'),
+    );
     if (folderPath === null) return;
     const validation = validateBatchFolderInput(folderPath, (path) => {
       const target = this.app.vault.getAbstractFileByPath(path);
