@@ -193,12 +193,16 @@ export function normalizeSettings(settings: Readonly<PluginSettings>): PluginSet
   const preset = getApiPreset(out);
   if (!out.apiFormat || !API_FORMATS[out.apiFormat]) out.apiFormat = preset.format;
   if (!out.apiAuthType || !(API_AUTH_TYPES as Record<string, string>)[out.apiAuthType]) out.apiAuthType = 'auto';
-  if (out.backend === 'anthropic-api') {
+  const rawBackend = out.backend as string;
+  if (rawBackend === 'anthropic-api') {
+    out.backend = 'api';
     out.apiProvider = out.apiProvider || 'anthropic';
     out.apiFormat = out.apiFormat || 'anthropic-messages';
     out.apiBaseUrl = out.apiBaseUrl || API_PROVIDER_PRESETS.anthropic.baseUrl;
     out.apiAuthType = out.apiAuthType || 'x-api-key';
     out.apiKeyEnvVar = out.apiKeyEnvVar || 'ANTHROPIC_API_KEY';
+  } else if (!(['api', 'claude-code', 'codex'] as string[]).includes(rawBackend)) {
+    out.backend = DEFAULT_SETTINGS.backend;
   }
   const n = Number(out.apiMaxTokens);
   if (!Number.isFinite(n) || n <= 0) out.apiMaxTokens = DEFAULT_SETTINGS.apiMaxTokens;

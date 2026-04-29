@@ -46,7 +46,7 @@ export interface CacheFile {
 
 export interface PluginSettings {
   uiLanguage: string;
-  backend: string;
+  backend: 'api' | 'claude-code' | 'codex';
   cliPath: string;
   apiProvider: string;
   apiFormat: string;

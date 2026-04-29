@@ -83,7 +83,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           .addOption('codex', 'Codex CLI')
           .setValue(this.plugin.settings.backend)
           .onChange(async (v) => {
-            this.plugin.settings.backend = v;
+            this.plugin.settings.backend = v as PluginSettings['backend'];
             if (v === 'api' && !this.plugin.settings.apiBaseUrl) {
               this.plugin.settings = applyApiProviderPreset(
                 this.plugin.settings,
