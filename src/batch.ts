@@ -109,6 +109,7 @@ export function promptForBatchFolder(
   selectText: string,
   promptText: string,
   confirmText: string,
+  cancelText: string,
 ): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const modal = new Modal(app);
@@ -123,7 +124,12 @@ export function promptForBatchFolder(
           modal.close();
         }
       });
-      modal.contentEl.createEl('button', { text: confirmText }).addEventListener('click', () => {
+      const actions = modal.contentEl.createDiv({ cls: 'modal-button-container' });
+      actions.createEl('button', { text: cancelText }).addEventListener('click', () => {
+        resolve(null);
+        modal.close();
+      });
+      actions.createEl('button', { text: confirmText, cls: 'mod-cta' }).addEventListener('click', () => {
         resolve(input.value.trim());
         modal.close();
       });

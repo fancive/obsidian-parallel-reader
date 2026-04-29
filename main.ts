@@ -546,6 +546,7 @@ class ParallelReaderPlugin extends Plugin {
       this.t('batchSelectFolder'),
       this.t('batchFolderPrompt'),
       this.t('batchFolderConfirm'),
+      this.t('batchFolderCancel'),
     );
     if (folderPath === null) return;
     const validation = validateBatchFolderInput(folderPath, (path) => {
