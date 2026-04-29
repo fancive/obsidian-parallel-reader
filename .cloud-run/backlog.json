@@ -1,0 +1,154 @@
+{
+  "items": [
+    {
+      "id": "ENG-01",
+      "theme": "engineering",
+      "title": "Type-tighten PluginSettings.backend to union literal",
+      "priority": "P1",
+      "acceptance": "backend field typed as 'api' | 'claude-code' | 'codex'; npm run typecheck passes",
+      "validation": "npm run typecheck",
+      "files": ["src/types.ts"],
+      "notes": "Currently typed as string; only three values are valid; union catches typos at compile time"
+    },
+    {
+      "id": "ENG-02",
+      "theme": "engineering",
+      "title": "Fix copyToClipboard to use i18n copyFailed key",
+      "priority": "P2",
+      "acceptance": "copyToClipboard catch block uses translate(null, 'copyFailed', {error}) instead of hardcoded English",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/ui-helpers.ts"],
+      "notes": "Line 56: 'Copy failed: ...' bypasses i18n; translate() can be called with null settings to get user-language string"
+    },
+    {
+      "id": "ENG-03",
+      "theme": "engineering",
+      "title": "Fix addIconButton/addTextButton catch blocks to use i18n actionFailed key",
+      "priority": "P2",
+      "acceptance": "Both catch blocks use translate(null, 'actionFailed', {label, error}) instead of hardcoded template strings",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/ui-helpers.ts"],
+      "notes": "Lines 21 and 45: '${title} failed: ...' hardcoded English; i18n key 'actionFailed' already exists in both languages"
+    },
+    {
+      "id": "ENG-04",
+      "theme": "engineering",
+      "title": "Add parseCardsJson edge-case tests (cards key missing or null)",
+      "priority": "P2",
+      "acceptance": "Tests added for: valid JSON with no cards key returns [], cards:null returns [], cards:{} (object) returns []",
+      "validation": "npm test",
+      "files": ["tests/schema.test.js"],
+      "notes": "normalizeCardsPayload edge cases with null/missing/wrong-type cards already exist; parseCardsJson path through normalizeCardsPayload not covered for these cases"
+    },
+    {
+      "id": "ENG-05",
+      "theme": "engineering",
+      "title": "Fix normalizeCardsPayload fallback title from hardcoded Chinese to translate()",
+      "priority": "P2",
+      "acceptance": "Fallback title uses translate(null, 'noTitle') with new i18n key added to both languages; test updated",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/schema.ts", "src/i18n-strings.ts", "tests/schema.test.js"],
+      "notes": "Line 143: '(无标题)' is hardcoded Chinese; should resolve to language-appropriate '(Untitled)' or '(无标题)' via translate()"
+    },
+    {
+      "id": "UI-01",
+      "theme": "ui",
+      "title": "Fix a11y: associate labels to inputs in CardEditModal",
+      "priority": "P1",
+      "acceptance": "Each label element has matching for attribute; each input/textarea has matching id; screen readers can navigate correctly",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/modal.ts"],
+      "notes": "createLabeledInput and createLabeledTextarea create <label> but no id/for linkage; fails WCAG 1.3.1"
+    },
+    {
+      "id": "UI-02",
+      "theme": "ui",
+      "title": "Fix hardcoded 'Cancel'/'OK' in confirmRegenerateEditedCards",
+      "priority": "P1",
+      "acceptance": "Button text strings come from parameters; caller in main.ts passes plugin.t('editCardCancel') and plugin.t('editCardSave')",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/modal.ts", "main.ts"],
+      "notes": "Lines 19,23: hardcoded 'Cancel' and 'OK' bypass i18n; function accepts app+title+message but not translated button labels"
+    },
+    {
+      "id": "UI-03",
+      "theme": "ui",
+      "title": "Add missing CLI timeout setting to settings tab UI",
+      "priority": "P2",
+      "acceptance": "renderCliBackendSettings shows a numeric text input for cliTimeoutMs; i18n keys settingCliTimeoutName already exist; saves on change",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/settings-tab.ts"],
+      "notes": "cliTimeoutMs exists in DEFAULT_SETTINGS and types; i18n key settingCliTimeoutName defined in both languages; but renderCliBackendSettings never renders it"
+    },
+    {
+      "id": "UI-04",
+      "theme": "ui",
+      "title": "Add missing description for Max output tokens setting",
+      "priority": "P2",
+      "acceptance": "settingMaxTokensDesc i18n key added to both languages; .setDesc() call added to the max tokens Setting",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/i18n-strings.ts", "src/settings-tab.ts"],
+      "notes": "Line 218 in settings-tab.ts: .setName() but no .setDesc(); settingMaxTokensName key exists but no desc key"
+    },
+    {
+      "id": "UI-05",
+      "theme": "ui",
+      "title": "Fix hardcoded 'chars' counter text in streaming preview to use i18n",
+      "priority": "P2",
+      "acceptance": "Streaming counter uses plugin.t('streamChars', {count}) key; key added to both language tables",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/view.ts", "src/i18n-strings.ts"],
+      "notes": "Lines 107,125 in view.ts: `${text.length} chars` hardcoded English; appears in streaming preview pane visible to all users"
+    },
+    {
+      "id": "FEAT-01",
+      "theme": "feature",
+      "title": "Guard exportToVault when sections list is empty",
+      "priority": "P1",
+      "acceptance": "exportToVault returns early with Notice('noExportContent') when this.sections.length === 0; no empty file created",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/view.ts"],
+      "notes": "Currently creates/overwrites a file with only frontmatter and empty body when sections=[]; noExportContent i18n key already exists"
+    },
+    {
+      "id": "FEAT-02",
+      "theme": "feature",
+      "title": "Add Alt+E keyboard shortcut to open edit modal for active card",
+      "priority": "P2",
+      "acceptance": "handleKeydown handles Alt+E; calls openEditCardModal(this.activeIdx) when activeIdx >= 0; does nothing when no active card",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/view.ts"],
+      "notes": "Alt+ArrowUp/Down already implemented; Edit is context-menu only; adding Alt+E enables keyboard-driven editing"
+    },
+    {
+      "id": "FEAT-03",
+      "theme": "feature",
+      "title": "Fix promptForBatchFolder hardcoded 'OK' button to use i18n",
+      "priority": "P2",
+      "acceptance": "promptForBatchFolder accepts okLabel parameter; caller in main.ts passes plugin.t('editCardSave') or a dedicated ok key",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/batch.ts", "main.ts"],
+      "notes": "Line 121: hardcoded 'OK' button; similar to modal.ts confirmRegenerateEditedCards issue; should reuse existing i18n keys"
+    },
+    {
+      "id": "FEAT-04",
+      "theme": "feature",
+      "title": "Add Alt+Delete keyboard shortcut to delete active card",
+      "priority": "P3",
+      "acceptance": "handleKeydown handles Alt+Delete; calls deleteCard(this.activeIdx) when activeIdx >= 0; does nothing otherwise",
+      "validation": "npm run lint && npm run typecheck",
+      "files": ["src/view.ts"],
+      "notes": "Companion to FEAT-02; allows full keyboard card management (navigate, edit, delete) without mouse"
+    },
+    {
+      "id": "FEAT-05",
+      "theme": "feature",
+      "title": "Change default promptLanguage from 'zh' to 'auto'",
+      "priority": "P3",
+      "acceptance": "DEFAULT_SETTINGS.promptLanguage is 'auto'; normalizeSettings maps 'auto' to system language for the prompt; test updated",
+      "validation": "npm run lint && npm run typecheck && npm test",
+      "files": ["src/settings.ts", "tests/direct-settings.test.js"],
+      "notes": "New users get Chinese output by default even with English UI (uiLanguage defaults to auto); 'auto' matches uiLanguage behavior"
+    }
+  ]
+}

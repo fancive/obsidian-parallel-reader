@@ -1,0 +1,28 @@
+{"id":"ENG-01","status":"doing","startedAt":"2026-04-29T07:58:00Z","title":"Type-tighten PluginSettings.backend to union literal"}
+{"id":"ENG-01","status":"done","commit":"f9c5ca0781c5d6f96377308b77664087bbbcd373","finishedAt":"2026-04-29T08:05:31Z"}
+{"id":"UI-01","status":"doing","startedAt":"2026-04-29T08:02:00Z","title":"Fix a11y label-input association in CardEditModal"}
+{"id":"UI-01","status":"done","commit":"7045d82eaea535fa555ae8be2e67f2527798d9dd","finishedAt":"2026-04-29T08:06:03Z"}
+{"id":"FEAT-01","status":"doing","startedAt":"2026-04-29T08:05:00Z","title":"Guard exportToVault when sections list is empty"}
+{"id":"FEAT-01","status":"done","commit":"803e6468a1823ca836d9d75ee253c0443c28fe5e","finishedAt":"2026-04-29T08:06:55Z"}
+{"id":"UI-02","status":"doing","startedAt":"2026-04-29T08:09:00Z","title":"Fix hardcoded Cancel/OK in confirmRegenerateEditedCards"}
+{"id":"UI-02","status":"done","commit":"187c0d17b2decfc080139ecbbb15af76016498fc","finishedAt":"2026-04-29T08:07:48Z"}
+{"id":"FEAT-02","status":"doing","startedAt":"2026-04-29T08:13:00Z","title":"Add Alt+E keyboard shortcut to edit active card"}
+{"id":"FEAT-02","status":"done","commit":"597a6582a930e13ad2ebab5ad3ca397f96f05381","finishedAt":"2026-04-29T08:08:42Z","note":"also covers FEAT-04 Alt+Delete"}
+{"id":"FEAT-04","status":"done","commit":"597a6582a930e13ad2ebab5ad3ca397f96f05381","finishedAt":"2026-04-29T08:08:42Z","note":"batched with FEAT-02"}
+{"id":"ENG-02","status":"doing","startedAt":"2026-04-29T08:17:00Z","title":"Fix copyToClipboard and button catch blocks to use i18n keys"}
+{"id":"ENG-02","status":"done","commit":"a20d94ca7ec656bb6f1a566b762984ee3c82b4da","finishedAt":"2026-04-29T08:09:58Z","note":"also covers ENG-03"}
+{"id":"ENG-03","status":"done","commit":"a20d94ca7ec656bb6f1a566b762984ee3c82b4da","finishedAt":"2026-04-29T08:09:58Z","note":"batched with ENG-02"}
+{"id":"UI-03","status":"doing","startedAt":"2026-04-29T08:22:00Z","title":"Add missing CLI timeout setting to settings tab UI"}
+{"id":"UI-03","status":"done","commit":"f4f3a33585a333f1663976887cec67222d652896","finishedAt":"2026-04-29T08:11:25Z"}
+{"id":"ENG-04","status":"doing","startedAt":"2026-04-29T08:28:00Z","title":"Add parseCardsJson edge-case tests"}
+{"id":"ENG-04","status":"done","commit":"9f9e96ab621c416ff7cd4fc265a346e772d0ac4a","finishedAt":"2026-04-29T08:13:02Z"}
+{"id":"UI-04","status":"doing","startedAt":"2026-04-29T08:35:00Z","title":"Add missing Max output tokens description"}
+{"id":"UI-04","status":"done","commit":"69f255b65671f62557923cc52e64fd66458d0886","finishedAt":"2026-04-29T08:14:12Z"}
+{"id":"FEAT-03","status":"doing","startedAt":"2026-04-29T08:40:00Z","title":"Fix promptForBatchFolder hardcoded OK button"}
+{"id":"FEAT-03","status":"done","commit":"d81039611adfa628439bcf89133edb6bb50c4d48","finishedAt":"2026-04-29T08:14:57Z"}
+{"id":"ENG-05","status":"doing","startedAt":"2026-04-29T08:45:00Z","title":"Fix normalizeCardsPayload hardcoded Chinese fallback title"}
+{"id":"ENG-05","status":"done","commit":"18e156a9aff59dfe336e128ccf7bf79c68370dac","finishedAt":"2026-04-29T08:16:08Z"}
+{"id":"UI-05","status":"doing","startedAt":"2026-04-29T08:51:00Z","title":"Fix hardcoded chars counter in streaming preview"}
+{"id":"UI-05","status":"done","commit":"06a416569a413b2070ab112ab1fdebbdc0f4db89","finishedAt":"2026-04-29T08:17:15Z"}
+{"id":"FEAT-05","status":"doing","startedAt":"2026-04-29T08:56:00Z","title":"Change default promptLanguage from zh to auto"}
+{"id":"FEAT-05","status":"done","commit":"12906bda7ca116ba179ba01e6c478b254ecb6d61","finishedAt":"2026-04-29T08:18:41Z"}
