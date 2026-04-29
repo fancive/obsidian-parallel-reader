@@ -41,7 +41,13 @@ export {
   supportsStreaming,
   tokenLimitFieldForOpenAiChat,
 } from './providers';
-export { collectJsonObjectCandidates, extractJson, normalizeCardsPayload, repairTruncatedCardsJson } from './schema';
+export {
+  collectJsonObjectCandidates,
+  extractJson,
+  normalizeCardsPayload,
+  parseCardsJson,
+  repairTruncatedCardsJson,
+} from './schema';
 export { createRafThrottledHandler, visibleTopProbeY } from './scroll';
 export {
   CACHE_SCHEMA_VERSION,

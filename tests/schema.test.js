@@ -1,6 +1,6 @@
 const { assert, t } = require('./test-setup');
 
-const { extractJson, normalizeCardsPayload, repairTruncatedCardsJson, collectJsonObjectCandidates } = t;
+const { extractJson, normalizeCardsPayload, parseCardsJson, repairTruncatedCardsJson, collectJsonObjectCandidates } = t;
 
 // ── extractJson ──
 
@@ -104,6 +104,23 @@ assert.deepStrictEqual(
   normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: [1, 'valid', null] }] }),
   [{ title: '(无标题)', anchor: '', gist: '', bullets: ['valid'] }],
   'non-string fields get defaults, non-string bullets filtered',
+);
+
+// ── parseCardsJson ──
+
+assert.deepStrictEqual(parseCardsJson('{"cards":[]}'), [], 'parseCardsJson: empty cards array returns []');
+assert.deepStrictEqual(parseCardsJson('{"notCards":true}'), [], 'parseCardsJson: JSON with no cards key returns []');
+assert.deepStrictEqual(parseCardsJson('{"cards":null}'), [], 'parseCardsJson: cards:null returns []');
+assert.deepStrictEqual(parseCardsJson('{"cards":{}}'), [], 'parseCardsJson: cards:{} (object, not array) returns []');
+assert.deepStrictEqual(
+  parseCardsJson('{"cards":[{"title":"T","anchor":"A","gist":"G","bullets":["B"]}]}'),
+  [{ title: 'T', anchor: 'A', gist: 'G', bullets: ['B'] }],
+  'parseCardsJson: valid card parsed correctly',
+);
+assert.throws(
+  () => parseCardsJson('not json at all'),
+  /non-JSON|non-json/i,
+  'parseCardsJson: unrepairable non-JSON throws',
 );
 
 console.log('schema tests passed');
