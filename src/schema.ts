@@ -3,6 +3,10 @@
 import { translate } from './i18n';
 import type { PluginSettings, RawCard } from './types';
 
+function noTitleFallback(): string {
+  return translate(null, 'noTitle');
+}
+
 export const ANTHROPIC_CARD_TOOL_NAME = 'record_parallel_reader_cards';
 
 export function collectJsonObjectCandidates(raw: string): string[] {
@@ -139,7 +143,7 @@ export function normalizeCardsPayload(parsed: unknown): RawCard[] {
   return raw
     .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
     .map((c) => ({
-      title: typeof c.title === 'string' ? c.title : '(无标题)',
+      title: typeof c.title === 'string' ? c.title : noTitleFallback(),
       anchor: typeof c.anchor === 'string' ? c.anchor : '',
       gist: typeof c.gist === 'string' ? c.gist : '',
       bullets: Array.isArray(c.bullets)

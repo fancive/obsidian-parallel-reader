@@ -100,9 +100,12 @@ assert.deepStrictEqual(
   [{ title: 'T', anchor: 'A', gist: 'G', bullets: ['B'] }],
   'valid card passes through',
 );
+const missingTitleCard = normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: [1, 'valid', null] }] });
+assert.strictEqual(missingTitleCard.length, 1, 'non-string fields card is returned');
+assert.ok(missingTitleCard[0].title.length > 0, 'missing title gets non-empty fallback');
 assert.deepStrictEqual(
-  normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: [1, 'valid', null] }] }),
-  [{ title: '(无标题)', anchor: '', gist: '', bullets: ['valid'] }],
+  { anchor: missingTitleCard[0].anchor, gist: missingTitleCard[0].gist, bullets: missingTitleCard[0].bullets },
+  { anchor: '', gist: '', bullets: ['valid'] },
   'non-string fields get defaults, non-string bullets filtered',
 );
 
