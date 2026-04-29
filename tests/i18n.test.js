@@ -27,5 +27,9 @@ assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'appTitle'), '对照阅读�
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, '__no_such_key__'), '__no_such_key__', 'missing key returns key');
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'settingTestBackendButton'), '测试');
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'confirmRegenerateProceed'), 'Regenerate');
+assert.strictEqual(
+  t.translate({ uiLanguage: 'en' }, 'confirmExportOverwrite', { path: 'Reading/A.md' }),
+  'Export file already exists: Reading/A.md\nOverwrite it?',
+);
 
 console.log('i18n tests passed');

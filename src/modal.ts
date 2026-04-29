@@ -4,7 +4,7 @@ import { type App, Modal } from 'obsidian';
 import type { CardPatch, PluginHost, ResolvedCard } from './types';
 import { addTextButton } from './ui-helpers';
 
-export function confirmRegenerateEditedCards(
+function confirmAction(
   app: App,
   title: string,
   message: string,
@@ -33,6 +33,26 @@ export function confirmRegenerateEditedCards(
     modal.onClose = () => settle(false);
     modal.open();
   });
+}
+
+export function confirmRegenerateEditedCards(
+  app: App,
+  title: string,
+  message: string,
+  cancelText: string,
+  confirmText: string,
+): Promise<boolean> {
+  return confirmAction(app, title, message, cancelText, confirmText);
+}
+
+export function confirmExportOverwrite(
+  app: App,
+  title: string,
+  message: string,
+  cancelText: string,
+  confirmText: string,
+): Promise<boolean> {
+  return confirmAction(app, title, message, cancelText, confirmText);
 }
 
 export class CardEditModal extends Modal {

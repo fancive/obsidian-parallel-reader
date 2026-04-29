@@ -3,7 +3,7 @@
 import { ItemView, MarkdownRenderer, Menu, Notice, TFile, type WorkspaceLeaf } from 'obsidian';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 import { cardsToMarkdown, cardToMarkdown, cardToPlain } from './markdown';
-import { CardEditModal } from './modal';
+import { CardEditModal, confirmExportOverwrite } from './modal';
 import { activeSectionLine, nextCardIndex } from './navigation';
 import type { CardPatch, PluginHost, ResolvedCard } from './types';
 import { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
@@ -438,6 +438,17 @@ export class ParallelReaderView extends ItemView {
 
     const existing = app.vault.getAbstractFileByPath(targetPath);
     if (existing instanceof TFile) {
+      const shouldOverwrite = await confirmExportOverwrite(
+        this.app,
+        this.plugin.t('displayName'),
+        this.plugin.t('confirmExportOverwrite', { path: targetPath }),
+        this.plugin.t('confirmExportCancel'),
+        this.plugin.t('confirmExportOverwriteButton'),
+      );
+      if (!shouldOverwrite) {
+        new Notice(this.plugin.t('exportCancelled'));
+        return;
+      }
       await app.vault.modify(existing, markdown);
     } else {
       await app.vault.create(targetPath, markdown);
