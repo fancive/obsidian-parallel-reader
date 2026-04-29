@@ -104,7 +104,12 @@ export function requestBatchCancel(state: BatchRunState | null): boolean {
   return true;
 }
 
-export function promptForBatchFolder(app: App, selectText: string, promptText: string): Promise<string | null> {
+export function promptForBatchFolder(
+  app: App,
+  selectText: string,
+  promptText: string,
+  okLabel = 'OK',
+): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const modal = new Modal(app);
     modal.onOpen = () => {
@@ -118,7 +123,7 @@ export function promptForBatchFolder(app: App, selectText: string, promptText: s
           modal.close();
         }
       });
-      modal.contentEl.createEl('button', { text: 'OK' }).addEventListener('click', () => {
+      modal.contentEl.createEl('button', { text: okLabel }).addEventListener('click', () => {
         resolve(input.value.trim());
         modal.close();
       });
