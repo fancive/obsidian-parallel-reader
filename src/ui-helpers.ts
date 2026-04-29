@@ -1,6 +1,7 @@
 'use strict';
 
 import { Notice, setIcon } from 'obsidian';
+import { translate } from './i18n';
 
 export function addIconButton(parent: HTMLElement, icon: string, title: string, onClick: () => void | Promise<void>) {
   const button = parent.createEl('button', {
@@ -18,7 +19,9 @@ export function addIconButton(parent: HTMLElement, icon: string, title: string, 
     e.stopPropagation();
     Promise.resolve(onClick()).catch((err: unknown) => {
       console.error(err);
-      new Notice(`${title} failed: ${err instanceof Error ? err.message : String(err)}`);
+      new Notice(
+        translate(null, 'actionFailed', { label: title, error: err instanceof Error ? err.message : String(err) }),
+      );
     });
   });
   return button;
@@ -42,7 +45,7 @@ export function addTextButton(
     e.stopPropagation();
     Promise.resolve(onClick()).catch((err: unknown) => {
       console.error(err);
-      new Notice(`${label} failed: ${err instanceof Error ? err.message : String(err)}`);
+      new Notice(translate(null, 'actionFailed', { label, error: err instanceof Error ? err.message : String(err) }));
     });
   });
   return button;
@@ -53,6 +56,6 @@ export async function copyToClipboard(text: string, successMsg: string) {
     await navigator.clipboard.writeText(text);
     new Notice(successMsg);
   } catch (e: unknown) {
-    new Notice(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    new Notice(translate(null, 'copyFailed', { error: e instanceof Error ? e.message : String(e) }));
   }
 }
