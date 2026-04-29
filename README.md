@@ -111,6 +111,14 @@ npm run lint      # Biome
 npm test          # build + typecheck + tests
 ```
 
+The project also has a host-neutral e2e contract gate:
+
+```bash
+bash .e2e/gate.sh --json
+```
+
+If `e2e_contract_validator` is not installed, set `E2E_CONTRACT_VALIDATOR_PYTHONPATH` to the `claude-code-addons/scripts` directory before running the gate. Runtime evidence such as `.e2e/artifact.json` and `.e2e/results/` is generated locally and ignored by git.
+
 ## Star History
 
 <a href="https://www.star-history.com/#fancive/obsidian-parallel-reader&Date">
