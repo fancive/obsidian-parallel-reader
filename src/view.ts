@@ -104,7 +104,7 @@ export class ParallelReaderView extends ItemView {
       const pre = existing.querySelector('pre');
       if (pre) pre.textContent = text.slice(-2000);
       const counter = existing.querySelector('.parallel-reader-stream-counter');
-      if (counter) counter.textContent = `${text.length} chars`;
+      if (counter) counter.textContent = this.plugin.t('streamChars', { count: text.length });
       return;
     }
     container.empty();
@@ -122,7 +122,10 @@ export class ParallelReaderView extends ItemView {
     state.createDiv({ cls: 'parallel-reader-spinner' });
     const titleEl = state.createEl('div', { cls: 'parallel-reader-state-title' });
     titleEl.createSpan({ text: this.plugin.t('loadingGenerating') + ' ' });
-    titleEl.createSpan({ cls: 'parallel-reader-stream-counter', text: `${text.length} chars` });
+    titleEl.createSpan({
+      cls: 'parallel-reader-stream-counter',
+      text: this.plugin.t('streamChars', { count: text.length }),
+    });
     const pre = state.createEl('pre', { cls: 'parallel-reader-stream-text' });
     pre.textContent = text.slice(-2000);
   }
