@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -20,14 +21,18 @@ jobs:
 
       - run: npm ci
 
-      - name: Build
-        run: npm run build
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm run test:only
-
       - name: Lint
         run: npm run lint
+
+      - name: E2E gate
+        run: timeout 600 npm run e2e
+
+      - name: Upload e2e artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            .e2e/artifact.json
+            .e2e/results/

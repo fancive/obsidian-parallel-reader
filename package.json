@@ -7,11 +7,17 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check main.ts src/ tests/ scripts/",
-    "lint:fix": "biome check --write main.ts src/ tests/ scripts/",
+    "lint": "biome check main.ts src/ tests/ scripts/ .e2e/scripts/",
+    "lint:fix": "biome check --write main.ts src/ tests/ scripts/ .e2e/scripts/",
     "version": "node scripts/bump-version.mjs",
     "test": "npm run build && npm run typecheck && node scripts/run-tests.mjs",
-    "test:only": "node scripts/run-tests.mjs"
+    "test:only": "node scripts/run-tests.mjs",
+    "test:unit": "node scripts/run-tests.mjs --category unit",
+    "test:component": "node scripts/run-tests.mjs --category component",
+    "test:contract": "node scripts/run-tests.mjs --category contract",
+    "e2e": "bash .e2e/gate.sh --json",
+    "test:e2e": "npm run build && node .e2e/cases/product-shell/run.mjs",
+    "test:live": "npm run build && node .e2e/cases/live/run.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",

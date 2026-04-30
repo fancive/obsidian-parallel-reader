@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
   "files": {
-    "includes": ["main.ts", "src/**/*.ts", "tests/**/*.js", "scripts/**/*.mjs", "esbuild.config.mjs"]
+    "includes": [
+      "main.ts",
+      "src/**/*.ts",
+      "tests/**/*.js",
+      "scripts/**/*.mjs",
+      ".e2e/scripts/**/*.mjs",
+      "esbuild.config.mjs"
+    ]
   },
   "linter": {
     "enabled": true,

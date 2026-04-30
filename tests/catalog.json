@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "defaultCategories": ["unit", "component", "contract"],
+  "categories": {
+    "unit": {
+      "description": "Pure logic tests with no Obsidian runtime, filesystem, process, or provider boundary.",
+      "files": [
+        "anchor.test.js",
+        "cards-nav.test.js",
+        "direct-batch.test.js",
+        "direct-generation.test.js",
+        "direct-i18n.test.js",
+        "direct-markdown.test.js",
+        "direct-prompt.test.js",
+        "direct-settings-extra.test.js",
+        "direct-settings.test.js",
+        "direct-streaming.test.js",
+        "i18n.test.js",
+        "markdown.test.js",
+        "schema.test.js",
+        "scroll.test.js",
+        "settings.test.js",
+        "streaming.test.js",
+        "vault-batch.test.js"
+      ]
+    },
+    "component": {
+      "description": "Tests that exercise plugin components with controlled adapters, job managers, or Obsidian shims.",
+      "files": [
+        "cache.test.js",
+        "direct-cache.test.js",
+        "generation-job-manager.test.js",
+        "plugin-batch.test.js"
+      ]
+    },
+    "contract": {
+      "description": "Tests for provider protocols, CLI command contracts, exported test surfaces, and architecture invariants.",
+      "files": [
+        "architecture.test.js",
+        "cli.test.js",
+        "direct-providers.test.js",
+        "providers.test.js",
+        "test-exports.test.js"
+      ]
+    }
+  },
+  "externalCategories": {
+    "e2e": {
+      "description": "Headless product-shell smoke using the built plugin package and a disposable Vault filesystem.",
+      "command": "npm run test:e2e"
+    },
+    "live": {
+      "description": "Opt-in check against a real local Vault plugin install. Does not launch Obsidian or call a provider.",
+      "command": "TEST_LIVE=1 npm run test:live"
+    }
+  }
+}
