@@ -60,3 +60,4 @@ export {
 export { deltaExtractorForFormat, parseSseBuffer } from './streaming';
 export { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
 export { folderPathsForTarget } from './vault';
+export { ParallelReaderView } from './view';

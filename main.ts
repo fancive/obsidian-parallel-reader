@@ -89,17 +89,7 @@ class ParallelReaderPlugin extends Plugin {
     this.addCommand({
       id: 'open-view',
       name: this.t('cmdOpenView'),
-      callback: async () => {
-        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL);
-        if (leaves.length > 0) {
-          for (const leaf of leaves) leaf.detach();
-          return;
-        }
-        const active = this.getActiveView();
-        const view = await this.ensureView();
-        if (!view) return;
-        if (active?.file) await this.syncViewToFile(active.file);
-      },
+      callback: () => this.toggleParallelView(),
     });
     this.addCommand({
       id: 'export-current',
@@ -251,6 +241,33 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   /* ---------- View management ---------- */
+
+  /**
+   * Open the panel if it does not exist yet; otherwise toggle the right
+   * sidebar's collapsed state. The leaf itself is preserved across toggles —
+   * we never detach it, so the panel content survives a hide/show cycle.
+   */
+  async toggleParallelView(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL);
+    if (leaves.length === 0) {
+      const active = this.getActiveView();
+      const view = await this.ensureView();
+      if (!view) return;
+      if (active?.file) await this.syncViewToFile(active.file);
+      return;
+    }
+    const rightSplit = this.app.workspace.rightSplit;
+    if (rightSplit?.collapsed) {
+      // Sidebar collapsed → expand and focus our tab.
+      await this.app.workspace.revealLeaf(leaves[0]);
+    } else if (rightSplit) {
+      // Sidebar expanded → collapse it. Tab state is preserved.
+      rightSplit.collapse();
+    } else {
+      // No right sidebar (mobile? unusual layout?) — just reveal.
+      await this.app.workspace.revealLeaf(leaves[0]);
+    }
+  }
 
   async ensureView(): Promise<ParallelReaderView | null> {
     const { workspace } = this.app;

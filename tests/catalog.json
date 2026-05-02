@@ -30,7 +30,8 @@
         "cache.test.js",
         "direct-cache.test.js",
         "generation-job-manager.test.js",
-        "plugin-batch.test.js"
+        "plugin-batch.test.js",
+        "view-render.test.js"
       ]
     },
     "contract": {
