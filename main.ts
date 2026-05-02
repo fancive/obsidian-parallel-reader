@@ -90,6 +90,11 @@ class ParallelReaderPlugin extends Plugin {
       id: 'open-view',
       name: this.t('cmdOpenView'),
       callback: async () => {
+        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PARALLEL);
+        if (leaves.length > 0) {
+          for (const leaf of leaves) leaf.detach();
+          return;
+        }
         const active = this.getActiveView();
         const view = await this.ensureView();
         if (!view) return;
@@ -497,12 +502,18 @@ class ParallelReaderPlugin extends Plugin {
         }
         job.throwIfCancelled();
 
+        // In non-silent mode the user explicitly asked to generate THIS file —
+        // bind the view to it (so subsequent viewIsShowingFile guards pass and
+        // streaming/loadFor render correctly even if the panel was previously
+        // showing a different note).
+        const shouldRender = !options.silentView || this.viewIsShowingFile(view, file);
+
         job.setPhase('cache-check');
         if (!force) {
           const entry = this.cacheManager.get(file.path);
           if (entry && cacheEntryMatches(entry, content, this.settings)) {
             this.cacheTouch(file.path);
-            if (view && this.activeFileStillMatches(file)) {
+            if (view && shouldRender && this.activeFileStillMatches(file)) {
               view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
             }
             outcome = 'cached';
@@ -510,7 +521,7 @@ class ParallelReaderPlugin extends Plugin {
           }
         }
 
-        if (view && this.viewIsShowingFile(view, file)) view.renderLoading(file, this.t('loadingGenerating'));
+        if (view && shouldRender) view.renderLoading(file, this.t('loadingGenerating'));
         const maxDocChars = Number(this.settings.maxDocChars) || DEFAULT_SETTINGS.maxDocChars;
         if (content.length > maxDocChars) new Notice(this.t('longNoteTruncated', { count: maxDocChars }));
         new Notice(this.t('generatingNotice'));
@@ -519,7 +530,7 @@ class ParallelReaderPlugin extends Plugin {
         const sections = await summarizeDocument(content, this.settings, job, this.streamProgressFor(view, file));
         job.throwIfCancelled();
         if (sections.length === 0) {
-          if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('noCardsReturned'));
+          if (view && shouldRender) view.renderError(file, this.t('noCardsReturned'));
           new Notice(this.t('noCardsReturned'));
           outcome = 'empty';
           return;
@@ -528,7 +539,7 @@ class ParallelReaderPlugin extends Plugin {
         job.setPhase('saving');
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
-        if (view && this.viewIsShowingFile(view, file)) view.loadFor(file, sections, false);
+        if (view && shouldRender) view.loadFor(file, sections, false);
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
           this.t('generationDone', {
