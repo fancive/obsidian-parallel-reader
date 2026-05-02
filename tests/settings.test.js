@@ -81,4 +81,32 @@ assert.strictEqual(
 );
 assert.strictEqual(t.shouldSkipBatchFile(null, 'test', baseSettings), false, 'missing cache entry is not skipped');
 
+// normalizeCliTimeoutMs (mirrors normalizeStreamingTimeoutMs)
+assert.strictEqual(t.normalizeCliTimeoutMs('60000'), 60000, 'cli timeout accepts numeric strings');
+assert.strictEqual(t.normalizeCliTimeoutMs(999), 120000, 'cli timeout below minimum falls back to default');
+assert.strictEqual(t.normalizeCliTimeoutMs('bad'), 120000, 'cli timeout rejects non-numeric values');
+assert.strictEqual(
+  t.normalizeSettings({ ...baseSettings, cliTimeoutMs: 500 }).cliTimeoutMs,
+  120000,
+  'normalizeSettings protects invalid cli timeout values',
+);
+
+// applyApiProviderPreset clears credentials but keeps preset baseUrl (security: prevent cross-provider key leak)
+{
+  const previous = {
+    ...baseSettings,
+    apiProvider: 'anthropic',
+    apiKey: 'sk-ant-secret',
+    apiHeaders: 'Authorization: Bearer leaked',
+    apiBaseUrl: 'https://api.anthropic.com/v1',
+  };
+  const switched = t.applyApiProviderPreset(previous, 'openai');
+  assert.strictEqual(switched.apiKey, '', 'switching provider clears apiKey');
+  assert.strictEqual(switched.apiHeaders, '', 'switching provider clears apiHeaders');
+  assert.notStrictEqual(switched.apiBaseUrl, '', 'switching provider keeps preset baseUrl (not blank)');
+  assert.ok(switched.apiBaseUrl.includes('openai'), 'switched apiBaseUrl matches new openai preset');
+  assert.notStrictEqual(switched, previous, 'applyApiProviderPreset returns new object');
+  assert.strictEqual(previous.apiKey, 'sk-ant-secret', 'applyApiProviderPreset does not mutate input');
+}
+
 console.log('settings tests passed');

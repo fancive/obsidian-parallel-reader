@@ -112,6 +112,12 @@ export function promptForBatchFolder(
   cancelText: string,
 ): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const settle = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
     const modal = new Modal(app);
     modal.onOpen = () => {
       modal.contentEl.createEl('p', { text: selectText });
@@ -120,21 +126,21 @@ export function promptForBatchFolder(
       input.placeholder = promptText;
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          resolve(input.value.trim());
+          settle(input.value.trim());
           modal.close();
         }
       });
       const actions = modal.contentEl.createDiv({ cls: 'modal-button-container' });
       actions.createEl('button', { text: cancelText }).addEventListener('click', () => {
-        resolve(null);
+        settle(null);
         modal.close();
       });
       actions.createEl('button', { text: confirmText, cls: 'mod-cta' }).addEventListener('click', () => {
-        resolve(input.value.trim());
+        settle(input.value.trim());
         modal.close();
       });
     };
-    modal.onClose = () => resolve(null);
+    modal.onClose = () => settle(null);
     modal.open();
   });
 }

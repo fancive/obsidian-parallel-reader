@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   getApiFormat,
   getApiPreset,
+  normalizeCliTimeoutMs,
   normalizeStreamingTimeoutMs,
   PROMPT_LANGUAGES,
   UI_LANGUAGES,
@@ -114,6 +115,19 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.cliPath)
           .onChange((v) => {
             this.plugin.settings.cliPath = v.trim();
+            this.plugin.saveSettingsDebounced();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName(this.tr('settingCliTimeoutName'))
+      .setDesc(this.tr('settingCliTimeoutDesc'))
+      .addText((t) =>
+        t
+          .setPlaceholder(String(DEFAULT_SETTINGS.cliTimeoutMs))
+          .setValue(String(this.plugin.settings.cliTimeoutMs || DEFAULT_SETTINGS.cliTimeoutMs))
+          .onChange((v) => {
+            this.plugin.settings.cliTimeoutMs = normalizeCliTimeoutMs(v);
             this.plugin.saveSettingsDebounced();
           }),
       );

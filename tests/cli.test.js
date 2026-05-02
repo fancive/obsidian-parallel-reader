@@ -278,6 +278,82 @@ async function testCodexArgs() {
 
   // Verify stdin content combines system and user prompts
   assert.ok(capturedArgs.includes('exec'), 'should include exec subcommand');
+
+  // Verify sandbox is read-only (security: prevent prompt injection from running tools)
+  const sandboxIdx = capturedArgs.indexOf('--sandbox');
+  assert.ok(sandboxIdx >= 0, 'should pass --sandbox to codex exec');
+  assert.strictEqual(capturedArgs[sandboxIdx + 1], 'read-only', 'sandbox value must be read-only');
+
+  // Codex never receives --model (settings.model defaults to a Claude-name and would break codex)
+  assert.ok(!capturedArgs.includes('--model'), 'codex args must not include --model (defers to codex config)');
+}
+
+async function testCodexArgsIgnoresClaudeDefaultModel() {
+  let capturedArgs = null;
+  const resultJson = '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}';
+  const fakeSpawn = (_cmd, args) => {
+    capturedArgs = args;
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(resultJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  // Even if settings.model is set (e.g. user has DEFAULT_SETTINGS.model = 'claude-sonnet-4-6'),
+  // codex must NOT receive --model.
+  const settings = {
+    backend: 'codex',
+    cliPath: '/usr/bin/codex',
+    cliTimeoutMs: 5000,
+    model: 'claude-sonnet-4-6',
+    promptLanguage: 'zh',
+    minCards: 5,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+
+  await t.summarizeViaCodex('system prompt', 'user content', settings, undefined, fakeSpawn);
+  assert.ok(!capturedArgs.includes('--model'), 'codex must ignore settings.model regardless of value');
+}
+
+async function testClaudeCodeArgsWithModel() {
+  let capturedArgs = null;
+  const resultJson = JSON.stringify([
+    {
+      type: 'result',
+      result: '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    },
+  ]);
+  const fakeSpawn = (_cmd, args) => {
+    capturedArgs = args;
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(resultJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  const baseSettings = {
+    backend: 'claude-code',
+    cliPath: '/usr/bin/claude',
+    apiMaxTokens: 8192,
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 5,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+
+  await t.summarizeViaClaudeCode('system prompt', 'user content', baseSettings, undefined, fakeSpawn);
+  assert.ok(!capturedArgs.includes('--model'), 'claude args omit --model when settings.model unset');
+
+  await t.summarizeViaClaudeCode('system', 'user', { ...baseSettings, model: 'claude-opus-4-7' }, undefined, fakeSpawn);
+  const modelIdx = capturedArgs.indexOf('--model');
+  assert.ok(modelIdx >= 0, 'claude should pass --model when settings.model set');
+  assert.strictEqual(capturedArgs[modelIdx + 1], 'claude-opus-4-7', 'claude --model value matches settings.model');
 }
 
 // ── classifyGenerationError ──
@@ -289,6 +365,31 @@ assert.strictEqual(t.classifyGenerationError(new Error('CLI 超时 (120000ms)'))
 assert.strictEqual(t.classifyGenerationError(new Error('API returned HTTP 429')), 'rate-limit');
 assert.strictEqual(t.classifyGenerationError(new Error('json_schema validation failed')), 'schema');
 assert.strictEqual(t.classifyGenerationError(new Error('LLM 返回非 JSON')), 'schema');
+assert.strictEqual(
+  t.classifyGenerationError(new Error('LLM returned non-JSON (123 chars). See console for excerpt.')),
+  'schema',
+  'EN non-JSON message classified as schema',
+);
+assert.strictEqual(
+  t.classifyGenerationError(new Error('Claude CLI returned unexpected output (200 chars).')),
+  'schema',
+  'EN unexpected output classified as schema',
+);
+assert.strictEqual(
+  t.classifyGenerationError(new Error('Claude CLI returned no result (0 chars).')),
+  'schema',
+  'EN no result classified as schema',
+);
+assert.strictEqual(
+  t.classifyGenerationError(new Error('Claude CLI 返回了非预期输出（长度 200 字符）')),
+  'schema',
+  'zh unexpected-output message classified as schema',
+);
+assert.strictEqual(
+  t.classifyGenerationError(new Error('Claude CLI 没有返回结果（长度 0 字符）')),
+  'schema',
+  'zh no-result message classified as schema',
+);
 assert.strictEqual(t.classifyGenerationError(new Error('bad config value')), 'config');
 assert.strictEqual(t.classifyGenerationError(new Error('random error')), 'unknown');
 assert.strictEqual(t.classifyGenerationError(null), 'unknown', 'null error');
@@ -297,7 +398,9 @@ assert.strictEqual(t.classifyGenerationError('string error'), 'unknown', 'string
 (async () => {
   await testRunCliEdgeCases();
   await testClaudeCodeArgs();
+  await testClaudeCodeArgsWithModel();
   await testCodexArgs();
+  await testCodexArgsIgnoresClaudeDefaultModel();
   console.log('cli tests passed');
 })().catch((e) => {
   console.error(e);

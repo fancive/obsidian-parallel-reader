@@ -424,7 +424,7 @@ export class ParallelReaderView extends ItemView {
 
     const markdown = [
       '---',
-      `source: [[${this.sourceFile.basename}]]`,
+      `source: [[${this.sourceFile.path}|${this.sourceFile.basename}]]`,
       `generated: ${new Date().toISOString().slice(0, 10)}`,
       'tool: parallel-reader',
       '---',
@@ -434,25 +434,30 @@ export class ParallelReaderView extends ItemView {
     ].join('\n');
 
     const app = this.plugin.app;
-    await ensureVaultFolder(app, folder);
-
-    const existing = app.vault.getAbstractFileByPath(targetPath);
-    if (existing instanceof TFile) {
-      const shouldOverwrite = await confirmExportOverwrite(
-        this.app,
-        this.plugin.t('displayName'),
-        this.plugin.t('confirmExportOverwrite', { path: targetPath }),
-        this.plugin.t('confirmExportCancel'),
-        this.plugin.t('confirmExportOverwriteButton'),
-      );
-      if (!shouldOverwrite) {
-        new Notice(this.plugin.t('exportCancelled'));
-        return;
+    try {
+      await ensureVaultFolder(app, folder);
+      const existing = app.vault.getAbstractFileByPath(targetPath);
+      if (existing instanceof TFile) {
+        const shouldOverwrite = await confirmExportOverwrite(
+          this.app,
+          this.plugin.t('displayName'),
+          this.plugin.t('confirmExportOverwrite', { path: targetPath }),
+          this.plugin.t('confirmExportCancel'),
+          this.plugin.t('confirmExportOverwriteButton'),
+        );
+        if (!shouldOverwrite) {
+          new Notice(this.plugin.t('exportCancelled'));
+          return;
+        }
+        await app.vault.modify(existing, markdown);
+      } else {
+        await app.vault.create(targetPath, markdown);
       }
-      await app.vault.modify(existing, markdown);
-    } else {
-      await app.vault.create(targetPath, markdown);
+      new Notice(this.plugin.t('exported', { path: targetPath }));
+    } catch (e: unknown) {
+      const error = e instanceof Error ? e.message : String(e);
+      console.error('[parallel-reader] exportToVault failed', e);
+      new Notice(this.plugin.t('exportFailed', { error }));
     }
-    new Notice(this.plugin.t('exported', { path: targetPath }));
   }
 }

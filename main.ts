@@ -485,6 +485,7 @@ class ParallelReaderPlugin extends Plugin {
         const sections = await summarizeDocument(content, this.settings, job, this.streamProgressFor(view, file));
         job.throwIfCancelled();
         if (sections.length === 0) {
+          if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('noCardsReturned'));
           new Notice(this.t('noCardsReturned'));
           return;
         }
@@ -521,7 +522,7 @@ class ParallelReaderPlugin extends Plugin {
 
   private handleGenerationError(e: unknown, file: TFile, view: ParallelReaderView | null) {
     if (e instanceof GenerationJobAlreadyRunningError) {
-      new Notice(e.message);
+      new Notice(this.t('generationAlreadyRunning'));
       return;
     }
     if (e instanceof GenerationJobCancelledError) {

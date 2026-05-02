@@ -12,6 +12,7 @@ export const PROMPT_VERSION = 2;
 export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
 export const MIN_STREAMING_TIMEOUT_MS = 1000;
+export const MIN_CLI_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
   zh: '中文',
   en: 'English',
@@ -180,6 +181,8 @@ export function applyApiProviderPreset(settings: Readonly<PluginSettings>, provi
     apiBaseUrl: preset.baseUrl,
     apiAuthType: preset.authType || 'auto',
     apiKeyEnvVar: preset.envVar || '',
+    apiKey: '',
+    apiHeaders: '',
     ...(shouldSwapModel ? { model: preset.model || '' } : {}),
   };
 }
@@ -211,6 +214,7 @@ export function normalizeSettings(settings: Readonly<PluginSettings>): PluginSet
   out.maxCards = normalizeCardCount(out.maxCards, DEFAULT_SETTINGS.maxCards);
   if (out.maxCards < out.minCards) out.maxCards = out.minCards;
   out.streamingTimeoutMs = normalizeStreamingTimeoutMs(out.streamingTimeoutMs);
+  out.cliTimeoutMs = normalizeCliTimeoutMs(out.cliTimeoutMs);
   if (typeof out.customSystemPrompt !== 'string') out.customSystemPrompt = '';
   return out;
 }
@@ -230,6 +234,12 @@ export function normalizeMaxCacheEntries(value: unknown): number {
 export function normalizeStreamingTimeoutMs(value: unknown): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n) || n < MIN_STREAMING_TIMEOUT_MS) return DEFAULT_SETTINGS.streamingTimeoutMs;
+  return n;
+}
+
+export function normalizeCliTimeoutMs(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < MIN_CLI_TIMEOUT_MS) return DEFAULT_SETTINGS.cliTimeoutMs;
   return n;
 }
 

@@ -138,7 +138,7 @@ evidence:
 bash .e2e/gate.sh --json
 ```
 
-If `e2e_contract_validator` is not installed, set `E2E_CONTRACT_VALIDATOR_PYTHONPATH` to the `claude-code-addons/scripts` directory before running the gate. Runtime evidence such as `.e2e/artifact.json` and `.e2e/results/` is generated locally and ignored by git.
+The gate is self-contained — `.e2e/gate.sh` runs the bundled Node-based contract checker directly, no external Python validator required. Runtime evidence such as `.e2e/artifact.json` and `.e2e/results/` is generated locally and ignored by git.
 
 Test classification lives in `tests/catalog.json`. `verify` owns unit,
 component, contract, and local integration checks. Mocked Obsidian/runtime tests

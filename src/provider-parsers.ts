@@ -55,7 +55,7 @@ export function cardsFromAnthropicToolUse(
   const block = content.find((c) => c && c.type === 'tool_use' && c.name === ANTHROPIC_CARD_TOOL_NAME);
   if (!block) return null;
   if (typeof block.input === 'string') return parseCardsJson(block.input, settings);
-  if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input);
+  if (block.input && typeof block.input === 'object') return normalizeCardsPayload(block.input, settings);
   return [];
 }
 

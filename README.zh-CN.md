@@ -137,7 +137,7 @@ npm run test:e2e  # 打包插件 + 临时 Vault smoke
 bash .e2e/gate.sh --json
 ```
 
-如果本机没有安装 `e2e_contract_validator`，运行前把 `E2E_CONTRACT_VALIDATOR_PYTHONPATH` 指向 `claude-code-addons/scripts` 目录。`.e2e/artifact.json`、`.e2e/results/` 等运行证据只在本地生成，并已被 git 忽略。
+该 gate 是自包含的 —— `.e2e/gate.sh` 直接运行仓库内的 Node 版 contract checker，不需要额外的 Python 校验器。`.e2e/artifact.json`、`.e2e/results/` 等运行证据只在本地生成，并已被 git 忽略。
 
 测试分类的来源是 `tests/catalog.json`。`verify` 负责 unit、component、contract
 和本地 integration 检查。使用 mock Obsidian/runtime 的测试归为 component 或

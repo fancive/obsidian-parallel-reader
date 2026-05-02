@@ -101,9 +101,14 @@ assert.deepStrictEqual(
   'valid card passes through',
 );
 assert.deepStrictEqual(
-  normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: [1, 'valid', null] }] }),
+  normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: [1, 'valid', null] }] }, { uiLanguage: 'zh' }),
   [{ title: '(无标题)', anchor: '', gist: '', bullets: ['valid'] }],
-  'non-string fields get defaults, non-string bullets filtered',
+  'non-string fields get defaults (zh fallback title), non-string bullets filtered',
+);
+assert.deepStrictEqual(
+  normalizeCardsPayload({ cards: [{ title: 123, gist: null, bullets: ['only'] }] }, { uiLanguage: 'en' }),
+  [{ title: '(Untitled)', anchor: '', gist: '', bullets: ['only'] }],
+  'fallback title respects en uiLanguage',
 );
 
 console.log('schema tests passed');

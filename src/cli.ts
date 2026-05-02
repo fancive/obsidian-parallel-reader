@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { type GenerationJob, GenerationJobCancelledError } from './generation-job-manager';
+import { translate } from './i18n';
 import { parseCardsJson } from './schema';
 import type { PluginSettings, RawCard } from './types';
 
@@ -176,6 +177,8 @@ export async function summarizeViaClaudeCode(
     '--disallowed-tools',
     'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
   ];
+  const claudeModel = (settings.model || '').trim();
+  if (claudeModel) args.push('--model', claudeModel);
   const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl);
 
   // --output-format json produces a JSON array of event objects.
@@ -193,12 +196,23 @@ export async function summarizeViaClaudeCode(
       resultText = events.result || events.content || '';
     }
   } catch (_) {
-    throw new Error('claude CLI returned unexpected output:\n' + stdout.slice(0, 500));
+    console.warn(
+      '[parallel-reader] claude CLI returned unexpected output. length=',
+      stdout.length,
+      'head=',
+      stdout.slice(0, 80),
+    );
+    throw new Error(translate(settings, 'errorClaudeCliBadJson', { length: String(stdout.length) }));
   }
 
   if (!resultText) {
-    console.warn('[parallel-reader] claude CLI returned no result. Full stdout:', stdout);
-    throw new Error('claude CLI returned no result. Output:\n' + stdout.slice(0, 500));
+    console.warn(
+      '[parallel-reader] claude CLI returned no result. length=',
+      stdout.length,
+      'head=',
+      stdout.slice(0, 80),
+    );
+    throw new Error(translate(settings, 'errorClaudeCliNoResult', { length: String(stdout.length) }));
   }
 
   return parseCardsJson(resultText, settings);
@@ -213,7 +227,10 @@ export async function summarizeViaCodex(
 ): Promise<RawCard[]> {
   const cmd = resolveCliPath('codex', settings.cliPath);
   const combined = `<<SYSTEM>>\n${system}\n<<USER>>\n${user}\n\nOutput JSON directly with no explanation.`;
-  const args = ['exec', '--skip-git-repo-check', '-'];
+  // NOTE: do NOT pass --model. settings.model defaults to a Claude model name
+  // (claude-sonnet-4-6), which would break Codex if passed verbatim. Codex
+  // uses its own config.toml profile for model selection.
+  const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '-'];
   const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl);
   return parseCardsJson(stdout, settings);
 }

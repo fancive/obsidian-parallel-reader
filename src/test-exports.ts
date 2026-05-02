@@ -45,11 +45,13 @@ export {
 export { collectJsonObjectCandidates, extractJson, normalizeCardsPayload, repairTruncatedCardsJson } from './schema';
 export { createRafThrottledHandler, visibleTopProbeY } from './scroll';
 export {
+  applyApiProviderPreset,
   CACHE_SCHEMA_VERSION,
   cacheEntryMatches,
   generationFingerprint,
   getApiBaseUrl,
   modelForApi,
+  normalizeCliTimeoutMs,
   normalizeSettings,
   normalizeStreamingTimeoutMs,
   pruneCacheEntries,

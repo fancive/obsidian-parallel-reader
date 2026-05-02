@@ -7,7 +7,7 @@ export class GenerationJobAlreadyRunningError extends Error {
   key: string;
 
   constructor(key: string) {
-    super('该笔记正在生成对照笔记');
+    super('already-running');
     this.name = 'GenerationJobAlreadyRunningError';
     this.code = 'already-running';
     this.key = key;
@@ -19,7 +19,7 @@ export class GenerationJobCancelledError extends Error {
   key: string;
 
   constructor(key: string) {
-    super('生成已取消');
+    super('cancelled');
     this.name = 'GenerationJobCancelledError';
     this.code = 'cancelled';
     this.key = key;
@@ -125,7 +125,10 @@ export function classifyGenerationError(error: unknown): ErrorKind {
   if (/api key|unauthorized|401|403|认证|权限/i.test(message)) return 'auth';
   if (/timeout|超时|timed out/i.test(message)) return 'timeout';
   if (/429|rate limit|too many requests/i.test(message)) return 'rate-limit';
-  if (/非 JSON|json_schema|schema|structured/i.test(message)) return 'schema';
+  if (
+    /非 JSON|非预期输出|没有返回结果|non-JSON|unexpected output|no result|json_schema|schema|structured/i.test(message)
+  )
+    return 'schema';
   if (/model 未设置|base url|配置|config/i.test(message)) return 'config';
   return 'unknown';
 }

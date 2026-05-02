@@ -118,28 +118,34 @@ export function parseCardsJson(text: string, settings?: PluginSettings | null): 
           (parsed as { cards?: unknown[] }).cards?.length ?? 0,
           'complete cards. Consider increasing max tokens.',
         );
-        return normalizeCardsPayload(parsed);
+        return normalizeCardsPayload(parsed, settings);
       } catch (_) {
         /* repair failed, fall through to error */
       }
     }
-    console.warn('[parallel-reader] LLM returned non-JSON. Raw response:', text);
+    console.warn(
+      '[parallel-reader] LLM returned non-JSON. length=',
+      (text || '').length,
+      'head=',
+      (text || '').slice(0, 80),
+    );
     throw new Error(
       translate(settings || null, 'errorLlmNonJson', {
-        excerpt: (text || '').slice(0, 500),
+        length: String((text || '').length),
       }),
     );
   }
-  return normalizeCardsPayload(parsed);
+  return normalizeCardsPayload(parsed, settings);
 }
 
-export function normalizeCardsPayload(parsed: unknown): RawCard[] {
+export function normalizeCardsPayload(parsed: unknown, settings?: PluginSettings | null): RawCard[] {
   const obj = parsed as { cards?: unknown[] } | null | undefined;
   const raw = obj && Array.isArray(obj.cards) ? obj.cards : [];
+  const fallbackTitle = translate(settings ?? null, 'cardUntitled');
   return raw
     .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
     .map((c) => ({
-      title: typeof c.title === 'string' ? c.title : '(无标题)',
+      title: typeof c.title === 'string' ? c.title : fallbackTitle,
       anchor: typeof c.anchor === 'string' ? c.anchor : '',
       gist: typeof c.gist === 'string' ? c.gist : '',
       bullets: Array.isArray(c.bullets)

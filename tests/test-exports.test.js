@@ -36,6 +36,8 @@ const expectedExports = [
   'validateBatchFolderInput',
   'normalizeSettings',
   'normalizeStreamingTimeoutMs',
+  'normalizeCliTimeoutMs',
+  'applyApiProviderPreset',
 ];
 
 for (const name of expectedExports) {
