@@ -285,7 +285,9 @@ export function generationFingerprint(settings: PluginSettings): string {
       maxCards: normalized.maxCards,
       customSystemPromptHash: hashContent(normalized.customSystemPrompt || ''),
       backend: normalized.backend,
-      model: normalized.model,
+      // Codex backend ignores settings.model (uses its own config); excluding it from
+      // the fingerprint avoids spurious cache invalidation when the user edits model.
+      model: normalized.backend === 'codex' ? '' : normalized.model,
       apiProvider: apiBackend ? normalized.apiProvider : '',
       apiFormat: apiBackend ? format : '',
       apiBaseUrl,

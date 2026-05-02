@@ -391,8 +391,12 @@ export class ParallelReaderView extends ItemView {
     const previousLength = this.sections.length;
     this.sections = nextSections;
     this.activeIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
-    await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
     this.render();
+    if (!ok) {
+      new Notice(this.plugin.t('cardPersistFailed'));
+      return false;
+    }
     new Notice(this.plugin.t('cardDeleted'));
     return true;
   }
@@ -410,8 +414,12 @@ export class ParallelReaderView extends ItemView {
     const nextSections = updateCardAt(this.sections, index, patch);
     if (nextSections.length !== this.sections.length) return false;
     this.sections = nextSections;
-    await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
     this.render();
+    if (!ok) {
+      new Notice(this.plugin.t('cardPersistFailed'));
+      return false;
+    }
     new Notice(this.plugin.t('cardSaved'));
     return true;
   }

@@ -40,6 +40,7 @@ import type {
   PluginSettings,
   ResolvedCard,
   RunForFileOptions,
+  RunForFileResult,
 } from './src/types';
 import { copyToClipboard } from './src/ui-helpers';
 import { ParallelReaderView, VIEW_TYPE_PARALLEL } from './src/view';
@@ -120,6 +121,7 @@ class ParallelReaderPlugin extends Plugin {
           return;
         }
         await this.cacheManager.delete(active.file.path);
+        this.refreshViewAfterCacheDelete(active.file.path);
         new Notice(this.t('cacheClearedFile', { name: active.file.basename }));
       },
     });
@@ -129,6 +131,7 @@ class ParallelReaderPlugin extends Plugin {
       callback: async () => {
         const n = Object.keys(this.cacheManager.cache).length;
         await this.cacheManager.clear();
+        this.refreshViewAfterCacheClear();
         new Notice(this.t('cacheClearedAll', { count: n }));
       },
     });
@@ -178,6 +181,7 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   onunload() {
+    if (this.jobs) this.jobs.cancelAllWaiters();
     this.flushSettingsSave().catch((e: unknown) => console.error('[parallel-reader] flush settings on unload', e));
     this.flushCacheSave().catch((e: unknown) => console.error('[parallel-reader] flush cache on unload', e));
   }
@@ -359,10 +363,21 @@ class ParallelReaderPlugin extends Plugin {
           .setIcon('trash')
           .onClick(async () => {
             await this.cacheManager.delete(file.path);
+            this.refreshViewAfterCacheDelete(file.path);
             new Notice(this.t('cacheClearedFile', { name: file.basename }));
           }),
       );
     }
+  }
+
+  private refreshViewAfterCacheDelete(filePath: string) {
+    const view = this.getParallelView();
+    if (view?.sourceFile?.path === filePath) view.renderEmpty();
+  }
+
+  private refreshViewAfterCacheClear() {
+    const view = this.getParallelView();
+    if (view) view.renderEmpty();
   }
 
   async handleFileRename(file: TFile, oldPath: string) {
@@ -434,36 +449,52 @@ class ParallelReaderPlugin extends Plugin {
     return this.runForFile(mdView.file, force);
   }
 
-  async runForFile(file: TFile | null, force: boolean, options: RunForFileOptions = {}) {
+  async runForFile(
+    file: TFile | null,
+    force: boolean,
+    options: RunForFileOptions = {},
+    preloadedContent?: string,
+  ): Promise<RunForFileResult> {
     if (!file) {
       new Notice(this.t('openNoteFirst'));
-      return;
+      return 'error';
     }
-    if (this.jobs.isRunning(file.path)) {
+    if (this.jobs.isPending(file.path)) {
       new Notice(this.t('alreadyGenerating'));
-      return;
+      return 'already-running';
     }
     if (
+      !options.skipEditConfirm &&
       shouldConfirmRegenerate(this.cacheManager.get(file.path), force) &&
       !(await this.confirmRegenerateEditedCards())
     ) {
       new Notice(this.t('regenerateCancelled'));
-      return;
+      return 'cancelled';
     }
 
     let view: ParallelReaderView | null = null;
-    return this.jobs
+    let outcome: RunForFileResult = 'error';
+
+    await this.jobs
       .start(file.path, async (job) => {
         job.setPhase('reading');
-        const content = await this.app.vault.read(file);
+        const content = preloadedContent ?? (await this.app.vault.read(file));
         job.throwIfCancelled();
         if (!content.trim()) {
           new Notice(this.t('emptyNote'));
+          outcome = 'empty';
           return;
         }
 
-        view = await this.ensureView();
-        if (!view) return;
+        if (options.silentView) {
+          view = this.getParallelView() ?? null;
+        } else {
+          view = await this.ensureView();
+          if (!view) {
+            outcome = 'no-view';
+            return;
+          }
+        }
         job.throwIfCancelled();
 
         job.setPhase('cache-check');
@@ -471,12 +502,15 @@ class ParallelReaderPlugin extends Plugin {
           const entry = this.cacheManager.get(file.path);
           if (entry && cacheEntryMatches(entry, content, this.settings)) {
             this.cacheTouch(file.path);
-            if (this.activeFileStillMatches(file)) view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
+            if (view && this.activeFileStillMatches(file)) {
+              view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
+            }
+            outcome = 'cached';
             return;
           }
         }
 
-        view.renderLoading(file, this.t('loadingGenerating'));
+        if (view && this.viewIsShowingFile(view, file)) view.renderLoading(file, this.t('loadingGenerating'));
         const maxDocChars = Number(this.settings.maxDocChars) || DEFAULT_SETTINGS.maxDocChars;
         if (content.length > maxDocChars) new Notice(this.t('longNoteTruncated', { count: maxDocChars }));
         new Notice(this.t('generatingNotice'));
@@ -487,13 +521,14 @@ class ParallelReaderPlugin extends Plugin {
         if (sections.length === 0) {
           if (view && this.viewIsShowingFile(view, file)) view.renderError(file, this.t('noCardsReturned'));
           new Notice(this.t('noCardsReturned'));
+          outcome = 'empty';
           return;
         }
         const rawCards = sections.map((s) => ({ title: s.title, anchor: s.anchor, gist: s.gist, bullets: s.bullets }));
         job.setPhase('saving');
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
-        if (this.viewIsShowingFile(view, file)) view.loadFor(file, sections, false);
+        if (view && this.viewIsShowingFile(view, file)) view.loadFor(file, sections, false);
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
           this.t('generationDone', {
@@ -501,11 +536,17 @@ class ParallelReaderPlugin extends Plugin {
             suffix: unanchored ? this.t('unanchoredSuffix', { count: unanchored }) : '',
           }),
         );
+        outcome = 'generated';
       })
       .catch((e: unknown) => {
         this.handleGenerationError(e, file, view);
+        if (e instanceof GenerationJobAlreadyRunningError) outcome = 'already-running';
+        else if (e instanceof GenerationJobCancelledError) outcome = 'cancelled';
+        else outcome = 'error';
         if (options.rethrowErrors) throw e;
       });
+
+    return outcome;
   }
 
   private streamProgressFor(
@@ -581,9 +622,16 @@ class ParallelReaderPlugin extends Plugin {
           continue;
         }
         try {
-          await this.runForFile(file, false, { rethrowErrors: true });
+          const result = await this.runForFile(
+            file,
+            false,
+            { rethrowErrors: true, silentView: true, skipEditConfirm: true },
+            content,
+          );
           if (batch.cancelled) break;
-          stats = recordBatchProcessed(stats);
+          if (result === 'generated') stats = recordBatchProcessed(stats);
+          else if (result === 'cached' || result === 'already-running') stats = recordBatchSkip(stats);
+          else stats = recordBatchError(stats);
         } catch (e: unknown) {
           if (batch.cancelled && e instanceof GenerationJobCancelledError) break;
           stats = recordBatchError(stats);
@@ -591,6 +639,7 @@ class ParallelReaderPlugin extends Plugin {
         }
       }
     } finally {
+      if (batch.cancelled) this.jobs.cancelAllWaiters();
       if (this.activeBatch === batch) this.activeBatch = null;
     }
     const batchVars: Record<string, string | number> = {

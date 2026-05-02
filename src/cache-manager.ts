@@ -11,6 +11,27 @@ import {
 } from './settings';
 import type { CacheEntry, PluginSettings, RawCard, ResolvedCard } from './types';
 
+/**
+ * Reject cache entries whose shape would crash downstream consumers (e.g. cards.map).
+ * Missing optional fields like contentHash/settingsHash are tolerated — they just
+ * cause a normal cache miss instead of returning stale data.
+ */
+function isValidCacheEntry(entry: unknown): entry is CacheEntry {
+  if (!entry || typeof entry !== 'object') return false;
+  const cards = (entry as { cards?: unknown }).cards;
+  if (!Array.isArray(cards)) return false;
+  for (const c of cards) {
+    if (!c || typeof c !== 'object') return false;
+    const card = c as { bullets?: unknown; anchor?: unknown };
+    // bullets is allowed to be missing (defaults to []), but if present must be an array
+    if (card.bullets !== undefined && !Array.isArray(card.bullets)) return false;
+    // anchor is allowed to be missing, but if present must be a string
+    // (downstream resolveCardAnchors / findLineForAnchor expects string)
+    if (card.anchor !== undefined && typeof card.anchor !== 'string') return false;
+  }
+  return true;
+}
+
 export class CacheManager {
   cache: Record<string, CacheEntry> = {};
   private _timer: ReturnType<typeof setTimeout> | null = null;
@@ -41,8 +62,16 @@ export class CacheManager {
     try {
       const raw = await this.adapter.read(this.filePath());
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object')
-        return parsed.entries;
+      if (parsed && typeof parsed === 'object' && parsed.entries && typeof parsed.entries === 'object') {
+        const validated: Record<string, CacheEntry> = {};
+        let dropped = 0;
+        for (const [path, entry] of Object.entries(parsed.entries as Record<string, unknown>)) {
+          if (isValidCacheEntry(entry)) validated[path] = entry;
+          else dropped++;
+        }
+        if (dropped > 0) console.warn('[parallel-reader] dropped', dropped, 'malformed cache entries');
+        return validated;
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       if (!/not found|does not exist|ENOENT/i.test(message))

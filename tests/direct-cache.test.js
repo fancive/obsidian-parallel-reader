@@ -274,6 +274,69 @@ function createFakeAdapter() {
     await scheduleManager.flush();
     assert.strictEqual(scheduleAdapter.files.has(scheduleManager.filePath()), false, 'flush is no-op when not dirty');
 
+    // ── readFile drops malformed entries (cards not array / bullets not array) ──
+    {
+      const validateAdapter = createFakeAdapter();
+      const validateManager = new cacheManagerModule.CacheManager(
+        validateAdapter,
+        '.obsidian',
+        'parallel-reader',
+        () => ({ ...settings.DEFAULT_SETTINGS, maxCacheEntries: 100 }),
+      );
+      validateAdapter.files.set(
+        validateManager.filePath(),
+        JSON.stringify({
+          version: 1,
+          entries: {
+            'good.md': { generatedAt: '2024-01-01T00:00:00.000Z', cards: [{ title: 't', bullets: ['x'] }] },
+            'cards-null.md': { cards: null },
+            'cards-string.md': { cards: 'oops' },
+            'bullets-string.md': { cards: [{ title: 't', bullets: 'not-array' }] },
+            'bullets-missing.md': { cards: [{ title: 't' }] }, // tolerated
+            'card-null.md': { cards: [null] }, // dangerous: c.anchor would crash
+            'anchor-number.md': { cards: [{ anchor: 42, bullets: [] }] }, // dangerous: anchor.trim() would crash
+            'not-an-object.md': 42,
+            'null-entry.md': null,
+          },
+        }),
+      );
+      const origWarn = console.warn;
+      let droppedMessage = '';
+      console.warn = (...args) => {
+        droppedMessage = args.join(' ');
+      };
+      try {
+        const loaded = await validateManager.readFile();
+        assert.ok(loaded['good.md'], 'good entry kept');
+        assert.ok(loaded['bullets-missing.md'], 'entry with missing bullets tolerated (defaults to [])');
+        assert.strictEqual(loaded['cards-null.md'], undefined, 'cards=null dropped');
+        assert.strictEqual(loaded['cards-string.md'], undefined, 'cards=string dropped');
+        assert.strictEqual(loaded['bullets-string.md'], undefined, 'bullets=string dropped');
+        assert.strictEqual(loaded['card-null.md'], undefined, 'cards=[null] dropped');
+        assert.strictEqual(loaded['anchor-number.md'], undefined, 'anchor=number dropped');
+        assert.strictEqual(loaded['not-an-object.md'], undefined, 'non-object entry dropped');
+        assert.strictEqual(loaded['null-entry.md'], undefined, 'null entry dropped');
+        assert.ok(/dropped 7 malformed/.test(droppedMessage), 'console.warn reports drop count');
+      } finally {
+        console.warn = origWarn;
+      }
+    }
+
+    // ── readFile tolerates parsed=null / non-object entries field ──
+    {
+      const edgeAdapter = createFakeAdapter();
+      const edgeManager = new cacheManagerModule.CacheManager(
+        edgeAdapter,
+        '.obsidian',
+        'parallel-reader',
+        () => settings.DEFAULT_SETTINGS,
+      );
+      edgeAdapter.files.set(edgeManager.filePath(), JSON.stringify(null));
+      assert.deepStrictEqual(await edgeManager.readFile(), {}, 'parsed=null returns empty cache');
+      edgeAdapter.files.set(edgeManager.filePath(), JSON.stringify({ entries: 'oops' }));
+      assert.deepStrictEqual(await edgeManager.readFile(), {}, 'entries=non-object returns empty cache');
+    }
+
     console.log('direct cache tests passed');
   } finally {
     cleanup();

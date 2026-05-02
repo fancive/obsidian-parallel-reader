@@ -91,4 +91,19 @@ assert.deepStrictEqual(sseMixed.deltas, ['x'], 'comment and event lines ignored'
 const sseBad = t.parseSseBuffer('data: not_json\n\ndata: {"choices":[{"delta":{"content":"y"}}]}\n\n', openaiExtract);
 assert.deepStrictEqual(sseBad.deltas, ['y'], 'bad JSON line skipped, good line extracted');
 
+// ── parseSseBuffer flush behavior: appending \n\n to unterminated event ──
+// (used by doStreamingFetch on EOF when provider closes without trailing \n\n)
+{
+  const unterminated = 'data: {"choices":[{"delta":{"content":"final"}}]}';
+  const flushed = t.parseSseBuffer(`${unterminated}\n\n`, openaiExtract);
+  assert.deepStrictEqual(flushed.deltas, ['final'], 'flush of unterminated event extracts last delta');
+  assert.strictEqual(flushed.rest, '', 'flush leaves no remainder');
+}
+{
+  // Buffer ending with single \n (often a partial line) — flush by appending one more \n
+  const partial = 'data: {"choices":[{"delta":{"content":"tail"}}]}\n';
+  const flushed = t.parseSseBuffer(`${partial}\n`, openaiExtract);
+  assert.deepStrictEqual(flushed.deltas, ['tail'], 'single-newline buffer flushed correctly');
+}
+
 console.log('streaming tests passed');

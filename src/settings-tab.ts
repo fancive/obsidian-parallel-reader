@@ -12,6 +12,7 @@ import {
   DEFAULT_SETTINGS,
   getApiFormat,
   getApiPreset,
+  normalizeCardCount,
   normalizeCliTimeoutMs,
   normalizeStreamingTimeoutMs,
   PROMPT_LANGUAGES,
@@ -310,29 +311,36 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(this.tr('settingCardRangeName'))
       .setDesc(this.tr('settingCardRangeDesc'))
-      .addText((t) =>
-        t
+      .addText((textComponent) =>
+        textComponent
           .setPlaceholder('Min')
           .setValue(String(this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards))
           .onChange((v) => {
-            const n = parseInt(v, 10);
-            if (!Number.isNaN(n) && n > 0) {
-              this.plugin.settings.minCards = n;
-              if (this.plugin.settings.maxCards < n) this.plugin.settings.maxCards = n;
-              this.plugin.saveSettingsDebounced();
-            }
+            const trimmed = v.trim();
+            if (trimmed === '') return;
+            const normalized = normalizeCardCount(trimmed, DEFAULT_SETTINGS.minCards);
+            this.plugin.settings.minCards = normalized;
+            if (this.plugin.settings.maxCards < normalized) this.plugin.settings.maxCards = normalized;
+            if (String(normalized) !== trimmed) textComponent.setValue(String(normalized));
+            this.plugin.saveSettingsDebounced();
           }),
       )
-      .addText((t) =>
-        t
+      .addText((textComponent) =>
+        textComponent
           .setPlaceholder('Max')
           .setValue(String(this.plugin.settings.maxCards || DEFAULT_SETTINGS.maxCards))
           .onChange((v) => {
-            const n = parseInt(v, 10);
-            if (!Number.isNaN(n) && n > 0) {
-              this.plugin.settings.maxCards = Math.max(n, this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards);
-              this.plugin.saveSettingsDebounced();
+            const trimmed = v.trim();
+            if (trimmed === '') return;
+            const normalized = normalizeCardCount(trimmed, DEFAULT_SETTINGS.maxCards);
+            this.plugin.settings.maxCards = Math.max(
+              normalized,
+              this.plugin.settings.minCards || DEFAULT_SETTINGS.minCards,
+            );
+            if (String(this.plugin.settings.maxCards) !== trimmed) {
+              textComponent.setValue(String(this.plugin.settings.maxCards));
             }
+            this.plugin.saveSettingsDebounced();
           }),
       );
 

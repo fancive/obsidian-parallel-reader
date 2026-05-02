@@ -76,10 +76,20 @@ export class GenerationJob {
   }
 }
 
+type Waiter = { key: string; resolve: () => void; reject: (err: Error) => void };
+
 export class GenerationJobManager {
   private jobs: Map<string, GenerationJob>;
+  private waiters: Waiter[] = [];
+  /**
+   * Live count of slots in use OR resolved-but-not-yet-set. This is the
+   * authoritative concurrency gauge — using `jobs.size` alone has a race
+   * window between `releaseSlot.resolve()` and the awaiter's `jobs.set()`
+   * during which a fresh `start()` could see a free slot and double-book.
+   */
+  private reserved = 0;
 
-  constructor() {
+  constructor(private maxConcurrent: number = 3) {
     this.jobs = new Map();
   }
 
@@ -91,8 +101,75 @@ export class GenerationJobManager {
     return this.jobs.has(key);
   }
 
+  /** Returns true if a key is either running or queued. */
+  isPending(key: string): boolean {
+    return this.jobs.has(key) || this.waiters.some((w) => w.key === key);
+  }
+
+  waitingCount(): number {
+    return this.waiters.length;
+  }
+
+  /**
+   * Reject all queued waiters with cancellation. Used on plugin unload or batch cancel
+   * so queued promises don't leak. Does not affect `reserved` — queued waiters were
+   * not yet counted toward `reserved` (they get incremented on resolve).
+   */
+  cancelAllWaiters(): number {
+    const drained = this.waiters.splice(0);
+    for (const w of drained) w.reject(new GenerationJobCancelledError(w.key));
+    return drained.length;
+  }
+
+  /**
+   * Returns null if a slot is immediately available (and reserves it synchronously,
+   * so the caller can take the fast path). Returns a Promise when queueing is required.
+   */
+  private waitSlot(key: string): Promise<void> | null {
+    if (this.reserved < this.maxConcurrent) {
+      this.reserved++;
+      return null;
+    }
+    return new Promise<void>((resolve, reject) => {
+      // Wrap resolve so the slot is reserved synchronously inside releaseSlot()
+      // before any other start() can read `reserved`.
+      this.waiters.push({
+        key,
+        resolve: () => {
+          this.reserved++;
+          resolve();
+        },
+        reject,
+      });
+    });
+  }
+
+  private releaseSlot(): void {
+    this.reserved--;
+    const next = this.waiters.shift();
+    if (next) next.resolve(); // wrapped resolve increments `reserved` synchronously
+  }
+
   async start<T>(key: string, runner: (job: GenerationJob) => Promise<T>): Promise<T> {
-    if (this.jobs.has(key)) throw new GenerationJobAlreadyRunningError(key);
+    // Reject same-key dedup at entry (running OR queued).
+    if (this.isPending(key)) throw new GenerationJobAlreadyRunningError(key);
+    const wait = this.waitSlot(key);
+    if (wait) {
+      try {
+        await wait;
+      } catch (err) {
+        // Cancelled while queued (cancelAllWaiters) — slot was never reserved
+        // for this caller, so no releaseSlot is needed.
+        throw err;
+      }
+      if (this.jobs.has(key)) {
+        // Same-key racily inserted while we waited; release the slot we got.
+        this.reserved--;
+        const next = this.waiters.shift();
+        if (next) next.resolve();
+        throw new GenerationJobAlreadyRunningError(key);
+      }
+    }
     const job = new GenerationJob(key);
     this.jobs.set(key, job);
     try {
@@ -107,6 +184,7 @@ export class GenerationJobManager {
       throw err;
     } finally {
       this.jobs.delete(key);
+      this.releaseSlot();
     }
   }
 

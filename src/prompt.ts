@@ -1,6 +1,6 @@
 'use strict';
 
-import { DEFAULT_SETTINGS, MAX_DOC_CHARS, PROMPT_LANGUAGES } from './settings';
+import { DEFAULT_SETTINGS, MAX_DOC_CHARS, normalizeCardCount, PROMPT_LANGUAGES } from './settings';
 import type { PluginSettings, PromptPair } from './types';
 
 export function promptLanguageInstruction(language: string): string {
@@ -119,8 +119,8 @@ export function buildPrompts(content: string, settings: PluginSettings): PromptP
   const promptLanguage = (PROMPT_LANGUAGES as Record<string, string>)[settings.promptLanguage]
     ? settings.promptLanguage
     : DEFAULT_SETTINGS.promptLanguage;
-  const minCards = Math.max(1, Number(settings.minCards) || DEFAULT_SETTINGS.minCards);
-  const maxCards = Math.max(minCards, Number(settings.maxCards) || DEFAULT_SETTINGS.maxCards);
+  const minCards = normalizeCardCount(settings.minCards, DEFAULT_SETTINGS.minCards);
+  const maxCards = Math.max(minCards, normalizeCardCount(settings.maxCards, DEFAULT_SETTINGS.maxCards));
   const languageInstruction = promptLanguageInstruction(promptLanguage);
   const doc =
     content.length > maxDocChars

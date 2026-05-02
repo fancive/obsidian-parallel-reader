@@ -24,8 +24,21 @@ assert.strictEqual(fp1, fp2, 'same settings = same fingerprint');
 assert.notStrictEqual(
   fp1,
   t.generationFingerprint({ ...baseSettings, model: 'other' }),
-  'different model = different fp',
+  'non-codex backend: different model = different fp',
 );
+
+// Codex backend: model is ignored by fingerprint (codex uses its own config)
+{
+  const codexA = t.generationFingerprint({ ...baseSettings, backend: 'codex', model: 'gpt-5-codex' });
+  const codexB = t.generationFingerprint({ ...baseSettings, backend: 'codex', model: 'claude-sonnet-4-6' });
+  assert.strictEqual(codexA, codexB, 'codex backend: model change does NOT affect fingerprint');
+  // But other fields still affect codex fingerprint
+  assert.notStrictEqual(
+    codexA,
+    t.generationFingerprint({ ...baseSettings, backend: 'codex', model: 'gpt-5-codex', minCards: 999 }),
+    'codex backend: other settings still affect fingerprint',
+  );
+}
 assert.notStrictEqual(
   fp1,
   t.generationFingerprint({ ...baseSettings, apiMaxTokens: 8192 }),
@@ -80,6 +93,13 @@ assert.strictEqual(
   'fresh cache entry is skipped during batch',
 );
 assert.strictEqual(t.shouldSkipBatchFile(null, 'test', baseSettings), false, 'missing cache entry is not skipped');
+
+// normalizeCardCount: cap to 30, fall back on invalid
+assert.strictEqual(t.normalizeCardCount(50, 5), 30, 'card count over 30 is capped');
+assert.strictEqual(t.normalizeCardCount(0, 5), 1, 'card count 0 floors to 1');
+assert.strictEqual(t.normalizeCardCount(-1, 5), 1, 'negative card count floors to 1');
+assert.strictEqual(t.normalizeCardCount('bad', 5), 5, 'non-numeric card count falls back to default');
+assert.strictEqual(t.normalizeCardCount('15', 5), 15, 'numeric string accepted');
 
 // normalizeCliTimeoutMs (mirrors normalizeStreamingTimeoutMs)
 assert.strictEqual(t.normalizeCliTimeoutMs('60000'), 60000, 'cli timeout accepts numeric strings');

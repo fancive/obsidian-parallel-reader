@@ -7,9 +7,11 @@ const originalConsoleError = console.error;
 plugin.cacheManager = { get: () => null };
 plugin.jobs = {
   isRunning: () => false,
+  isPending: () => false,
   start: async () => {
     throw new Error('backend down');
   },
+  cancelAllWaiters: () => 0,
 };
 plugin.t = (key) => key;
 

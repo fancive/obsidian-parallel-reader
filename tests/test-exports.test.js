@@ -37,6 +37,7 @@ const expectedExports = [
   'normalizeSettings',
   'normalizeStreamingTimeoutMs',
   'normalizeCliTimeoutMs',
+  'normalizeCardCount',
   'applyApiProviderPreset',
 ];
 

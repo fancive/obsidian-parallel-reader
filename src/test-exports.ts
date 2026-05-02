@@ -51,6 +51,7 @@ export {
   generationFingerprint,
   getApiBaseUrl,
   modelForApi,
+  normalizeCardCount,
   normalizeCliTimeoutMs,
   normalizeSettings,
   normalizeStreamingTimeoutMs,

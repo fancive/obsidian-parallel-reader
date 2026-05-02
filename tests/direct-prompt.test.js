@@ -88,7 +88,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     // ── buildPrompts: card count normalization ──
     // 0 is falsy so || picks DEFAULT (5), then Math.max(1, 5) = 5
     const zeroCards = prompt.buildPrompts('doc', { ...base, minCards: 0, maxCards: 0 });
-    assert.ok(zeroCards.system.includes('5-'), 'zero minCards falls back to default');
+    assert.ok(zeroCards.system.includes('1-1'), 'zero minCards/maxCards clamps to 1 (normalizeCardCount floor)');
 
     const bigCards = prompt.buildPrompts('doc', { ...base, minCards: 5, maxCards: 3 });
     assert.ok(bigCards.system.includes('5-5'), 'maxCards raised to match minCards');
@@ -96,6 +96,12 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     // ── buildPrompts: maxDocChars normalization ──
     const defaultMax = prompt.buildPrompts('doc', { ...base, maxDocChars: undefined });
     assert.ok(defaultMax.user.includes('doc'), 'undefined maxDocChars uses default without truncation');
+
+    // ── buildPrompts: card count is normalized (capped at 30) — keeps prompt ↔ fingerprint in sync ──
+    const oversized = prompt.buildPrompts('doc', { ...base, minCards: 100, maxCards: 200 });
+    assert.ok(oversized.system.includes('30-30'), 'over-cap card count is clamped to 30 in prompt');
+    assert.ok(!oversized.system.includes('100'), 'raw 100 must not appear in prompt');
+    assert.ok(!oversized.system.includes('200'), 'raw 200 must not appear in prompt');
 
     console.log('direct prompt tests passed');
   } finally {

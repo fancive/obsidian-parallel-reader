@@ -132,6 +132,14 @@ async function doStreamingFetch(
     reader.releaseLock();
   }
 
+  // Flush any unterminated final SSE event (some providers close the stream
+  // without a trailing \n\n, leaving the last delta in `buffer`).
+  if (buffer.length > 0) {
+    const tailBuffer = buffer.endsWith('\n\n') ? buffer : `${buffer}\n\n`;
+    const tail = parseSseBuffer(tailBuffer, extractDelta);
+    for (const delta of tail.deltas) accumulated += delta;
+  }
+
   onProgress?.({ accumulated, done: true });
   return accumulated;
 }

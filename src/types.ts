@@ -105,7 +105,13 @@ export type ErrorKind = 'auth' | 'timeout' | 'rate-limit' | 'schema' | 'config' 
 
 export interface RunForFileOptions {
   rethrowErrors?: boolean;
+  /** Skip ensureView+revealLeaf; only update view if it's already showing this file (used by batch). */
+  silentView?: boolean;
+  /** Skip the "you have edited cards" confirm dialog (used by unattended batch). */
+  skipEditConfirm?: boolean;
 }
+
+export type RunForFileResult = 'generated' | 'cached' | 'cancelled' | 'already-running' | 'empty' | 'error' | 'no-view';
 
 /* ---------- Prompt types ---------- */
 
@@ -160,7 +166,12 @@ export interface PluginHost {
   t(key: string, vars?: Record<string, string | number>): string;
   isGeneratingFile(file: TFile | null): boolean;
   cancelGenerationForFile(file: TFile | null): boolean;
-  runForFile(file: TFile | null, force: boolean, options?: RunForFileOptions): Promise<void>;
+  runForFile(
+    file: TFile | null,
+    force: boolean,
+    options?: RunForFileOptions,
+    preloadedContent?: string,
+  ): Promise<RunForFileResult | void>;
   copyCurrentViewMarkdown(): Promise<void>;
   scrollEditorToLine(line: number, file: TFile | null): Promise<void>;
   cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;
