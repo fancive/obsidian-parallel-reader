@@ -131,20 +131,13 @@ npm run test:contract
 npm run test:e2e  # packaged plugin + disposable Vault smoke
 ```
 
-The project also has a host-neutral e2e contract gate for product-shell smoke
-evidence:
+For CI / release evidence, run the contract gate:
 
 ```bash
-bash .e2e/gate.sh --json
+bash .e2e/gate.sh --json    # writes .e2e/artifact.json (gitignored)
 ```
 
-The gate is self-contained — `.e2e/gate.sh` runs the bundled Node-based contract checker directly, no external Python validator required. Runtime evidence such as `.e2e/artifact.json` and `.e2e/results/` is generated locally and ignored by git.
-
-Test classification lives in `tests/catalog.json`. `verify` owns unit,
-component, contract, and local integration checks. Mocked Obsidian/runtime tests
-are classified as component or contract tests, not product e2e. The `.e2e` gate
-intentionally includes only the default product-shell smoke plus optional live
-local Vault/provider checks with `TEST_LIVE=1`.
+Add `TEST_LIVE=1` to opt into real local Vault / provider checks.
 
 ## Star History
 

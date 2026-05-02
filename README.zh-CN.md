@@ -131,18 +131,13 @@ npm run test:contract
 npm run test:e2e  # 打包插件 + 临时 Vault smoke
 ```
 
-项目还提供一个与宿主环境解耦的 e2e contract gate，用于产品壳 smoke 证据：
+CI / 发布前跑一次 contract gate 留证据：
 
 ```bash
-bash .e2e/gate.sh --json
+bash .e2e/gate.sh --json    # 写出 .e2e/artifact.json（已 gitignore）
 ```
 
-该 gate 是自包含的 —— `.e2e/gate.sh` 直接运行仓库内的 Node 版 contract checker，不需要额外的 Python 校验器。`.e2e/artifact.json`、`.e2e/results/` 等运行证据只在本地生成，并已被 git 忽略。
-
-测试分类的来源是 `tests/catalog.json`。`verify` 负责 unit、component、contract
-和本地 integration 检查。使用 mock Obsidian/runtime 的测试归为 component 或
-contract，不声明为产品 e2e。`.e2e` gate 只包含默认产品壳 smoke，以及通过
-`TEST_LIVE=1` 显式开启的真实本地 Vault/provider 检查。
+`TEST_LIVE=1` 可开启真实本地 Vault / provider 检查。
 
 ## Star History
 
