@@ -34,6 +34,21 @@ async function testBackend(settings: PluginSettings) {
   return testApiBackend(requestUrl, settings);
 }
 
+/** Detect whether the user has departed from preset defaults. If so we keep the
+ * Advanced connection section open so they can find what they configured. */
+function shouldOpenAdvancedConnection(settings: PluginSettings): boolean {
+  if ((settings.apiProvider || '').startsWith('custom-')) return true;
+  if ((settings.apiHeaders || '').trim()) return true;
+  const preset = getApiPreset(settings);
+  const baseUrl = (settings.apiBaseUrl || '').trim();
+  if (baseUrl && preset.baseUrl && baseUrl.replace(/\/+$/, '') !== preset.baseUrl.replace(/\/+$/, '')) return true;
+  if (settings.apiAuthType && settings.apiAuthType !== 'auto') return true;
+  if (settings.streaming === false) return true;
+  if (settings.apiMaxTokens && settings.apiMaxTokens !== DEFAULT_SETTINGS.apiMaxTokens) return true;
+  if (settings.apiFormat && preset.format && settings.apiFormat !== preset.format) return true;
+  return false;
+}
+
 export class ParallelReaderSettingTab extends PluginSettingTab {
   plugin: Plugin & PluginHost;
 
@@ -49,31 +64,27 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName(this.tr('settingsTitle')).setHeading();
-
-    this.renderGeneralSection(containerEl);
+    containerEl.addClass('parallel-reader-settings');
 
     const isCliBacked = this.plugin.settings.backend === 'claude-code' || this.plugin.settings.backend === 'codex';
-    this.renderBackendSection(containerEl, isCliBacked);
-    this.renderPromptSection(containerEl, isCliBacked);
-    this.renderActionsSection(containerEl, isCliBacked);
-    this.renderCacheSection(containerEl);
+
+    this.renderQuickSetup(containerEl, isCliBacked);
+    this.renderReadingOutput(containerEl);
+
+    if (!isCliBacked) {
+      this.renderAdvancedConnection(containerEl);
+    } else {
+      this.renderAdvancedConnectionCli(containerEl);
+    }
+
+    this.renderAdvancedPrompt(containerEl);
+    this.renderCacheMaintenance(containerEl);
   }
 
-  private renderGeneralSection(containerEl: HTMLElement) {
-    new Setting(containerEl)
-      .setName(this.tr('settingUiLanguageName'))
-      .setDesc(this.tr('settingUiLanguageDesc'))
-      .addDropdown((d) => {
-        for (const [id, label] of Object.entries(UI_LANGUAGES)) {
-          d.addOption(id, label);
-        }
-        return d.setValue(this.plugin.settings.uiLanguage || DEFAULT_SETTINGS.uiLanguage).onChange(async (v) => {
-          this.plugin.settings.uiLanguage = v;
-          await this.plugin.saveSettings();
-          this.display();
-        });
-      });
+  /* ---------- 1. Quick setup (always expanded) ---------- */
+
+  private renderQuickSetup(containerEl: HTMLElement, isCliBacked: boolean) {
+    new Setting(containerEl).setName(this.tr('sectionQuickSetup')).setHeading();
 
     new Setting(containerEl)
       .setName(this.tr('settingBackendName'))
@@ -96,175 +107,103 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.display();
           }),
       );
-  }
 
-  private renderBackendSection(containerEl: HTMLElement, isCliBacked: boolean) {
     if (isCliBacked) {
-      this.renderCliBackendSettings(containerEl);
+      new Setting(containerEl)
+        .setName(this.tr('settingCliPathName'))
+        .setDesc(this.tr('settingCliPathDesc'))
+        .addText((t) =>
+          t
+            .setPlaceholder(this.tr('settingCliPathPlaceholder'))
+            .setValue(this.plugin.settings.cliPath)
+            .onChange((v) => {
+              this.plugin.settings.cliPath = v.trim();
+              this.plugin.saveSettingsDebounced();
+            }),
+        );
     } else {
-      this.renderApiBackendSettings(containerEl);
+      this.renderProviderPresetWithSummary(containerEl);
+      this.renderCredentialRow(containerEl);
     }
+
+    this.renderModelRow(containerEl, isCliBacked);
+    this.renderTestButton(containerEl, isCliBacked);
   }
 
-  private renderCliBackendSettings(containerEl: HTMLElement) {
-    new Setting(containerEl)
-      .setName(this.tr('settingCliPathName'))
-      .setDesc(this.tr('settingCliPathDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder(this.tr('settingCliPathPlaceholder'))
-          .setValue(this.plugin.settings.cliPath)
-          .onChange((v) => {
-            this.plugin.settings.cliPath = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
+  private renderProviderPresetWithSummary(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const preset = getApiPreset(settings);
+    const format = getApiFormat(settings);
+    const baseUrl = (settings.apiBaseUrl || preset.baseUrl || API_FORMATS[format]?.defaultBaseUrl || '').replace(
+      /\/+$/,
+      '',
+    );
 
-    new Setting(containerEl)
-      .setName(this.tr('settingCliTimeoutName'))
-      .setDesc(this.tr('settingCliTimeoutDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder(String(DEFAULT_SETTINGS.cliTimeoutMs))
-          .setValue(String(this.plugin.settings.cliTimeoutMs || DEFAULT_SETTINGS.cliTimeoutMs))
-          .onChange((v) => {
-            this.plugin.settings.cliTimeoutMs = normalizeCliTimeoutMs(v);
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
-  }
-
-  private renderApiBackendSettings(containerEl: HTMLElement) {
-    const preset = getApiPreset(this.plugin.settings);
-    new Setting(containerEl).setName(this.tr('apiProviderHeader')).setHeading();
-
-    new Setting(containerEl)
+    const setting = new Setting(containerEl)
       .setName(this.tr('settingProviderPresetName'))
       .setDesc(this.tr('settingProviderPresetDesc'))
       .addDropdown((d) => {
         for (const [id, entry] of Object.entries(API_PROVIDER_PRESETS)) {
           d.addOption(id, entry.label);
         }
-        return d.setValue(this.plugin.settings.apiProvider).onChange(async (v) => {
+        return d.setValue(settings.apiProvider).onChange(async (v) => {
           this.plugin.settings = applyApiProviderPreset(this.plugin.settings, v);
           await this.plugin.saveSettings();
           this.display();
         });
       });
 
-    new Setting(containerEl)
-      .setName(this.tr('settingApiFormatName'))
-      .setDesc(this.tr('settingApiFormatDesc'))
-      .addDropdown((d) => {
-        for (const [id, entry] of Object.entries(API_FORMATS)) {
-          d.addOption(id, entry.label);
-        }
-        return d.setValue(getApiFormat(this.plugin.settings)).onChange(async (v) => {
-          this.plugin.settings.apiFormat = v;
-          await this.plugin.saveSettings();
-          this.display();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName(this.tr('settingBaseUrlName'))
-      .setDesc(this.tr('settingBaseUrlDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder(
-            (this.plugin.settings.apiProvider || '').startsWith('custom-')
-              ? 'https://your-provider.example/v1'
-              : preset.baseUrl || API_FORMATS[getApiFormat(this.plugin.settings)].defaultBaseUrl,
-          )
-          .setValue(this.plugin.settings.apiBaseUrl)
-          .onChange((v) => {
-            this.plugin.settings.apiBaseUrl = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName(this.tr('settingApiKeyName'))
-      .setDesc(this.tr('settingApiKeyDesc'))
-      .addText((t) => {
-        t.inputEl.type = 'password';
-        return t.setValue(this.plugin.settings.apiKey).onChange((v) => {
-          this.plugin.settings.apiKey = v.trim();
-          this.plugin.saveSettingsDebounced();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName(this.tr('settingApiKeyEnvName'))
-      .setDesc(this.tr('settingApiKeyEnvDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder(preset.envVar || 'OPENAI_API_KEY')
-          .setValue(this.plugin.settings.apiKeyEnvVar)
-          .onChange((v) => {
-            this.plugin.settings.apiKeyEnvVar = v.trim();
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName(this.tr('settingAuthTypeName'))
-      .setDesc(this.tr('settingAuthTypeDesc'))
-      .addDropdown((d) => {
-        for (const [id, label] of Object.entries(API_AUTH_TYPES)) {
-          d.addOption(id, label);
-        }
-        return d.setValue(this.plugin.settings.apiAuthType || 'auto').onChange(async (v) => {
-          this.plugin.settings.apiAuthType = v;
-          await this.plugin.saveSettings();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName(this.tr('settingHeadersName'))
-      .setDesc(this.tr('settingHeadersDesc'))
-      .addTextArea((t) =>
-        t.setValue(this.plugin.settings.apiHeaders).onChange((v) => {
-          this.plugin.settings.apiHeaders = v;
-          this.plugin.saveSettingsDebounced();
-        }),
-      );
-
-    new Setting(containerEl).setName(this.tr('settingMaxTokensName')).addText((t) =>
-      t.setValue(String(this.plugin.settings.apiMaxTokens)).onChange((v) => {
-        const n = parseInt(v, 10);
-        if (!Number.isNaN(n) && n > 0) {
-          this.plugin.settings.apiMaxTokens = n;
-          this.plugin.saveSettingsDebounced();
-        }
-      }),
-    );
-
-    new Setting(containerEl)
-      .setName(this.tr('settingStreamingName'))
-      .setDesc(this.tr('settingStreamingDesc'))
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.streaming ?? true).onChange(async (v) => {
-          this.plugin.settings.streaming = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(this.tr('settingStreamingTimeoutName'))
-      .setDesc(this.tr('settingStreamingTimeoutDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder(String(DEFAULT_SETTINGS.streamingTimeoutMs))
-          .setValue(String(this.plugin.settings.streamingTimeoutMs || DEFAULT_SETTINGS.streamingTimeoutMs))
-          .onChange((v) => {
-            this.plugin.settings.streamingTimeoutMs = normalizeStreamingTimeoutMs(v);
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
+    // Read-only summary of derived format + baseUrl, replacing the standalone rows.
+    const summary = setting.descEl.createDiv({ cls: 'parallel-reader-preset-summary' });
+    summary.createEl('code', {
+      text: `${API_FORMATS[format]?.label || format} · ${baseUrl || this.tr('settingProviderPresetSummaryEmpty')}`,
+    });
   }
 
-  private renderPromptSection(containerEl: HTMLElement, isCliBacked: boolean) {
+  private renderCredentialRow(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const preset = getApiPreset(settings);
+    const setting = new Setting(containerEl)
+      .setName(this.tr('settingApiKeyName'))
+      .setDesc(this.tr('settingApiKeyDesc'));
+
+    setting.addText((t) => {
+      t.inputEl.type = 'password';
+      t.inputEl.autocomplete = 'off';
+      return t.setValue(settings.apiKey).onChange((v) => {
+        this.plugin.settings.apiKey = v.trim();
+        this.plugin.saveSettingsDebounced();
+      });
+    });
+
+    // Env-var fallback: render manually (without `new Setting`) to avoid
+    // nesting Obsidian .setting-item inside another controlEl, which causes
+    // theme CSS conflicts (extra borders/padding from `.setting-item:first-child`).
+    const envWrap = setting.controlEl.createDiv({ cls: 'parallel-reader-env-wrap' });
+    const envDetails = envWrap.createEl('details');
+    envDetails.createEl('summary', { text: this.tr('settingApiKeyEnvSummary') });
+    const row = envDetails.createDiv({ cls: 'parallel-reader-env-row' });
+    row.createEl('label', {
+      text: this.tr('settingApiKeyEnvName'),
+      cls: 'parallel-reader-env-label',
+    });
+    const envInput = row.createEl('input', {
+      type: 'text',
+      cls: 'parallel-reader-env-input',
+    });
+    envInput.placeholder = preset.envVar || 'OPENAI_API_KEY';
+    envInput.value = settings.apiKeyEnvVar || '';
+    envInput.addEventListener('input', () => {
+      this.plugin.settings.apiKeyEnvVar = envInput.value.trim();
+      this.plugin.saveSettingsDebounced();
+    });
+    envDetails.createEl('div', {
+      text: this.tr('settingApiKeyEnvDesc'),
+      cls: 'parallel-reader-env-desc',
+    });
+  }
+
+  private renderModelRow(containerEl: HTMLElement, isCliBacked: boolean) {
     new Setting(containerEl)
       .setName(this.tr('settingModelName'))
       .setDesc(isCliBacked ? this.tr('settingModelDescCli') : this.tr('settingModelDescApi'))
@@ -277,21 +216,28 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.plugin.saveSettingsDebounced();
           }),
       );
+  }
 
+  private renderTestButton(containerEl: HTMLElement, isCliBacked: boolean) {
     new Setting(containerEl)
-      .setName(this.tr('settingMaxInputName'))
-      .setDesc(this.tr('settingMaxInputDesc'))
-      .addText((t) =>
-        t.setValue(String(this.plugin.settings.maxDocChars || DEFAULT_SETTINGS.maxDocChars)).onChange((v) => {
-          const n = parseInt(v, 10);
-          if (!Number.isNaN(n) && n >= 1000) {
-            this.plugin.settings.maxDocChars = n;
-            this.plugin.saveSettingsDebounced();
+      .setName(this.tr('settingTestBackendName'))
+      .setDesc(isCliBacked ? this.tr('settingTestBackendDescCli') : this.tr('settingTestBackendDescApi'))
+      .addButton((b) =>
+        b.setButtonText(this.tr('settingTestBackendButton')).onClick(async () => {
+          try {
+            const result = await testBackend(this.plugin.settings);
+            new Notice(`✓ ${result.slice(0, 180)}`, 8000);
+          } catch (e: unknown) {
+            new Notice(this.tr('backendTestFailed', { error: e instanceof Error ? e.message : String(e) }), 10000);
           }
         }),
       );
+  }
 
-    new Setting(containerEl).setName(this.tr('promptHeader')).setHeading();
+  /* ---------- 2. Reading output (always expanded) ---------- */
+
+  private renderReadingOutput(containerEl: HTMLElement) {
+    new Setting(containerEl).setName(this.tr('sectionReadingOutput')).setHeading();
 
     new Setting(containerEl)
       .setName(this.tr('settingPromptLanguageName'))
@@ -345,36 +291,6 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(this.tr('settingCustomPromptName'))
-      .setDesc(this.tr('settingCustomPromptDesc'))
-      .addTextArea((t) => {
-        t.inputEl.rows = 8;
-        return t
-          .setPlaceholder(this.tr('settingCustomPromptPlaceholder'))
-          .setValue(this.plugin.settings.customSystemPrompt || '')
-          .onChange((v) => {
-            this.plugin.settings.customSystemPrompt = v;
-            this.plugin.saveSettingsDebounced();
-          });
-      });
-  }
-
-  private renderActionsSection(containerEl: HTMLElement, isCliBacked: boolean) {
-    new Setting(containerEl)
-      .setName(this.tr('settingTestBackendName'))
-      .setDesc(isCliBacked ? this.tr('settingTestBackendDescCli') : this.tr('settingTestBackendDescApi'))
-      .addButton((b) =>
-        b.setButtonText(this.tr('settingTestBackendButton')).onClick(async () => {
-          try {
-            const result = await testBackend(this.plugin.settings);
-            new Notice(`✓ ${result.slice(0, 180)}`, 8000);
-          } catch (e: unknown) {
-            new Notice(this.tr('backendTestFailed', { error: e instanceof Error ? e.message : String(e) }), 10000);
-          }
-        }),
-      );
-
-    new Setting(containerEl)
       .setName(this.tr('settingExportFolderName'))
       .setDesc(this.tr('settingExportFolderDesc'))
       .addText((t) =>
@@ -383,12 +299,192 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
           this.plugin.saveSettingsDebounced();
         }),
       );
-  }
-
-  private renderCacheSection(containerEl: HTMLElement) {
-    new Setting(containerEl).setName(this.tr('cacheHeader')).setHeading();
 
     new Setting(containerEl)
+      .setName(this.tr('settingUiLanguageName'))
+      .setDesc(this.tr('settingUiLanguageDesc'))
+      .addDropdown((d) => {
+        for (const [id, label] of Object.entries(UI_LANGUAGES)) {
+          d.addOption(id, label);
+        }
+        return d.setValue(this.plugin.settings.uiLanguage || DEFAULT_SETTINGS.uiLanguage).onChange(async (v) => {
+          this.plugin.settings.uiLanguage = v;
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      });
+  }
+
+  /* ---------- 3. Advanced connection (collapsed by default) ---------- */
+
+  private renderAdvancedConnection(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const details = this.openCollapsibleSection(
+      containerEl,
+      'sectionAdvancedConnection',
+      shouldOpenAdvancedConnection(settings),
+    );
+
+    new Setting(details)
+      .setName(this.tr('settingApiFormatName'))
+      .setDesc(this.tr('settingApiFormatDesc'))
+      .addDropdown((d) => {
+        for (const [id, entry] of Object.entries(API_FORMATS)) {
+          d.addOption(id, entry.label);
+        }
+        return d.setValue(getApiFormat(settings)).onChange(async (v) => {
+          this.plugin.settings.apiFormat = v;
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      });
+
+    new Setting(details)
+      .setName(this.tr('settingBaseUrlName'))
+      .setDesc(this.tr('settingBaseUrlDesc'))
+      .addText((t) => {
+        const preset = getApiPreset(settings);
+        t.setPlaceholder(
+          (settings.apiProvider || '').startsWith('custom-')
+            ? 'https://your-provider.example/v1'
+            : preset.baseUrl || API_FORMATS[getApiFormat(settings)].defaultBaseUrl,
+        )
+          .setValue(settings.apiBaseUrl)
+          .onChange((v) => {
+            this.plugin.settings.apiBaseUrl = v.trim();
+            this.plugin.saveSettingsDebounced();
+          });
+      });
+
+    new Setting(details)
+      .setName(this.tr('settingAuthTypeName'))
+      .setDesc(this.tr('settingAuthTypeDesc'))
+      .addDropdown((d) => {
+        for (const [id, label] of Object.entries(API_AUTH_TYPES)) {
+          d.addOption(id, label);
+        }
+        return d.setValue(settings.apiAuthType || 'auto').onChange(async (v) => {
+          this.plugin.settings.apiAuthType = v;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(details)
+      .setName(this.tr('settingHeadersName'))
+      .setDesc(this.tr('settingHeadersDesc'))
+      .addTextArea((t) =>
+        t.setValue(settings.apiHeaders).onChange((v) => {
+          this.plugin.settings.apiHeaders = v;
+          this.plugin.saveSettingsDebounced();
+        }),
+      );
+
+    new Setting(details).setName(this.tr('settingMaxTokensName')).addText((t) =>
+      t.setValue(String(settings.apiMaxTokens)).onChange((v) => {
+        const n = parseInt(v, 10);
+        if (!Number.isNaN(n) && n > 0) {
+          this.plugin.settings.apiMaxTokens = n;
+          this.plugin.saveSettingsDebounced();
+        }
+      }),
+    );
+
+    // Streaming + timeout merged. We build the timeout in a dedicated wrapper
+    // and toggle that wrapper's visibility so we never accidentally hide the
+    // shared controlEl (which would also hide the toggle itself).
+    const streamingSetting = new Setting(details)
+      .setName(this.tr('settingStreamingName'))
+      .setDesc(this.tr('settingStreamingDesc'));
+
+    let timeoutWrap: HTMLElement | null = null;
+
+    streamingSetting.addToggle((toggle) =>
+      toggle.setValue(settings.streaming ?? true).onChange(async (v) => {
+        this.plugin.settings.streaming = v;
+        await this.plugin.saveSettings();
+        if (timeoutWrap) timeoutWrap.toggleClass('parallel-reader-hidden', !v);
+      }),
+    );
+
+    timeoutWrap = streamingSetting.controlEl.createDiv({ cls: 'parallel-reader-timeout-wrap' });
+    const timeoutInput = timeoutWrap.createEl('input', {
+      type: 'text',
+      cls: 'parallel-reader-timeout-input',
+    });
+    timeoutInput.placeholder = String(DEFAULT_SETTINGS.streamingTimeoutMs);
+    timeoutInput.title = this.tr('settingStreamingTimeoutName');
+    timeoutInput.value = String(settings.streamingTimeoutMs || DEFAULT_SETTINGS.streamingTimeoutMs);
+    timeoutInput.addEventListener('input', () => {
+      this.plugin.settings.streamingTimeoutMs = normalizeStreamingTimeoutMs(timeoutInput.value);
+      this.plugin.saveSettingsDebounced();
+    });
+    timeoutWrap.toggleClass('parallel-reader-hidden', !(settings.streaming ?? true));
+  }
+
+  private renderAdvancedConnectionCli(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const userChangedTimeout = !!(settings.cliTimeoutMs && settings.cliTimeoutMs !== DEFAULT_SETTINGS.cliTimeoutMs);
+    const details = this.openCollapsibleSection(containerEl, 'sectionAdvancedConnection', userChangedTimeout);
+    new Setting(details)
+      .setName(this.tr('settingCliTimeoutName'))
+      .setDesc(this.tr('settingCliTimeoutDesc'))
+      .addText((t) =>
+        t
+          .setPlaceholder(String(DEFAULT_SETTINGS.cliTimeoutMs))
+          .setValue(String(this.plugin.settings.cliTimeoutMs || DEFAULT_SETTINGS.cliTimeoutMs))
+          .onChange((v) => {
+            this.plugin.settings.cliTimeoutMs = normalizeCliTimeoutMs(v);
+            this.plugin.saveSettingsDebounced();
+          }),
+      );
+  }
+
+  /* ---------- 4. Advanced prompt (collapsed by default) ---------- */
+
+  private renderAdvancedPrompt(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const userHasCustomPrompt = !!(settings.customSystemPrompt || '').trim();
+    const userHasCustomMaxInput = settings.maxDocChars && settings.maxDocChars !== DEFAULT_SETTINGS.maxDocChars;
+    const details = this.openCollapsibleSection(
+      containerEl,
+      'sectionAdvancedPrompt',
+      !!(userHasCustomPrompt || userHasCustomMaxInput),
+    );
+
+    new Setting(details)
+      .setName(this.tr('settingMaxInputName'))
+      .setDesc(this.tr('settingMaxInputDesc'))
+      .addText((t) =>
+        t.setValue(String(settings.maxDocChars || DEFAULT_SETTINGS.maxDocChars)).onChange((v) => {
+          const n = parseInt(v, 10);
+          if (!Number.isNaN(n) && n >= 1000) {
+            this.plugin.settings.maxDocChars = n;
+            this.plugin.saveSettingsDebounced();
+          }
+        }),
+      );
+
+    new Setting(details)
+      .setName(this.tr('settingCustomPromptName'))
+      .setDesc(this.tr('settingCustomPromptDesc'))
+      .addTextArea((t) => {
+        t.inputEl.rows = 8;
+        return t
+          .setPlaceholder(this.tr('settingCustomPromptPlaceholder'))
+          .setValue(settings.customSystemPrompt || '')
+          .onChange((v) => {
+            this.plugin.settings.customSystemPrompt = v;
+            this.plugin.saveSettingsDebounced();
+          });
+      });
+  }
+
+  /* ---------- 5. Cache & maintenance (collapsed by default) ---------- */
+
+  private renderCacheMaintenance(containerEl: HTMLElement) {
+    const details = this.openCollapsibleSection(containerEl, 'sectionCacheMaintenance', false);
+
+    new Setting(details)
       .setName(this.tr('settingMaxCacheName'))
       .setDesc(this.tr('settingMaxCacheDesc'))
       .addText((t) => {
@@ -413,7 +509,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       });
 
     const cacheCount = Object.keys(this.plugin.cache).length;
-    new Setting(containerEl)
+    new Setting(details)
       .setName(this.tr('cachedNotesName', { count: cacheCount }))
       .setDesc(this.tr('cachedNotesDesc'))
       .addButton((b) =>
@@ -427,5 +523,16 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.display();
           }),
       );
+  }
+
+  /* ---------- helpers ---------- */
+
+  /** Create a `<details>` collapsible section with translated `<summary>` and
+   * return the inner element to render Settings into. */
+  private openCollapsibleSection(parent: HTMLElement, summaryKey: string, openByDefault: boolean): HTMLElement {
+    const details = parent.createEl('details', { cls: 'parallel-reader-section' });
+    if (openByDefault) details.setAttr('open', '');
+    details.createEl('summary', { text: this.tr(summaryKey), cls: 'parallel-reader-section-summary' });
+    return details;
   }
 }

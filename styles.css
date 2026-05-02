@@ -1,3 +1,89 @@
+/* ---- Settings tab: collapsible sections ---- */
+
+.parallel-reader-settings details.parallel-reader-section {
+  margin: 0.6em 0 0.4em;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 0.4em;
+}
+
+.parallel-reader-settings details.parallel-reader-section > summary.parallel-reader-section-summary {
+  cursor: pointer;
+  list-style: revert;
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--text-muted);
+  padding: 0.4em 0;
+  user-select: none;
+}
+
+.parallel-reader-settings details.parallel-reader-section[open] > summary.parallel-reader-section-summary {
+  color: var(--text-normal);
+  margin-bottom: 0.4em;
+}
+
+.parallel-reader-settings .parallel-reader-preset-summary {
+  margin-top: 0.3em;
+  font-size: 0.82em;
+  color: var(--text-faint);
+}
+
+.parallel-reader-settings .parallel-reader-preset-summary code {
+  font-size: 0.95em;
+  background: var(--background-secondary);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+}
+
+.parallel-reader-settings .parallel-reader-env-wrap {
+  width: 100%;
+  margin-top: 0.4em;
+}
+
+.parallel-reader-settings .parallel-reader-env-wrap details summary {
+  cursor: pointer;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  padding: 0.2em 0;
+}
+
+.parallel-reader-settings .parallel-reader-env-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0.4em 0;
+}
+
+.parallel-reader-settings .parallel-reader-env-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.parallel-reader-settings .parallel-reader-env-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.parallel-reader-settings .parallel-reader-env-desc {
+  font-size: 0.8em;
+  color: var(--text-faint);
+  margin-top: 0.2em;
+}
+
+.parallel-reader-settings .parallel-reader-timeout-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.6em;
+}
+
+.parallel-reader-settings .parallel-reader-timeout-input {
+  width: 90px;
+}
+
+.parallel-reader-settings .parallel-reader-hidden {
+  display: none !important;
+}
+
 .parallel-reader-container {
   padding: 0;
   overflow: hidden;
