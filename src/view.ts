@@ -110,7 +110,7 @@ export class ParallelReaderView extends ItemView {
     container.empty();
     const header = container.createDiv({ cls: 'parallel-reader-header' });
     const headerRow = header.createDiv({ cls: 'parallel-reader-header-row' });
-    headerRow.createEl('div', { text: file.basename, cls: 'parallel-reader-title' });
+    headerRow.createDiv({ text: file.basename, cls: 'parallel-reader-title' });
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => {
       this.plugin.cancelGenerationForFile(file);
@@ -120,7 +120,7 @@ export class ParallelReaderView extends ItemView {
       cls: 'parallel-reader-state parallel-reader-loading parallel-reader-streaming-preview',
     });
     state.createDiv({ cls: 'parallel-reader-spinner' });
-    const titleEl = state.createEl('div', { cls: 'parallel-reader-state-title' });
+    const titleEl = state.createDiv({ cls: 'parallel-reader-state-title' });
     titleEl.createSpan({ text: this.plugin.t('loadingGenerating') + ' ' });
     titleEl.createSpan({ cls: 'parallel-reader-stream-counter', text: `${text.length} chars` });
     const pre = state.createEl('pre', { cls: 'parallel-reader-stream-text' });
@@ -174,7 +174,7 @@ export class ParallelReaderView extends ItemView {
   private renderHeader(container: Element) {
     const header = container.createDiv({ cls: 'parallel-reader-header' });
     const headerRow = header.createDiv({ cls: 'parallel-reader-header-row' });
-    headerRow.createEl('div', { text: this.sourceFile?.basename || '', cls: 'parallel-reader-title' });
+    headerRow.createDiv({ text: this.sourceFile?.basename || '', cls: 'parallel-reader-title' });
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     if (this.sourceFile) {
       if (this.plugin.isGeneratingFile(this.sourceFile)) {
@@ -209,14 +209,14 @@ export class ParallelReaderView extends ItemView {
   private renderLoadingState(container: Element) {
     const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-loading' });
     state.createDiv({ cls: 'parallel-reader-spinner' });
-    state.createEl('div', { text: this.loadingMessage, cls: 'parallel-reader-state-title' });
-    state.createEl('div', { text: this.plugin.t('loadingSubtitle'), cls: 'parallel-reader-state-subtitle' });
+    state.createDiv({ text: this.loadingMessage, cls: 'parallel-reader-state-title' });
+    state.createDiv({ text: this.plugin.t('loadingSubtitle'), cls: 'parallel-reader-state-subtitle' });
   }
 
   private renderErrorState(container: Element) {
     const state = container.createDiv({ cls: 'parallel-reader-state parallel-reader-error' });
-    state.createEl('div', { text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
-    state.createEl('div', {
+    state.createDiv({ text: this.plugin.t('errorTitle'), cls: 'parallel-reader-state-title' });
+    state.createDiv({
       text: this.errorMessage,
       cls: 'parallel-reader-state-subtitle parallel-reader-selectable',
     });
@@ -254,14 +254,14 @@ export class ParallelReaderView extends ItemView {
     card.dataset.idx = String(i);
     if (s.startLine < 0) card.addClass('parallel-reader-card-unanchored');
 
-    const title = card.createEl('div', { cls: 'parallel-reader-card-title' });
+    const title = card.createDiv({ cls: 'parallel-reader-card-title' });
     title.createSpan({ text: s.title });
     if (s.startLine < 0) {
-      title.createEl('span', { text: ' ⚠', cls: 'parallel-reader-warn', title: this.plugin.t('anchorMismatch') });
+      title.createSpan({ text: ' ⚠', cls: 'parallel-reader-warn', title: this.plugin.t('anchorMismatch') });
     }
 
     if (s.gist) {
-      const gistEl = card.createEl('div', { cls: 'parallel-reader-gist' });
+      const gistEl = card.createDiv({ cls: 'parallel-reader-gist' });
       MarkdownRenderer.render(this.app, s.gist, gistEl, sourcePath, this).catch(() => {
         gistEl.setText(s.gist);
       });
@@ -269,13 +269,13 @@ export class ParallelReaderView extends ItemView {
 
     const bs = s.bullets || [];
     if (bs.length > 0) {
-      const bulletsEl = card.createEl('div', { cls: 'parallel-reader-bullets-md' });
+      const bulletsEl = card.createDiv({ cls: 'parallel-reader-bullets-md' });
       const md = bs.map((b) => `- ${b}`).join('\n');
       MarkdownRenderer.render(this.app, md, bulletsEl, sourcePath, this).catch(() => {
         bulletsEl.setText(md);
       });
     } else if (!s.gist) {
-      card.createEl('div', { cls: 'parallel-reader-empty-li', text: this.plugin.t('emptyCard') });
+      card.createDiv({ cls: 'parallel-reader-empty-li', text: this.plugin.t('emptyCard') });
     }
 
     card.addEventListener('click', (e) => {

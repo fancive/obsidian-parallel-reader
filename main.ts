@@ -53,7 +53,7 @@ class ParallelReaderPlugin extends Plugin {
   jobs!: GenerationJobManager;
   activeBatch: BatchRunState | null = null;
   _scrollDispose: (() => void) | null = null;
-  _settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  _settingsSaveTimer: number | null = null;
 
   get cache(): Record<string, CacheEntry> {
     return this.cacheManager.cache;
@@ -198,15 +198,15 @@ class ParallelReaderPlugin extends Plugin {
 
   async saveSettings() {
     if (this._settingsSaveTimer) {
-      clearTimeout(this._settingsSaveTimer);
+      activeWindow.clearTimeout(this._settingsSaveTimer);
       this._settingsSaveTimer = null;
     }
     await this.saveData({ settings: this.settings });
   }
 
   saveSettingsDebounced(delayMs = 400) {
-    if (this._settingsSaveTimer) clearTimeout(this._settingsSaveTimer);
-    this._settingsSaveTimer = setTimeout(() => {
+    if (this._settingsSaveTimer) activeWindow.clearTimeout(this._settingsSaveTimer);
+    this._settingsSaveTimer = activeWindow.setTimeout(() => {
       this._settingsSaveTimer = null;
       this.saveSettings().catch((e: unknown) => console.error('[parallel-reader] failed to save settings', e));
     }, delayMs);
@@ -214,7 +214,7 @@ class ParallelReaderPlugin extends Plugin {
 
   async flushSettingsSave() {
     if (!this._settingsSaveTimer) return;
-    clearTimeout(this._settingsSaveTimer);
+    activeWindow.clearTimeout(this._settingsSaveTimer);
     this._settingsSaveTimer = null;
     await this.saveSettings();
   }

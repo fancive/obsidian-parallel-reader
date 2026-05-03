@@ -155,13 +155,9 @@ export class GenerationJobManager {
     if (this.isPending(key)) throw new GenerationJobAlreadyRunningError(key);
     const wait = this.waitSlot(key);
     if (wait) {
-      try {
-        await wait;
-      } catch (err) {
-        // Cancelled while queued (cancelAllWaiters) — slot was never reserved
-        // for this caller, so no releaseSlot is needed.
-        throw err;
-      }
+      // If cancelled while queued (cancelAllWaiters), the slot was never reserved
+      // for this caller, so no releaseSlot is needed — propagation is enough.
+      await wait;
       if (this.jobs.has(key)) {
         // Same-key racily inserted while we waited; release the slot we got.
         this.reserved--;

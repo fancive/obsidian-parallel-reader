@@ -85,7 +85,7 @@ async function doStreamingFetch(
   signal: AbortSignal,
   settings: PluginSettings | null | undefined,
 ): Promise<string> {
-  const response = await globalThis.fetch(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -158,7 +158,7 @@ export async function streamingFetch(
   signal?: AbortSignal,
   settings?: PluginSettings | null,
 ): Promise<string> {
-  if (typeof globalThis.fetch !== 'function') {
+  if (typeof fetch !== 'function') {
     throw new Error('Streaming requires fetch API');
   }
 
@@ -172,9 +172,9 @@ export async function streamingFetch(
     if (signal.aborted) timeoutController.abort();
   }
 
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timeoutId: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
+    timeoutId = activeWindow.setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Streaming timed out after ${timeoutMs}ms`));
     }, timeoutMs);
@@ -186,7 +186,7 @@ export async function streamingFetch(
       timeoutPromise,
     ]);
   } finally {
-    if (timeoutId !== null) clearTimeout(timeoutId);
+    if (timeoutId !== null) activeWindow.clearTimeout(timeoutId);
     if (signal && abortListener) signal.removeEventListener('abort', abortListener);
   }
 }

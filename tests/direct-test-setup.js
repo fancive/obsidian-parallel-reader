@@ -4,6 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Polyfill Obsidian's `activeWindow` global for Node test runtime.
+if (typeof globalThis.activeWindow === 'undefined') {
+  globalThis.activeWindow = globalThis;
+}
+
 const repoRoot = path.join(__dirname, '..');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-reader-tests-'));
 

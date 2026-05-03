@@ -29,12 +29,12 @@ export function visibleTopProbeY(
 type ScheduleId = { readonly __brand: 'ScheduleId'; readonly raw: number | ReturnType<typeof setTimeout> };
 
 function wrapId(raw: number | ReturnType<typeof setTimeout>): ScheduleId {
-  return { __brand: 'ScheduleId', raw } as ScheduleId;
+  return { __brand: 'ScheduleId', raw };
 }
 
 function defaultSchedule(callback: FrameRequestCallback): ScheduleId {
   if (typeof requestAnimationFrame === 'function') return wrapId(requestAnimationFrame(callback));
-  return wrapId(setTimeout(() => callback(Date.now()), FALLBACK_FRAME_MS));
+  return wrapId(activeWindow.setTimeout(() => callback(Date.now()), FALLBACK_FRAME_MS));
 }
 
 function defaultCancel(id: ScheduleId) {
@@ -42,7 +42,7 @@ function defaultCancel(id: ScheduleId) {
     cancelAnimationFrame(id.raw as number);
     return;
   }
-  clearTimeout(id.raw as ReturnType<typeof setTimeout>);
+  activeWindow.clearTimeout(id.raw as number);
 }
 
 export function createRafThrottledHandler(

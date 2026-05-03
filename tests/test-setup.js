@@ -5,6 +5,11 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 
+// Polyfill Obsidian's `activeWindow` global for Node test runtime.
+if (typeof globalThis.activeWindow === 'undefined') {
+  globalThis.activeWindow = globalThis;
+}
+
 // Load obsidian mock first — hooks Module._load so that require('obsidian')
 // returns the mock for both us and the esbuild-bundled test-exports module.
 const { getRequestUrlMock, setRequestUrlMock } = require('./obsidian-mock');

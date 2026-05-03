@@ -34,7 +34,7 @@ function isValidCacheEntry(entry: unknown): entry is CacheEntry {
 
 export class CacheManager {
   cache: Record<string, CacheEntry> = {};
-  private _timer: ReturnType<typeof setTimeout> | null = null;
+  private _timer: number | null = null;
   private _dirty = false;
 
   constructor(
@@ -104,7 +104,7 @@ export class CacheManager {
 
   async save(): Promise<void> {
     if (this._timer) {
-      clearTimeout(this._timer);
+      activeWindow.clearTimeout(this._timer);
       this._timer = null;
     }
     this.prune();
@@ -115,7 +115,7 @@ export class CacheManager {
   scheduleSave(delayMs = 5000): void {
     this._dirty = true;
     if (this._timer) return;
-    this._timer = setTimeout(() => {
+    this._timer = activeWindow.setTimeout(() => {
       this._timer = null;
       if (!this._dirty) return;
       this.save().catch((e: unknown) => console.error('[parallel-reader] failed to save cache', e));
@@ -124,7 +124,7 @@ export class CacheManager {
 
   async flush(): Promise<void> {
     if (this._timer) {
-      clearTimeout(this._timer);
+      activeWindow.clearTimeout(this._timer);
       this._timer = null;
     }
     if (!this._dirty) return;

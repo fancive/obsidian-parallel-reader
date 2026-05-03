@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check main.ts src/ tests/ scripts/ .e2e/scripts/",
     "lint:fix": "biome check --write main.ts src/ tests/ scripts/ .e2e/scripts/",
+    "lint:obsidian": "eslint main.ts src/",
     "version": "node scripts/bump-version.mjs",
     "test": "npm run build && npm run typecheck && node scripts/run-tests.mjs",
     "test:only": "node scripts/run-tests.mjs",
@@ -22,7 +23,10 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
     "@types/node": "^22.10.2",
+    "@typescript-eslint/parser": "^8.59.1",
     "esbuild": "^0.24.2",
+    "eslint": "^9.39.4",
+    "eslint-plugin-obsidianmd": "^0.2.9",
     "obsidian": "^1.7.2",
     "typescript": "^5.7.2"
   }

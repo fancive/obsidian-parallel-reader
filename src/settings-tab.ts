@@ -197,7 +197,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       this.plugin.settings.apiKeyEnvVar = envInput.value.trim();
       this.plugin.saveSettingsDebounced();
     });
-    envDetails.createEl('div', {
+    envDetails.createDiv({
       text: this.tr('settingApiKeyEnvDesc'),
       cls: 'parallel-reader-env-desc',
     });

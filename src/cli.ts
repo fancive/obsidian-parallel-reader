@@ -63,17 +63,17 @@ export function runCli(
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
     let settled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let timer: number | null = null;
     const fail = (err: Error) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) activeWindow.clearTimeout(timer);
       reject(err);
     };
     const succeed = (value: { stdout: string; stderr: string }) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
+      if (timer) activeWindow.clearTimeout(timer);
       resolve(value);
     };
     try {
@@ -98,7 +98,7 @@ export function runCli(
 
     let stdout = '';
     let stderr = '';
-    timer = setTimeout(() => {
+    timer = activeWindow.setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch (e: unknown) {
