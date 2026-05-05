@@ -195,6 +195,24 @@ export function classifyGenerationError(error: unknown): ErrorKind {
   if (error instanceof GenerationJobCancelledError) return 'cancelled';
   const errObj = error as { code?: string; message?: string } | null;
   if (errObj?.code === 'cancelled') return 'cancelled';
+
+  // Structured CLI error short-circuits message-regex matching for the deterministic cases.
+  // Duck-typed to avoid circular import with ./cli.
+  const details = (error as { details?: { reason?: string } } | null)?.details;
+  if (details && typeof details.reason === 'string') {
+    switch (details.reason) {
+      case 'wall-timeout':
+      case 'idle-timeout':
+        return 'timeout';
+      case 'spawn-failure':
+      case 'startup-error':
+        return 'config';
+      case 'streams-unavailable':
+        return 'unknown';
+      // exit-nonzero falls through: stderr might carry auth/rate-limit/schema info.
+    }
+  }
+
   const message = String(errObj?.message || error);
   if (/api key|unauthorized|401|403|认证|权限/i.test(message)) return 'auth';
   if (/timeout|超时|timed out/i.test(message)) return 'timeout';

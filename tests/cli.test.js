@@ -66,6 +66,13 @@ async function testRunCliEdgeCases() {
       assert.match(err.message, /stderr=\d+B/, 'timeout error carries stderr byte count');
       assert.match(err.message, /stderr tail/, 'timeout error includes stderr tail');
       assert.match(err.message, /boom: connection reset/, 'timeout error preserves last stderr line');
+      // Structured CliProcessError details (P0 #2: error UI dispatch needs typed access).
+      assert.ok(err instanceof t.CliProcessError, 'wall-timeout throws CliProcessError');
+      assert.strictEqual(err.details.reason, 'wall-timeout', 'wall-timeout reason set');
+      assert.strictEqual(err.details.pid, 4242, 'details.pid populated');
+      assert.ok(err.details.stderrBytes >= 'boom: connection reset'.length, 'details.stderrBytes utf-8 byte count');
+      assert.match(err.details.stderrTail, /boom: connection reset/, 'details.stderrTail preserved');
+      assert.strictEqual(err.details.timeoutMs, 20, 'details.timeoutMs reflects wall timeout');
       return true;
     },
     'runCli rejects on timeout with rich diagnostics',
@@ -80,6 +87,9 @@ async function testRunCliEdgeCases() {
     (err) => {
       assert.match(err.message, /CLI idle timeout \(15ms\)/, 'idle timeout error message');
       assert.match(err.message, /pid=5252/, 'idle timeout carries pid');
+      assert.ok(err instanceof t.CliProcessError, 'idle-timeout throws CliProcessError');
+      assert.strictEqual(err.details.reason, 'idle-timeout', 'idle-timeout reason set');
+      assert.strictEqual(err.details.idleTimeoutMs, 15, 'details.idleTimeoutMs reflects idle window');
       return true;
     },
     'runCli idle timeout fires when no output',
@@ -132,8 +142,33 @@ async function testRunCliEdgeCases() {
 
   await assert.rejects(
     () => t.runCli('fake', [], '', 100, undefined, () => ({ stdout: null, stderr: null, stdin: null })),
-    /CLI process streams are unavailable/,
+    (err) => {
+      assert.match(err.message, /CLI process streams are unavailable/, 'streams-unavailable message preserved');
+      assert.ok(err instanceof t.CliProcessError, 'streams-unavailable throws CliProcessError');
+      assert.strictEqual(err.details.reason, 'streams-unavailable', 'streams-unavailable reason set');
+      return true;
+    },
     'runCli reports unavailable stdio streams',
+  );
+
+  // Non-zero exit still throws a typed CliProcessError so dispatcher can inspect stderr.
+  const exitChild = createFakeChild();
+  exitChild.pid = 7373;
+  const exitPromise = t.runCli('fake', [], '', 1000, undefined, () => exitChild);
+  setImmediate(() => {
+    exitChild.stderr.emit('data', Buffer.from('error: invalid api key'));
+    exitChild.emit('close', 2, null);
+  });
+  await assert.rejects(
+    () => exitPromise,
+    (err) => {
+      assert.ok(err instanceof t.CliProcessError, 'exit-nonzero throws CliProcessError');
+      assert.strictEqual(err.details.reason, 'exit-nonzero', 'exit-nonzero reason set');
+      assert.strictEqual(err.details.exitCode, 2, 'details.exitCode populated');
+      assert.match(err.details.stderrTail, /invalid api key/, 'details.stderrTail captures auth hint');
+      return true;
+    },
+    'runCli exposes non-zero exit code in structured details',
   );
 
   // Diagnostic suffix must redact secrets that show up in stderr (Bearer tokens, sk- keys, etc.)
@@ -433,6 +468,62 @@ assert.strictEqual(t.classifyGenerationError(new Error('API key 未设置')), 'a
 assert.strictEqual(t.classifyGenerationError(new Error('API key is not set')), 'auth');
 assert.strictEqual(t.classifyGenerationError(new Error('CLI timed out (120000ms)')), 'timeout');
 assert.strictEqual(t.classifyGenerationError(new Error('CLI 超时 (120000ms)')), 'timeout');
+
+// Structured CliProcessError short-circuits message-regex matching for deterministic reasons.
+const wallTimeout = new t.CliProcessError('whatever message text', {
+  reason: 'wall-timeout',
+  cmd: 'claude',
+  pid: 1,
+  elapsedMs: 0,
+  idleMs: 0,
+  stdoutBytes: 0,
+  stderrBytes: 0,
+  stdoutTail: '',
+  stderrTail: '',
+  exitCode: null,
+  signal: null,
+  timeoutMs: 0,
+  idleTimeoutMs: 0,
+});
+assert.strictEqual(t.classifyGenerationError(wallTimeout), 'timeout', 'wall-timeout details → timeout kind');
+const spawnFailure = new t.CliProcessError('Failed to start claude', {
+  reason: 'spawn-failure',
+  cmd: 'claude',
+  pid: null,
+  elapsedMs: 0,
+  idleMs: null,
+  stdoutBytes: 0,
+  stderrBytes: 0,
+  stdoutTail: '',
+  stderrTail: '',
+  exitCode: null,
+  signal: null,
+  timeoutMs: 0,
+  idleTimeoutMs: 0,
+});
+assert.strictEqual(t.classifyGenerationError(spawnFailure), 'config', 'spawn-failure details → config kind');
+// exit-nonzero falls through so stderr-derived auth/rate-limit messages can still classify.
+const exitWithAuthStderr = new t.CliProcessError('CLI exited with code 1\nstderr:\nerror: API key invalid', {
+  reason: 'exit-nonzero',
+  cmd: 'claude',
+  pid: 1,
+  elapsedMs: 0,
+  idleMs: 0,
+  stdoutBytes: 0,
+  stderrBytes: 0,
+  stdoutTail: '',
+  stderrTail: '',
+  exitCode: 1,
+  signal: null,
+  timeoutMs: 0,
+  idleTimeoutMs: 0,
+});
+assert.strictEqual(
+  t.classifyGenerationError(exitWithAuthStderr),
+  'auth',
+  'exit-nonzero falls through so message-regex still detects auth',
+);
+
 assert.strictEqual(t.classifyGenerationError(new Error('API returned HTTP 429')), 'rate-limit');
 assert.strictEqual(t.classifyGenerationError(new Error('json_schema validation failed')), 'schema');
 assert.strictEqual(t.classifyGenerationError(new Error('LLM 返回非 JSON')), 'schema');

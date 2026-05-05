@@ -18,6 +18,7 @@ import {
 import { shouldConfirmRegenerate } from './src/cache';
 import { CacheManager } from './src/cache-manager';
 import { resolveCardAnchors } from './src/cards';
+import { showGenerationError } from './src/error-ui';
 import { cancellationNoticeKey, summarizeDocument } from './src/generation';
 import {
   classifyGenerationError,
@@ -603,7 +604,30 @@ class ParallelReaderPlugin extends Plugin {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(e);
     if (view && this.viewIsShowingFile(view, file)) view.renderError(file, msg);
-    new Notice(this.t('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: msg }));
+    showGenerationError(
+      {
+        app: this.app,
+        settings: this.settings,
+        openSettings: () => this.openPluginSettings(),
+      },
+      kind,
+      e,
+      msg,
+    );
+  }
+
+  private openPluginSettings(): void {
+    // Obsidian doesn't expose a typed API for opening a specific plugin tab; use the documented
+    // (but technically internal) setting/openTabById path with safe fallbacks.
+    const setting = (this.app as unknown as { setting?: { open: () => void; openTabById: (id: string) => void } })
+      .setting;
+    if (!setting) return;
+    try {
+      setting.open();
+      setting.openTabById(this.manifest.id);
+    } catch (err: unknown) {
+      console.warn('[parallel-reader] failed to open settings tab', err);
+    }
   }
 
   async runBatchForFolder() {

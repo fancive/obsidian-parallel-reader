@@ -59,6 +59,42 @@ export interface RunCliOptions {
   debug?: boolean;
 }
 
+export type CliFailureReason =
+  | 'wall-timeout'
+  | 'idle-timeout'
+  | 'exit-nonzero'
+  | 'streams-unavailable'
+  | 'spawn-failure'
+  | 'startup-error';
+
+export interface CliErrorDetails {
+  reason: CliFailureReason;
+  cmd: string;
+  pid: number | null;
+  elapsedMs: number;
+  idleMs: number | null;
+  stdoutBytes: number;
+  stderrBytes: number;
+  /** Already secret-redacted, capped to DIAG_STDERR_TAIL_CHARS. */
+  stderrTail: string;
+  /** Already secret-redacted, capped to DIAG_STDOUT_TAIL_CHARS. */
+  stdoutTail: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  timeoutMs: number;
+  idleTimeoutMs: number;
+}
+
+export class CliProcessError extends Error {
+  readonly name = 'CliProcessError';
+  readonly details: CliErrorDetails;
+
+  constructor(message: string, details: CliErrorDetails) {
+    super(message);
+    this.details = details;
+  }
+}
+
 const DIAG_STDERR_TAIL_CHARS = 800;
 const DIAG_STDOUT_TAIL_CHARS = 200;
 
@@ -73,7 +109,7 @@ function redactSecrets(text: string): string {
   return text
     .replace(/\b(Bearer)\s+[\w.\-+/=]{6,}/gi, `$1 ${REDACT}`)
     .replace(/\b(x-api-key|x-goog-api-key|api[_-]?key|authorization)\s*[:=]\s*[\w.\-+/=]{6,}/gi, `$1: ${REDACT}`)
-    .replace(/\b(sk-[A-Za-z0-9_\-]{12,})/g, REDACT);
+    .replace(/\b(sk-[A-Za-z0-9_-]{12,})/g, REDACT);
 }
 
 function utf8ByteLength(text: string): number {
@@ -156,7 +192,23 @@ export function runCli(
     } catch (e: unknown) {
       const message = `Failed to start ${cmd}: ${e instanceof Error ? e.message : String(e)}`;
       if (debug) console.warn('[parallel-reader] cli spawn failed', { cmd, error: message });
-      return reject(new Error(message));
+      return reject(
+        new CliProcessError(message, {
+          reason: 'spawn-failure',
+          cmd,
+          pid: null,
+          elapsedMs: Date.now() - startedAt,
+          idleMs: null,
+          stdoutBytes: 0,
+          stderrBytes: 0,
+          stdoutTail: '',
+          stderrTail: '',
+          exitCode: null,
+          signal: null,
+          timeoutMs,
+          idleTimeoutMs,
+        }),
+      );
     }
 
     if (debug) {
@@ -172,17 +224,32 @@ export function runCli(
     let stdout = '';
     let stderr = '';
 
-    const buildDiagSuffix = (idleMs: number): string => {
-      const elapsed = Date.now() - startedAt;
-      const stderrBytes = utf8ByteLength(stderr);
-      const stdoutBytes = utf8ByteLength(stdout);
-      const stderrTail = redactSecrets(tail(stderr, DIAG_STDERR_TAIL_CHARS));
-      const stdoutTail = redactSecrets(tail(stdout, DIAG_STDOUT_TAIL_CHARS));
+    const collectDetails = (
+      reason: CliFailureReason,
+      idleMs: number,
+      extras: { exitCode?: number | null; signal?: NodeJS.Signals | null } = {},
+    ): CliErrorDetails => ({
+      reason,
+      cmd,
+      pid: child?.pid ?? null,
+      elapsedMs: Date.now() - startedAt,
+      idleMs,
+      stdoutBytes: utf8ByteLength(stdout),
+      stderrBytes: utf8ByteLength(stderr),
+      stdoutTail: redactSecrets(tail(stdout, DIAG_STDOUT_TAIL_CHARS)),
+      stderrTail: redactSecrets(tail(stderr, DIAG_STDERR_TAIL_CHARS)),
+      exitCode: extras.exitCode ?? null,
+      signal: extras.signal ?? null,
+      timeoutMs,
+      idleTimeoutMs,
+    });
+
+    const buildDiagSuffix = (details: CliErrorDetails): string => {
       let suffix =
-        ` [pid=${child?.pid ?? 'unknown'} elapsed=${elapsed}ms idle=${idleMs}ms ` +
-        `stdout=${stdoutBytes}B stderr=${stderrBytes}B]`;
-      if (stderrTail) suffix += `\n--- stderr tail ---\n${stderrTail}`;
-      if (stdoutTail) suffix += `\n--- stdout tail ---\n${stdoutTail}`;
+        ` [pid=${details.pid ?? 'unknown'} elapsed=${details.elapsedMs}ms idle=${details.idleMs ?? 0}ms ` +
+        `stdout=${details.stdoutBytes}B stderr=${details.stderrBytes}B]`;
+      if (details.stderrTail) suffix += `\n--- stderr tail ---\n${details.stderrTail}`;
+      if (details.stdoutTail) suffix += `\n--- stdout tail ---\n${details.stdoutTail}`;
       return suffix;
     };
 
@@ -193,7 +260,8 @@ export function runCli(
         console.warn('[parallel-reader] failed to kill timed-out CLI process', e);
       }
       const idleMs = Date.now() - lastActivityAt;
-      fail(new Error(`CLI timed out (${timeoutMs}ms)${buildDiagSuffix(idleMs)}`));
+      const details = collectDetails('wall-timeout', idleMs, { signal: 'SIGKILL' });
+      fail(new CliProcessError(`CLI timed out (${timeoutMs}ms)${buildDiagSuffix(details)}`, details));
     }, timeoutMs);
 
     const armIdleTimer = () => {
@@ -206,7 +274,8 @@ export function runCli(
         } catch (e: unknown) {
           console.warn('[parallel-reader] failed to kill idle-timed-out CLI process', e);
         }
-        fail(new Error(`CLI idle timeout (${idleTimeoutMs}ms)${buildDiagSuffix(idleMs)}`));
+        const details = collectDetails('idle-timeout', idleMs, { signal: 'SIGKILL' });
+        fail(new CliProcessError(`CLI idle timeout (${idleTimeoutMs}ms)${buildDiagSuffix(details)}`, details));
       }, idleTimeoutMs);
     };
     armIdleTimer();
@@ -223,7 +292,7 @@ export function runCli(
     }
 
     if (!child.stdout || !child.stderr || !child.stdin) {
-      fail(new Error('CLI process streams are unavailable'));
+      fail(new CliProcessError('CLI process streams are unavailable', collectDetails('streams-unavailable', 0)));
       return;
     }
 
@@ -246,12 +315,20 @@ export function runCli(
       noteActivity();
     });
     child.on('error', (e) => {
-      fail(new Error(`CLI startup error: ${e.message}. Try setting an absolute CLI path.`));
+      const idleMs = Date.now() - lastActivityAt;
+      fail(
+        new CliProcessError(
+          `CLI startup error: ${e.message}. Try setting an absolute CLI path.`,
+          collectDetails('startup-error', idleMs),
+        ),
+      );
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       if (settled) return;
       if (code !== 0) {
-        return fail(new Error(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`));
+        const idleMs = Date.now() - lastActivityAt;
+        const details = collectDetails('exit-nonzero', idleMs, { exitCode: code, signal });
+        return fail(new CliProcessError(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`, details));
       }
       succeed({ stdout, stderr });
     });

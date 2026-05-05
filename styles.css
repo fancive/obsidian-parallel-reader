@@ -473,3 +473,60 @@
   color: var(--text-faint);
   font-weight: normal;
 }
+
+/* ---- Generation error UI: actionable notice + diagnostics modal ---- */
+
+.parallel-reader-error-notice .parallel-reader-error-notice-message {
+  white-space: pre-wrap;
+  margin-bottom: 0.6em;
+}
+
+.parallel-reader-error-notice .parallel-reader-error-notice-actions {
+  display: flex;
+  gap: 0.4em;
+  flex-wrap: wrap;
+}
+
+.parallel-reader-error-notice .parallel-reader-error-notice-button {
+  padding: 0.25em 0.7em;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.8em;
+  row-gap: 0.2em;
+  font-size: 0.85em;
+  margin: 0.6em 0;
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-row {
+  display: contents;
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-label {
+  color: var(--text-muted);
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-value {
+  font-family: var(--font-monospace);
+  word-break: break-all;
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-tail {
+  background: var(--background-secondary);
+  padding: 0.6em 0.8em;
+  border-radius: 4px;
+  font-size: 0.8em;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.parallel-reader-error-modal .parallel-reader-error-modal-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
