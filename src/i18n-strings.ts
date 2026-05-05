@@ -114,6 +114,10 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingCliPathPlaceholder: '例：/Users/you/bin/codex',
     settingCliTimeoutName: 'CLI 超时 (ms)',
     settingCliTimeoutDesc: 'CLI 调用的最大等待时间（毫秒），最小 1000，默认 120000',
+    settingCliIdleTimeoutName: 'CLI 静默超时 (ms)',
+    settingCliIdleTimeoutDesc: '若 CLI 持续 X 毫秒没有任何输出则视为卡死并终止；0 表示关闭，建议 30000–60000',
+    settingDebugLoggingName: '调试日志',
+    settingDebugLoggingDesc: '在浏览器控制台打印 CLI spawn / 完成 / 失败的诊断信息（含 PID、耗时、字节数）',
     sectionQuickSetup: '快速配置',
     sectionReadingOutput: '阅读输出',
     sectionAdvancedConnection: '高级连接设置',
@@ -300,6 +304,12 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingCliPathPlaceholder: 'Example: /Users/you/bin/codex',
     settingCliTimeoutName: 'CLI timeout (ms)',
     settingCliTimeoutDesc: 'Max wait time for CLI calls (ms). Minimum 1000, default 120000.',
+    settingCliIdleTimeoutName: 'CLI idle timeout (ms)',
+    settingCliIdleTimeoutDesc:
+      'Kill the CLI if it produces no output for this long. 0 disables. Recommended 30000–60000.',
+    settingDebugLoggingName: 'Debug logging',
+    settingDebugLoggingDesc:
+      'Log CLI spawn / completion / failure to the browser console (PID, elapsed time, byte counts).',
     sectionQuickSetup: 'Quick setup',
     sectionReadingOutput: 'Reading output',
     sectionAdvancedConnection: 'Advanced connection',

@@ -52,6 +52,34 @@ export function resolveCliPath(name: string, override: string): string {
   return name;
 }
 
+export interface RunCliOptions {
+  /** Idle timeout in ms — fail if no stdout/stderr data arrives for this long. 0 disables. */
+  idleTimeoutMs?: number;
+  /** When true, log spawn/settle lifecycle to console for diagnostics. */
+  debug?: boolean;
+}
+
+const DIAG_STDERR_TAIL_CHARS = 800;
+const DIAG_STDOUT_TAIL_CHARS = 200;
+
+function tail(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(-max);
+}
+
+const REDACT = '[REDACTED]';
+function redactSecrets(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\b(Bearer)\s+[\w.\-+/=]{6,}/gi, `$1 ${REDACT}`)
+    .replace(/\b(x-api-key|x-goog-api-key|api[_-]?key|authorization)\s*[:=]\s*[\w.\-+/=]{6,}/gi, `$1: ${REDACT}`)
+    .replace(/\b(sk-[A-Za-z0-9_\-]{12,})/g, REDACT);
+}
+
+function utf8ByteLength(text: string): number {
+  return Buffer.byteLength(text, 'utf8');
+}
+
 export function runCli(
   cmd: string,
   args: string[],
@@ -59,21 +87,54 @@ export function runCli(
   timeoutMs: number,
   job?: GenerationJob,
   spawnImpl: typeof spawn = spawn,
+  options: RunCliOptions = {},
 ): Promise<{ stdout: string; stderr: string }> {
+  const idleTimeoutMs = Math.max(0, Math.floor(options.idleTimeoutMs ?? 0));
+  const debug = !!options.debug;
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
     let settled = false;
     let timer: number | null = null;
+    let idleTimer: number | null = null;
+    const startedAt = Date.now();
+    let lastActivityAt = startedAt;
+    const clearTimers = () => {
+      if (timer) {
+        activeWindow.clearTimeout(timer);
+        timer = null;
+      }
+      if (idleTimer) {
+        activeWindow.clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
     const fail = (err: Error) => {
       if (settled) return;
       settled = true;
-      if (timer) activeWindow.clearTimeout(timer);
+      clearTimers();
+      if (debug) {
+        console.warn('[parallel-reader] cli failed', {
+          cmd,
+          pid: child?.pid,
+          elapsedMs: Date.now() - startedAt,
+          error: err.message,
+        });
+      }
       reject(err);
     };
     const succeed = (value: { stdout: string; stderr: string }) => {
       if (settled) return;
       settled = true;
-      if (timer) activeWindow.clearTimeout(timer);
+      clearTimers();
+      if (debug) {
+        console.info('[parallel-reader] cli ok', {
+          cmd,
+          pid: child?.pid,
+          elapsedMs: Date.now() - startedAt,
+          stdoutBytes: utf8ByteLength(value.stdout),
+          stderrBytes: utf8ByteLength(value.stderr),
+        });
+      }
       resolve(value);
     };
     try {
@@ -93,19 +154,63 @@ export function runCli(
         },
       });
     } catch (e: unknown) {
-      return reject(new Error(`Failed to start ${cmd}: ${e instanceof Error ? e.message : String(e)}`));
+      const message = `Failed to start ${cmd}: ${e instanceof Error ? e.message : String(e)}`;
+      if (debug) console.warn('[parallel-reader] cli spawn failed', { cmd, error: message });
+      return reject(new Error(message));
+    }
+
+    if (debug) {
+      console.info('[parallel-reader] cli spawn', {
+        cmd,
+        argCount: args.length,
+        pid: child?.pid,
+        timeoutMs,
+        idleTimeoutMs,
+      });
     }
 
     let stdout = '';
     let stderr = '';
+
+    const buildDiagSuffix = (idleMs: number): string => {
+      const elapsed = Date.now() - startedAt;
+      const stderrBytes = utf8ByteLength(stderr);
+      const stdoutBytes = utf8ByteLength(stdout);
+      const stderrTail = redactSecrets(tail(stderr, DIAG_STDERR_TAIL_CHARS));
+      const stdoutTail = redactSecrets(tail(stdout, DIAG_STDOUT_TAIL_CHARS));
+      let suffix =
+        ` [pid=${child?.pid ?? 'unknown'} elapsed=${elapsed}ms idle=${idleMs}ms ` +
+        `stdout=${stdoutBytes}B stderr=${stderrBytes}B]`;
+      if (stderrTail) suffix += `\n--- stderr tail ---\n${stderrTail}`;
+      if (stdoutTail) suffix += `\n--- stdout tail ---\n${stdoutTail}`;
+      return suffix;
+    };
+
     timer = activeWindow.setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch (e: unknown) {
         console.warn('[parallel-reader] failed to kill timed-out CLI process', e);
       }
-      fail(new Error(`CLI timed out (${timeoutMs}ms)`));
+      const idleMs = Date.now() - lastActivityAt;
+      fail(new Error(`CLI timed out (${timeoutMs}ms)${buildDiagSuffix(idleMs)}`));
     }, timeoutMs);
+
+    const armIdleTimer = () => {
+      if (settled || !idleTimeoutMs) return;
+      if (idleTimer) activeWindow.clearTimeout(idleTimer);
+      idleTimer = activeWindow.setTimeout(() => {
+        const idleMs = Date.now() - lastActivityAt;
+        try {
+          child.kill('SIGKILL');
+        } catch (e: unknown) {
+          console.warn('[parallel-reader] failed to kill idle-timed-out CLI process', e);
+        }
+        fail(new Error(`CLI idle timeout (${idleTimeoutMs}ms)${buildDiagSuffix(idleMs)}`));
+      }, idleTimeoutMs);
+    };
+    armIdleTimer();
+
     if (job) {
       job.onCancel(() => {
         try {
@@ -126,11 +231,19 @@ export function runCli(
     const childStderr = child.stderr;
     const childStdin = child.stdin;
 
+    const noteActivity = () => {
+      if (settled) return;
+      lastActivityAt = Date.now();
+      armIdleTimer();
+    };
+
     childStdout.on('data', (d) => {
       stdout += d.toString('utf8');
+      noteActivity();
     });
     childStderr.on('data', (d) => {
       stderr += d.toString('utf8');
+      noteActivity();
     });
     child.on('error', (e) => {
       fail(new Error(`CLI startup error: ${e.message}. Try setting an absolute CLI path.`));
@@ -179,7 +292,10 @@ export async function summarizeViaClaudeCode(
   ];
   const claudeModel = (settings.model || '').trim();
   if (claudeModel) args.push('--model', claudeModel);
-  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl);
+  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl, {
+    idleTimeoutMs: settings.cliIdleTimeoutMs,
+    debug: settings.debugLogging,
+  });
 
   // --output-format json produces a JSON array of event objects.
   // Find the "result" entry and extract its .result text field.
@@ -231,6 +347,9 @@ export async function summarizeViaCodex(
   // (claude-sonnet-4-6), which would break Codex if passed verbatim. Codex
   // uses its own config.toml profile for model selection.
   const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '-'];
-  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl);
+  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl, {
+    idleTimeoutMs: settings.cliIdleTimeoutMs,
+    debug: settings.debugLogging,
+  });
   return parseCardsJson(stdout, settings);
 }

@@ -51,12 +51,61 @@ function createFakeChild() {
 
 async function testRunCliEdgeCases() {
   const timeoutChild = createFakeChild();
+  timeoutChild.pid = 4242;
   await assert.rejects(
-    () => t.runCli('fake', [], '', 5, undefined, () => timeoutChild),
-    /CLI timed out \(5ms\)/,
-    'runCli rejects on timeout',
+    () => {
+      // emit some bytes before timeout so we can verify the diagnostic suffix carries them
+      setImmediate(() => {
+        timeoutChild.stderr.emit('data', Buffer.from('boom: connection reset'));
+      });
+      return t.runCli('fake', [], '', 20, undefined, () => timeoutChild);
+    },
+    (err) => {
+      assert.match(err.message, /CLI timed out \(20ms\)/, 'wall-clock timeout keeps original prefix');
+      assert.match(err.message, /pid=4242/, 'timeout error carries pid');
+      assert.match(err.message, /stderr=\d+B/, 'timeout error carries stderr byte count');
+      assert.match(err.message, /stderr tail/, 'timeout error includes stderr tail');
+      assert.match(err.message, /boom: connection reset/, 'timeout error preserves last stderr line');
+      return true;
+    },
+    'runCli rejects on timeout with rich diagnostics',
   );
   assert.strictEqual(timeoutChild.killedWith, 'SIGKILL', 'runCli kills timed out processes');
+
+  // Idle timeout fires when no data within idle window even if wall clock is generous.
+  const idleChild = createFakeChild();
+  idleChild.pid = 5252;
+  await assert.rejects(
+    () => t.runCli('fake', [], '', 60000, undefined, () => idleChild, { idleTimeoutMs: 15 }),
+    (err) => {
+      assert.match(err.message, /CLI idle timeout \(15ms\)/, 'idle timeout error message');
+      assert.match(err.message, /pid=5252/, 'idle timeout carries pid');
+      return true;
+    },
+    'runCli idle timeout fires when no output',
+  );
+  assert.strictEqual(idleChild.killedWith, 'SIGKILL', 'idle timeout kills the process');
+
+  // Idle timer must reset on data — child keeps emitting and only wall clock should fire.
+  const heartbeatChild = createFakeChild();
+  let cancelHeartbeat = false;
+  const heartbeatPromise = t.runCli('fake', [], '', 80, undefined, () => heartbeatChild, { idleTimeoutMs: 30 });
+  const beat = () => {
+    if (cancelHeartbeat) return;
+    heartbeatChild.stdout.emit('data', Buffer.from('.'));
+    setTimeout(beat, 10);
+  };
+  beat();
+  await assert.rejects(
+    () => heartbeatPromise,
+    (err) => {
+      cancelHeartbeat = true;
+      assert.match(err.message, /CLI timed out \(80ms\)/, 'wall-clock fires when idle resets keep happening');
+      assert.doesNotMatch(err.message, /CLI idle timeout/, 'idle timeout must not fire while data flows');
+      return true;
+    },
+    'runCli idle timer resets on incoming data',
+  );
 
   const cancelChild = createFakeChild();
   let cancelHandler = null;
@@ -85,6 +134,28 @@ async function testRunCliEdgeCases() {
     () => t.runCli('fake', [], '', 100, undefined, () => ({ stdout: null, stderr: null, stdin: null })),
     /CLI process streams are unavailable/,
     'runCli reports unavailable stdio streams',
+  );
+
+  // Diagnostic suffix must redact secrets that show up in stderr (Bearer tokens, sk- keys, etc.)
+  const secretChild = createFakeChild();
+  secretChild.pid = 6363;
+  await assert.rejects(
+    () => {
+      setImmediate(() => {
+        secretChild.stderr.emit(
+          'data',
+          Buffer.from('Authorization: Bearer sk-ant-supersecrettoken-xyz123 failed handshake'),
+        );
+      });
+      return t.runCli('fake', [], '', 20, undefined, () => secretChild);
+    },
+    (err) => {
+      assert.doesNotMatch(err.message, /sk-ant-supersecrettoken-xyz123/, 'token must not appear verbatim');
+      assert.match(err.message, /\[REDACTED\]/, 'redaction marker present');
+      assert.match(err.message, /failed handshake/, 'non-secret context preserved');
+      return true;
+    },
+    'runCli timeout suffix redacts secrets',
   );
 }
 

@@ -52,6 +52,7 @@ export {
   getApiBaseUrl,
   modelForApi,
   normalizeCardCount,
+  normalizeCliIdleTimeoutMs,
   normalizeCliTimeoutMs,
   normalizeSettings,
   normalizeStreamingTimeoutMs,
