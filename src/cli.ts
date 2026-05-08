@@ -163,7 +163,7 @@ export function runCli(
       settled = true;
       clearTimers();
       if (debug) {
-        console.info('[parallel-reader] cli ok', {
+        console.debug('[parallel-reader] cli ok', {
           cmd,
           pid: child?.pid,
           elapsedMs: Date.now() - startedAt,
@@ -212,7 +212,7 @@ export function runCli(
     }
 
     if (debug) {
-      console.info('[parallel-reader] cli spawn', {
+      console.debug('[parallel-reader] cli spawn', {
         cmd,
         argCount: args.length,
         pid: child?.pid,

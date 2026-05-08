@@ -21,14 +21,6 @@ export default defineConfig([
     },
   },
   {
-    // streaming.ts legitimately uses bare `fetch` because Obsidian's `requestUrl`
-    // does not support streaming responses (it's a one-shot wrapper).
-    files: ["src/streaming.ts"],
-    rules: {
-      "no-restricted-globals": "off",
-    },
-  },
-  {
     ignores: [
       "node_modules/",
       "main.js",

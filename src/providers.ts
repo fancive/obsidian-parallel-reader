@@ -25,7 +25,7 @@ import {
   getApiPreset,
   modelForApi,
 } from './settings';
-import { deltaExtractorForFormat, type StreamProgress, streamingFetch } from './streaming';
+import { deltaExtractorForFormat, type StreamProgress, streamingRequestUrl } from './streaming';
 import type { PluginSettings, RawCard } from './types';
 
 export {
@@ -193,7 +193,7 @@ async function summarizeViaGoogleGenerativeAi(
   return parseCardsJson(textFromGoogleGenerativeAiResponse(json), settings);
 }
 
-// Obsidian's requestUrl is not directly compatible with fetch — we accept it as a typed callback
+// Accept Obsidian's requestUrl as a typed callback so tests can inject the transport.
 export async function summarizeViaApi(
   requestUrlImpl: RequestUrlFunction,
   system: string,
@@ -220,6 +220,7 @@ export function supportsStreaming(settings: PluginSettings): boolean {
 }
 
 async function streamSummarizeViaOpenAiChat(
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -231,11 +232,12 @@ async function streamSummarizeViaOpenAiChat(
   const body = buildOpenAiChatBody(system, user, settings, { structured: false });
   body.stream = true;
   const extractor = requiredDeltaExtractor('openai-chat');
-  const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
+  const text = await streamingRequestUrl(requestUrlImpl, url, headers, body, extractor, onProgress, signal, settings);
   return parseCardsJson(text.trim(), settings);
 }
 
 async function streamSummarizeViaAnthropicMessages(
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -247,11 +249,12 @@ async function streamSummarizeViaAnthropicMessages(
   const body = buildAnthropicMessagesBody(system, user, settings, { structured: false });
   body.stream = true;
   const extractor = requiredDeltaExtractor('anthropic-messages');
-  const text = await streamingFetch(url, headers, body, extractor, onProgress, signal, settings);
+  const text = await streamingRequestUrl(requestUrlImpl, url, headers, body, extractor, onProgress, signal, settings);
   return parseCardsJson(text.trim(), settings);
 }
 
 export async function summarizeViaApiStreaming(
+  requestUrlImpl: RequestUrlFunction,
   system: string,
   user: string,
   settings: PluginSettings,
@@ -261,15 +264,15 @@ export async function summarizeViaApiStreaming(
   const format = getApiFormat(settings);
   switch (format) {
     case 'openai-chat':
-      return streamSummarizeViaOpenAiChat(system, user, settings, onProgress, signal);
+      return streamSummarizeViaOpenAiChat(requestUrlImpl, system, user, settings, onProgress, signal);
     case 'anthropic-messages':
-      return streamSummarizeViaAnthropicMessages(system, user, settings, onProgress, signal);
+      return streamSummarizeViaAnthropicMessages(requestUrlImpl, system, user, settings, onProgress, signal);
     default:
       throw new Error(`Streaming not supported for format: ${format}`);
   }
 }
 
-// Obsidian's requestUrl is not directly compatible with fetch — we accept it as a typed callback
+// Accept Obsidian's requestUrl as a typed callback so tests can inject the transport.
 export async function testApiBackend(requestUrlImpl: RequestUrlFunction, settings: PluginSettings): Promise<string> {
   await summarizeViaApi(requestUrlImpl, '只输出 JSON：{"cards":[]}', '连通性测试：请原样输出 {"cards":[]}', settings);
   const format = getApiFormat(settings);

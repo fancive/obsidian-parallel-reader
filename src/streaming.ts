@@ -1,6 +1,7 @@
 'use strict';
 
 import { translate } from './i18n';
+import type { RequestUrlFunction } from './provider-request';
 import type { PluginSettings } from './types';
 
 /**
@@ -64,7 +65,7 @@ export function parseSseBuffer(buffer: string, extractDelta: DeltaExtractor): { 
       const json = JSON.parse(data) as Record<string, unknown>;
       const delta = extractDelta(json);
       if (delta) deltas.push(delta);
-    } catch (_) {
+    } catch {
       // skip non-JSON SSE lines
     }
   }
@@ -76,68 +77,52 @@ export interface StreamProgress {
   done: boolean;
 }
 
-async function doStreamingFetch(
+async function doStreamingRequestUrl(
+  requestUrlImpl: RequestUrlFunction,
   url: string,
   headers: Record<string, string>,
   body: unknown,
   extractDelta: DeltaExtractor,
   onProgress: ((progress: StreamProgress) => void) | undefined,
-  signal: AbortSignal,
   settings: PluginSettings | null | undefined,
 ): Promise<string> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
+  let response: Awaited<ReturnType<RequestUrlFunction>>;
+  try {
+    response = await requestUrlImpl({
+      url,
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      throw: false,
+    });
+  } catch (e: unknown) {
     throw new Error(
-      translate(settings || null, 'errorProviderApiStatus', {
+      translate(settings || null, 'errorProviderRequestFailed', {
         label: 'Streaming',
-        status: response.status,
-        excerpt: text.slice(0, 500),
+        error: e instanceof Error ? e.message : String(e),
       }),
     );
   }
 
-  if (!response.body) {
-    throw new Error('Response has no body for streaming');
+  if (response.status >= 400) {
+    throw new Error(
+      translate(settings || null, 'errorProviderApiStatus', {
+        label: 'Streaming',
+        status: response.status,
+        excerpt: (response.text || '').slice(0, 500),
+      }),
+    );
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
   let accumulated = '';
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const result = parseSseBuffer(buffer, extractDelta);
-      buffer = result.rest;
-
-      for (const delta of result.deltas) {
-        accumulated += delta;
-      }
-      if (result.deltas.length > 0) {
-        onProgress?.({ accumulated, done: false });
-      }
-    }
-  } finally {
-    reader.releaseLock();
+  const text = response.text || '';
+  const buffer = text.endsWith('\n\n') ? text : `${text}\n\n`;
+  const result = parseSseBuffer(buffer, extractDelta);
+  for (const delta of result.deltas) {
+    accumulated += delta;
   }
-
-  // Flush any unterminated final SSE event (some providers close the stream
-  // without a trailing \n\n, leaving the last delta in `buffer`).
-  if (buffer.length > 0) {
-    const tailBuffer = buffer.endsWith('\n\n') ? buffer : `${buffer}\n\n`;
-    const tail = parseSseBuffer(tailBuffer, extractDelta);
-    for (const delta of tail.deltas) accumulated += delta;
+  if (result.deltas.length > 0) {
+    onProgress?.({ accumulated, done: false });
   }
 
   onProgress?.({ accumulated, done: true });
@@ -145,11 +130,12 @@ async function doStreamingFetch(
 }
 
 /**
- * Perform a streaming fetch with SSE parsing and configurable timeout.
- * Uses the native Fetch API (available in Electron/Obsidian).
- * Returns the full accumulated text when done.
+ * Perform an Obsidian requestUrl call that asks providers for SSE output and parses
+ * the complete response text. requestUrl is one-shot, so progress arrives after
+ * the HTTP request completes rather than per network chunk.
  */
-export async function streamingFetch(
+export async function streamingRequestUrl(
+  requestUrlImpl: RequestUrlFunction,
   url: string,
   headers: Record<string, string>,
   body: unknown,
@@ -158,33 +144,38 @@ export async function streamingFetch(
   signal?: AbortSignal,
   settings?: PluginSettings | null,
 ): Promise<string> {
-  if (typeof fetch !== 'function') {
-    throw new Error('Streaming requires fetch API');
-  }
-
   const timeoutMs = settings?.streamingTimeoutMs ?? 120000;
-  const timeoutController = new AbortController();
   let abortListener: (() => void) | null = null;
+  let abortPromise: Promise<never> | null = null;
 
   if (signal) {
-    abortListener = () => timeoutController.abort();
-    signal.addEventListener('abort', abortListener, { once: true });
-    if (signal.aborted) timeoutController.abort();
+    if (signal.aborted) throw new Error('Streaming request aborted');
+    abortPromise = new Promise<never>((_, reject) => {
+      abortListener = () => reject(new Error('Streaming request aborted'));
+      signal.addEventListener('abort', abortListener, { once: true });
+    });
   }
 
   let timeoutId: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = activeWindow.setTimeout(() => {
-      timeoutController.abort();
       reject(new Error(`Streaming timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   });
 
   try {
-    return await Promise.race([
-      doStreamingFetch(url, headers, body, extractDelta, onProgress, timeoutController.signal, settings),
-      timeoutPromise,
-    ]);
+    const requestPromise = doStreamingRequestUrl(
+      requestUrlImpl,
+      url,
+      headers,
+      body,
+      extractDelta,
+      onProgress,
+      settings,
+    );
+    return await Promise.race(
+      abortPromise ? [requestPromise, timeoutPromise, abortPromise] : [requestPromise, timeoutPromise],
+    );
   } finally {
     if (timeoutId !== null) activeWindow.clearTimeout(timeoutId);
     if (signal && abortListener) signal.removeEventListener('abort', abortListener);

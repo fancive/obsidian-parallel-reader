@@ -30,7 +30,14 @@ export async function summarizeDocument(
       if (useStreaming) {
         const abortController = new AbortController();
         job.onCancel(() => abortController.abort());
-        cards = await summarizeViaApiStreaming(system, user, settings, onStreamProgress, abortController.signal);
+        cards = await summarizeViaApiStreaming(
+          requestUrl,
+          system,
+          user,
+          settings,
+          onStreamProgress,
+          abortController.signal,
+        );
       } else {
         cards = await summarizeViaApi(requestUrl, system, user, settings);
       }

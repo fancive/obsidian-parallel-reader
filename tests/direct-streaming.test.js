@@ -74,7 +74,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const empty = streaming.parseSseBuffer('', openAiExtractor);
     assert.deepStrictEqual(empty.deltas, []);
 
-    // ── streamingFetch ──
+    // ── streamingRequestUrl ──
     function trackedSignal() {
       const controller = new AbortController();
       const signal = controller.signal;
@@ -92,41 +92,42 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
       return { controller, signal, activeListeners: () => activeListeners };
     }
 
-    function streamingBody(text) {
-      const encoder = new TextEncoder();
-      return new ReadableStream({
-        start(c) {
-          c.enqueue(encoder.encode(text));
-          c.close();
-        },
-      });
-    }
-
-    const originalFetch = globalThis.fetch;
-    try {
+    {
       const success = trackedSignal();
-      globalThis.fetch = async () => ({
-        ok: true,
-        status: 200,
-        body: streamingBody('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
-        text: async () => '',
-      });
-      await streaming.streamingFetch(
+      const progress = [];
+      const text = await streaming.streamingRequestUrl(
+        async (params) => {
+          assert.strictEqual(params.method, 'POST');
+          assert.strictEqual(params.url, 'https://example.test');
+          assert.strictEqual(params.body, '{"stream":true}');
+          return {
+            status: 200,
+            json: null,
+            text: 'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+          };
+        },
         'https://example.test',
         {},
-        {},
+        { stream: true },
         streaming.deltaExtractorForFormat('openai-chat'),
-        undefined,
+        (p) => progress.push(p),
         success.signal,
         { streamingTimeoutMs: 1000 },
       );
+      assert.strictEqual(text, 'ok');
+      assert.deepStrictEqual(progress, [
+        { accumulated: 'ok', done: false },
+        { accumulated: 'ok', done: true },
+      ]);
       assert.strictEqual(success.activeListeners(), 0, 'cleanup after success');
+    }
 
+    {
       const httpError = trackedSignal();
-      globalThis.fetch = async () => ({ ok: false, status: 500, body: null, text: async () => 'bad' });
       await assert.rejects(
         () =>
-          streaming.streamingFetch(
+          streaming.streamingRequestUrl(
+            async () => ({ status: 500, json: null, text: 'bad' }),
             'https://example.test',
             {},
             {},
@@ -138,12 +139,14 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
         /HTTP 500|API returned HTTP 500/,
       );
       assert.strictEqual(httpError.activeListeners(), 0, 'cleanup after HTTP error');
+    }
 
+    {
       const timeout = trackedSignal();
-      globalThis.fetch = async () => new Promise(() => {});
       await assert.rejects(
         () =>
-          streaming.streamingFetch(
+          streaming.streamingRequestUrl(
+            async () => new Promise(() => {}),
             'https://example.test',
             {},
             {},
@@ -155,16 +158,19 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
         /Streaming timed out/,
       );
       assert.strictEqual(timeout.activeListeners(), 0, 'cleanup after timeout');
+    }
 
+    {
       const preAborted = trackedSignal();
       preAborted.controller.abort();
-      globalThis.fetch = async (_url, opts) => {
-        if (opts?.signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
-        throw new Error('should not reach');
-      };
+      let called = false;
       await assert.rejects(
         () =>
-          streaming.streamingFetch(
+          streaming.streamingRequestUrl(
+            async () => {
+              called = true;
+              return { status: 200, json: null, text: '' };
+            },
             'https://example.test',
             {},
             {},
@@ -175,41 +181,52 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
           ),
         /abort/i,
       );
+      assert.strictEqual(called, false, 'pre-aborted request is not started');
       assert.strictEqual(preAborted.activeListeners(), 0, 'cleanup on pre-aborted');
+    }
 
-      const abortDuringRead = trackedSignal();
-      globalThis.fetch = async (_url, opts) => {
-        const fetchSignal = opts?.signal;
-        const stream = new ReadableStream({
-          async pull(ctrl) {
-            ctrl.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"first"}}]}\n\n'));
-            abortDuringRead.controller.abort();
-            await new Promise((r) => setTimeout(r, 5));
-            if (fetchSignal?.aborted) {
-              ctrl.error(new DOMException('The operation was aborted.', 'AbortError'));
-              return;
-            }
-            ctrl.close();
-          },
-        });
-        return { ok: true, status: 200, body: stream, text: async () => '' };
-      };
+    {
+      const abortDuringRequest = trackedSignal();
       await assert.rejects(
         () =>
-          streaming.streamingFetch(
+          streaming.streamingRequestUrl(
+            async () =>
+              new Promise((resolve) => {
+                setTimeout(() => abortDuringRequest.controller.abort(), 1);
+                setTimeout(() => resolve({ status: 200, json: null, text: '' }), 20);
+              }),
             'https://example.test',
             {},
             {},
             streaming.deltaExtractorForFormat('openai-chat'),
             undefined,
-            abortDuringRead.signal,
+            abortDuringRequest.signal,
             { streamingTimeoutMs: 5000 },
           ),
         /abort/i,
       );
-      assert.strictEqual(abortDuringRead.activeListeners(), 0, 'cleanup after mid-read abort');
-    } finally {
-      globalThis.fetch = originalFetch;
+      assert.strictEqual(abortDuringRequest.activeListeners(), 0, 'cleanup after mid-request abort');
+    }
+
+    {
+      const requestFailure = trackedSignal();
+      await assert.rejects(
+        () =>
+          streaming.streamingRequestUrl(
+            async () => {
+              throw new Error('network down');
+            },
+            'https://example.test',
+            {},
+            {},
+            streaming.deltaExtractorForFormat('openai-chat'),
+            undefined,
+            requestFailure.signal,
+            { streamingTimeoutMs: 1000 },
+          ),
+        /network down/,
+      );
+      assert.strictEqual(requestFailure.activeListeners(), 0, 'cleanup after transport failure');
     }
 
     console.log('direct streaming tests passed');

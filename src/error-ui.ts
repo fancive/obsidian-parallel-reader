@@ -21,7 +21,7 @@ interface ActionableNoticeAction {
 
 function showActionableNotice(message: string, actions: ActionableNoticeAction[], durationMs = 12000): Notice {
   const notice = new Notice('', durationMs);
-  const root = notice.noticeEl;
+  const root = notice.messageEl;
   root.addClass('parallel-reader-error-notice');
   root.createDiv({ cls: 'parallel-reader-error-notice-message', text: message });
   if (actions.length > 0) {
@@ -77,7 +77,7 @@ class TimeoutDiagnosticsModal extends Modal {
     const reasonKey = this.details.reason === 'idle-timeout' ? 'errorModalReasonIdle' : 'errorModalReasonWall';
     contentEl.createEl('p', { text: translate(this.settings, reasonKey) });
 
-    const grid = contentEl.createEl('div', { cls: 'parallel-reader-error-modal-grid' });
+    const grid = contentEl.createDiv({ cls: 'parallel-reader-error-modal-grid' });
     const addRow = (label: string, value: string) => {
       const row = grid.createDiv({ cls: 'parallel-reader-error-modal-row' });
       row.createSpan({ cls: 'parallel-reader-error-modal-label', text: label });
