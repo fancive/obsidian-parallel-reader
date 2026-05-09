@@ -53,7 +53,7 @@ export class CacheManager {
     try {
       if (typeof this.adapter.exists === 'function' && (await this.adapter.exists(dir))) return;
       await this.adapter.mkdir(dir);
-    } catch (_) {
+    } catch {
       /* ignore race */
     }
   }

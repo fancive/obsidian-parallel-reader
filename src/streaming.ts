@@ -150,18 +150,22 @@ export async function streamingRequestUrl(
 
   if (signal) {
     if (signal.aborted) throw new Error('Streaming request aborted');
-    abortPromise = new Promise<never>((_, reject) => {
-      abortListener = () => reject(new Error('Streaming request aborted'));
-      signal.addEventListener('abort', abortListener, { once: true });
-    });
+    abortPromise = (async () => {
+      await new Promise<void>((resolve) => {
+        abortListener = resolve;
+        signal.addEventListener('abort', abortListener, { once: true });
+      });
+      throw new Error('Streaming request aborted');
+    })();
   }
 
   let timeoutId: number | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = activeWindow.setTimeout(() => {
-      reject(new Error(`Streaming timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
+  const timeoutPromise = (async () => {
+    await new Promise<void>((resolve) => {
+      timeoutId = activeWindow.setTimeout(resolve, timeoutMs);
+    });
+    throw new Error(`Streaming timed out after ${timeoutMs}ms`);
+  })();
 
   try {
     const requestPromise = doStreamingRequestUrl(

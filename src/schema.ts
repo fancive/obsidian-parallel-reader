@@ -48,7 +48,7 @@ export function extractJson(text: string): string {
   try {
     JSON.parse(raw);
     return raw;
-  } catch (_) {
+  } catch {
     /* continue */
   }
 
@@ -58,7 +58,7 @@ export function extractJson(text: string): string {
     try {
       JSON.parse(fenced);
       return fenced;
-    } catch (_) {
+    } catch {
       /* continue */
     }
   }
@@ -69,7 +69,7 @@ export function extractJson(text: string): string {
     try {
       JSON.parse(c);
       return c;
-    } catch (_) {
+    } catch {
       /* skip */
     }
   }
@@ -94,7 +94,7 @@ export function repairTruncatedCardsJson(text: string): string | null {
     try {
       JSON.parse(c);
       validCards.push(c);
-    } catch (_) {
+    } catch {
       /* skip malformed card */
     }
   }
@@ -107,7 +107,7 @@ export function parseCardsJson(text: string, settings?: PluginSettings | null): 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonText);
-  } catch (_e) {
+  } catch {
     // Attempt to salvage complete cards from truncated output
     const repaired = repairTruncatedCardsJson(text);
     if (repaired) {
@@ -119,7 +119,7 @@ export function parseCardsJson(text: string, settings?: PluginSettings | null): 
           'complete cards. Consider increasing max tokens.',
         );
         return normalizeCardsPayload(parsed, settings);
-      } catch (_) {
+      } catch {
         /* repair failed, fall through to error */
       }
     }

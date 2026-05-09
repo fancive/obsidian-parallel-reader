@@ -756,7 +756,7 @@ class ParallelReaderPlugin extends Plugin {
     try {
       const pos = cm.posAtCoords({ x: rect.left + 20, y: topY });
       if (pos != null) topLine = cm.state.doc.lineAt(pos).number - 1;
-    } catch (_: unknown) {
+    } catch {
       /* posAtCoords/lineAt can throw during editor state transitions — safe to ignore */
       return;
     }
@@ -801,7 +801,7 @@ class ParallelReaderPlugin extends Plugin {
       try {
         mdView.editor.setCursor({ line, ch: 0 });
         mdView.editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
-      } catch (_: unknown) {
+      } catch {
         /* setCursor/scrollIntoView can throw during view transitions — safe to ignore */
       }
     }

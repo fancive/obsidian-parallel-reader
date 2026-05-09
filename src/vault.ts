@@ -14,7 +14,11 @@ export function folderPathsForTarget(folderPath: string): string[] {
   const normalized = normalizeVaultPath(folderPath);
   if (!normalized) return [];
   const parts = normalized.split('/');
-  return parts.map((_, idx) => parts.slice(0, idx + 1).join('/'));
+  const folders: string[] = [];
+  for (let idx = 0; idx < parts.length; idx++) {
+    folders.push(parts.slice(0, idx + 1).join('/'));
+  }
+  return folders;
 }
 
 export async function ensureVaultFolder(app: App, folderPath: string) {

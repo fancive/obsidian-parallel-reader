@@ -44,7 +44,7 @@ export function resolveCliPath(name: string, override: string): string {
       const p = path.join(dir, name + ext);
       try {
         if (fs.existsSync(p)) return p;
-      } catch (_) {
+      } catch {
         // Ignore unreadable candidate paths and keep searching.
       }
     }
