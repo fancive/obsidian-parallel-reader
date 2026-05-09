@@ -11,6 +11,7 @@ export const MAX_DOC_CHARS = 100000;
 export const PROMPT_VERSION = 2;
 export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
+export const DEFAULT_CLI_TIMEOUT_MS = 300000;
 export const MIN_STREAMING_TIMEOUT_MS = 1000;
 export const MIN_CLI_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
@@ -44,7 +45,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   customSystemPrompt: '',
   model: 'claude-sonnet-4-6',
   exportFolder: 'Reading/Articles',
-  cliTimeoutMs: 120000,
+  cliTimeoutMs: DEFAULT_CLI_TIMEOUT_MS,
   streaming: true,
   streamingTimeoutMs: 120000,
 };

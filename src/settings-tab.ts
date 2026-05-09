@@ -1,8 +1,7 @@
 'use strict';
 
-import { type App, Notice, type Plugin, PluginSettingTab, requestUrl, Setting } from 'obsidian';
-import { resolveCliPath, runCli } from './cli';
-import { testApiBackend } from './providers';
+import { type App, Notice, type Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { testBackend } from './backend-test';
 import {
   API_AUTH_TYPES,
   API_FORMATS,
@@ -19,20 +18,6 @@ import {
   UI_LANGUAGES,
 } from './settings';
 import type { PluginHost, PluginSettings } from './types';
-
-async function testBackend(settings: PluginSettings) {
-  if (settings.backend === 'claude-code') {
-    const cmd = resolveCliPath('claude', settings.cliPath);
-    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
-    return `claude @ ${cmd}\n${stdout.trim()}`;
-  }
-  if (settings.backend === 'codex') {
-    const cmd = resolveCliPath('codex', settings.cliPath);
-    const { stdout } = await runCli(cmd, ['--version'], '', 10000);
-    return `codex @ ${cmd}\n${stdout.trim()}`;
-  }
-  return testApiBackend(requestUrl, settings);
-}
 
 /** Detect whether the user has departed from preset defaults. If so we keep the
  * Advanced connection section open so they can find what they configured. */
@@ -224,11 +209,16 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
       .setDesc(isCliBacked ? this.tr('settingTestBackendDescCli') : this.tr('settingTestBackendDescApi'))
       .addButton((b) =>
         b.setButtonText(this.tr('settingTestBackendButton')).onClick(async () => {
+          b.setDisabled(true);
+          b.setButtonText(this.tr('settingTestBackendButtonRunning'));
           try {
             const result = await testBackend(this.plugin.settings);
             new Notice(`✓ ${result.slice(0, 180)}`, 8000);
           } catch (e: unknown) {
             new Notice(this.tr('backendTestFailed', { error: e instanceof Error ? e.message : String(e) }), 10000);
+          } finally {
+            b.setButtonText(this.tr('settingTestBackendButton'));
+            b.setDisabled(false);
           }
         }),
       );

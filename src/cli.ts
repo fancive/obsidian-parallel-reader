@@ -89,6 +89,7 @@ export class CliProcessError extends Error {
 
 const DIAG_STDERR_TAIL_CHARS = 1500;
 const DIAG_STDOUT_TAIL_CHARS = 1500;
+const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 
 function tail(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -106,6 +107,38 @@ function redactSecrets(text: string): string {
 
 function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, 'utf8');
+}
+
+function claudeResultText(stdout: string): string {
+  const events: Array<Record<string, unknown>> = [];
+  try {
+    const parsed = JSON.parse(stdout);
+    if (Array.isArray(parsed)) {
+      events.push(...(parsed.filter((e) => e && typeof e === 'object') as Array<Record<string, unknown>>));
+    } else if (parsed && typeof parsed === 'object') {
+      events.push(parsed as Record<string, unknown>);
+    }
+  } catch {
+    for (const line of stdout.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') events.push(parsed as Record<string, unknown>);
+      } catch {
+        // Ignore non-JSON progress lines and keep scanning for result events.
+      }
+    }
+  }
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type === 'result' && typeof event.result === 'string') return event.result;
+  }
+  const single = events[0];
+  if (single && typeof single.result === 'string') return single.result;
+  if (single && typeof single.content === 'string') return single.content;
+  return '';
 }
 
 export function runCli(
@@ -308,7 +341,7 @@ export function runCli(
       try {
         childStdin.write(stdinText);
         childStdin.end();
-      } catch (_e) {
+      } catch {
         // Child may have exited before stdin was written.
       }
     } else {
@@ -332,38 +365,32 @@ export async function summarizeViaClaudeCode(
   const args = [
     '-p',
     '--output-format',
-    'json',
+    'stream-json',
     '--append-system-prompt',
     system,
+    '--tools',
+    '',
     '--disallowed-tools',
-    'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task',
+    'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task,LSP,NotebookEdit',
+    '--no-session-persistence',
+    '--disable-slash-commands',
+    '--no-chrome',
+    '--strict-mcp-config',
+    '--mcp-config',
+    EMPTY_MCP_CONFIG,
   ];
   const claudeModel = (settings.model || '').trim();
   if (claudeModel) args.push('--model', claudeModel);
   const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl);
 
-  // --output-format json produces a JSON array of event objects.
-  // Find the "result" entry and extract its .result text field.
-  let resultText = '';
-  try {
-    const events = JSON.parse(stdout);
-    if (Array.isArray(events)) {
-      const resultEvent = events.find((e: Record<string, unknown>) => e.type === 'result');
-      if (resultEvent && typeof resultEvent.result === 'string') {
-        resultText = resultEvent.result;
-      }
-    } else if (events && typeof events === 'object') {
-      // Older CLI versions return a single object
-      resultText = events.result || events.content || '';
-    }
-  } catch (_) {
+  const resultText = claudeResultText(stdout);
+  if (!resultText && stdout.trim()) {
     console.warn(
       '[parallel-reader] claude CLI returned unexpected output. length=',
       stdout.length,
       'head=',
       stdout.slice(0, 80),
     );
-    throw new Error(translate(settings, 'errorClaudeCliBadJson', { length: String(stdout.length) }));
   }
 
   if (!resultText) {

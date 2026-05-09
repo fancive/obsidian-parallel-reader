@@ -103,11 +103,11 @@ assert.strictEqual(t.normalizeCardCount('15', 5), 15, 'numeric string accepted')
 
 // normalizeCliTimeoutMs (mirrors normalizeStreamingTimeoutMs)
 assert.strictEqual(t.normalizeCliTimeoutMs('60000'), 60000, 'cli timeout accepts numeric strings');
-assert.strictEqual(t.normalizeCliTimeoutMs(999), 120000, 'cli timeout below minimum falls back to default');
-assert.strictEqual(t.normalizeCliTimeoutMs('bad'), 120000, 'cli timeout rejects non-numeric values');
+assert.strictEqual(t.normalizeCliTimeoutMs(999), 300000, 'cli timeout below minimum falls back to default');
+assert.strictEqual(t.normalizeCliTimeoutMs('bad'), 300000, 'cli timeout rejects non-numeric values');
 assert.strictEqual(
   t.normalizeSettings({ ...baseSettings, cliTimeoutMs: 500 }).cliTimeoutMs,
-  120000,
+  300000,
   'normalizeSettings protects invalid cli timeout values',
 );
 

@@ -38,6 +38,7 @@
       "description": "Tests for provider protocols, CLI command contracts, exported test surfaces, and architecture invariants.",
       "files": [
         "architecture.test.js",
+        "backend-test.test.js",
         "cli.test.js",
         "direct-providers.test.js",
         "providers.test.js",

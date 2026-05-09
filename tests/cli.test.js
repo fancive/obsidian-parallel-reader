@@ -258,11 +258,53 @@ async function testClaudeCodeArgs() {
   // Verify key expected flags are present
   assert.ok(capturedArgs.includes('-p'), 'should include -p (print mode)');
   assert.ok(capturedArgs.includes('--output-format'), 'should include --output-format');
+  assert.strictEqual(
+    capturedArgs[capturedArgs.indexOf('--output-format') + 1],
+    'stream-json',
+    'claude output should stream JSON events',
+  );
   assert.ok(capturedArgs.includes('--append-system-prompt'), 'should include --append-system-prompt');
+  assert.ok(capturedArgs.includes('--tools'), 'should explicitly restrict Claude tools');
+  assert.strictEqual(capturedArgs[capturedArgs.indexOf('--tools') + 1], '', 'Claude tools should be disabled');
   assert.ok(capturedArgs.includes('--disallowed-tools'), 'should include --disallowed-tools');
+  assert.ok(capturedArgs.includes('--no-session-persistence'), 'should avoid session persistence for plugin calls');
+  assert.ok(capturedArgs.includes('--strict-mcp-config'), 'should ignore user/project MCP servers');
 
   // Verify --max-tokens is NOT present (it's not a valid claude CLI flag)
   assert.ok(!capturedArgs.includes('--max-tokens'), 'should NOT include --max-tokens');
+}
+
+async function testClaudeCodeStreamJsonOutput() {
+  const streamJson = [
+    JSON.stringify({ type: 'system', subtype: 'init', tools: ['LSP'] }),
+    JSON.stringify({
+      type: 'result',
+      result: '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    }),
+    '',
+  ].join('\n');
+  const fakeSpawn = () => {
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(streamJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  const settings = {
+    backend: 'claude-code',
+    cliPath: '/usr/bin/claude',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 5,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+
+  const cards = await t.summarizeViaClaudeCode('system prompt', 'user content', settings, undefined, fakeSpawn);
+  assert.strictEqual(cards.length, 1, 'claude stream-json result event is parsed');
+  assert.strictEqual(cards[0].title, 'T', 'parsed card title preserved');
 }
 
 // ── summarizeViaCodex args validation ──
@@ -519,6 +561,7 @@ assert.strictEqual(t.classifyGenerationError('string error'), 'unknown', 'string
 (async () => {
   await testRunCliEdgeCases();
   await testClaudeCodeArgs();
+  await testClaudeCodeStreamJsonOutput();
   await testClaudeCodeArgsWithModel();
   await testCodexArgs();
   await testCodexArgsIgnoresClaudeDefaultModel();

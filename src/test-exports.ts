@@ -2,6 +2,7 @@
 
 export { default as ParallelReaderPlugin } from '../main';
 export { findLineForAnchor } from './anchor';
+export { testBackend } from './backend-test';
 export {
   batchProgressVars,
   createBatchRunState,
