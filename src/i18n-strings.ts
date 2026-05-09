@@ -93,10 +93,15 @@ export const STRINGS: Record<string, Record<string, string>> = {
     errorActionCopyDetails: '复制详情',
     errorActionCopyRaw: '复制原始输出',
     errorModalTimeoutTitle: 'CLI 超时诊断',
+    errorModalExitTitle: 'CLI 异常退出诊断',
+    errorModalStartupTitle: 'CLI 启动失败诊断',
     errorModalReasonWall:
       'CLI 在墙钟超时之前没有完成。建议先看 stderr 是否有线索，再考虑增大 CLI 超时或换用 API 后端。',
-    errorModalReasonIdle:
-      'CLI 在静默超时窗口内没有任何输出，已被终止。常见原因：网络挂死、模型在思考但 CLI 不流式输出。',
+    errorModalReasonExit:
+      'CLI 进程返回了非零退出码。下方是 stdout 和 stderr 的末尾（已脱敏）—— claude CLI 在 --output-format json 模式下会把错误事件写到 stdout，请优先看那里。',
+    errorModalReasonStartup:
+      'CLI 进程未能启动。常见原因：路径错误、二进制不可执行、Obsidian GUI 没继承 shell PATH。请在设置里填绝对路径再试。',
+    errorModalFieldExit: '退出码 {code}（信号 {signal}）',
     errorModalFieldCmd: '命令',
     errorModalFieldPid: '进程 PID',
     errorModalFieldElapsed: '已耗时',
@@ -139,10 +144,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingCliPathPlaceholder: '例：/Users/you/bin/codex',
     settingCliTimeoutName: 'CLI 超时 (ms)',
     settingCliTimeoutDesc: 'CLI 调用的最大等待时间（毫秒），最小 1000，默认 120000',
-    settingCliIdleTimeoutName: 'CLI 静默超时 (ms)',
-    settingCliIdleTimeoutDesc: '若 CLI 持续 X 毫秒没有任何输出则视为卡死并终止；0 表示关闭，建议 30000–60000',
-    settingDebugLoggingName: '调试日志',
-    settingDebugLoggingDesc: '在浏览器控制台打印 CLI spawn / 完成 / 失败的诊断信息（含 PID、耗时、字节数）',
     sectionQuickSetup: '快速配置',
     sectionReadingOutput: '阅读输出',
     sectionAdvancedConnection: '高级连接设置',
@@ -306,10 +307,15 @@ export const STRINGS: Record<string, Record<string, string>> = {
     errorActionCopyDetails: 'Copy details',
     errorActionCopyRaw: 'Copy raw output',
     errorModalTimeoutTitle: 'CLI timeout diagnostics',
+    errorModalExitTitle: 'CLI non-zero exit',
+    errorModalStartupTitle: 'CLI startup failure',
     errorModalReasonWall:
       'The CLI did not finish before the wall-clock timeout. Inspect stderr below, then consider raising the CLI timeout or switching to the API backend.',
-    errorModalReasonIdle:
-      'The CLI produced no output during the idle-timeout window and was terminated. Common causes: network hang, or model thinking with a non-streaming CLI.',
+    errorModalReasonExit:
+      'The CLI process exited with a non-zero status. stdout and stderr tails are below (redacted). Note that `claude --output-format json` writes error events to stdout, so check there first.',
+    errorModalReasonStartup:
+      'The CLI process failed to launch. Common causes: wrong path, non-executable binary, or Obsidian GUI not inheriting shell PATH. Try setting an absolute CLI path in Settings.',
+    errorModalFieldExit: 'exit {code} (signal {signal})',
     errorModalFieldCmd: 'Command',
     errorModalFieldPid: 'PID',
     errorModalFieldElapsed: 'Elapsed',
@@ -355,12 +361,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingCliPathPlaceholder: 'Example: /Users/you/bin/codex',
     settingCliTimeoutName: 'CLI timeout (ms)',
     settingCliTimeoutDesc: 'Max wait time for CLI calls (ms). Minimum 1000, default 120000.',
-    settingCliIdleTimeoutName: 'CLI idle timeout (ms)',
-    settingCliIdleTimeoutDesc:
-      'Kill the CLI if it produces no output for this long. 0 disables. Recommended 30000–60000.',
-    settingDebugLoggingName: 'Debug logging',
-    settingDebugLoggingDesc:
-      'Log CLI spawn / completion / failure to the browser console (PID, elapsed time, byte counts).',
     sectionQuickSetup: 'Quick setup',
     sectionReadingOutput: 'Reading output',
     sectionAdvancedConnection: 'Advanced connection',

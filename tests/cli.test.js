@@ -79,44 +79,6 @@ async function testRunCliEdgeCases() {
   );
   assert.strictEqual(timeoutChild.killedWith, 'SIGKILL', 'runCli kills timed out processes');
 
-  // Idle timeout fires when no data within idle window even if wall clock is generous.
-  const idleChild = createFakeChild();
-  idleChild.pid = 5252;
-  await assert.rejects(
-    () => t.runCli('fake', [], '', 60000, undefined, () => idleChild, { idleTimeoutMs: 15 }),
-    (err) => {
-      assert.match(err.message, /CLI idle timeout \(15ms\)/, 'idle timeout error message');
-      assert.match(err.message, /pid=5252/, 'idle timeout carries pid');
-      assert.ok(err instanceof t.CliProcessError, 'idle-timeout throws CliProcessError');
-      assert.strictEqual(err.details.reason, 'idle-timeout', 'idle-timeout reason set');
-      assert.strictEqual(err.details.idleTimeoutMs, 15, 'details.idleTimeoutMs reflects idle window');
-      return true;
-    },
-    'runCli idle timeout fires when no output',
-  );
-  assert.strictEqual(idleChild.killedWith, 'SIGKILL', 'idle timeout kills the process');
-
-  // Idle timer must reset on data — child keeps emitting and only wall clock should fire.
-  const heartbeatChild = createFakeChild();
-  let cancelHeartbeat = false;
-  const heartbeatPromise = t.runCli('fake', [], '', 80, undefined, () => heartbeatChild, { idleTimeoutMs: 30 });
-  const beat = () => {
-    if (cancelHeartbeat) return;
-    heartbeatChild.stdout.emit('data', Buffer.from('.'));
-    setTimeout(beat, 10);
-  };
-  beat();
-  await assert.rejects(
-    () => heartbeatPromise,
-    (err) => {
-      cancelHeartbeat = true;
-      assert.match(err.message, /CLI timed out \(80ms\)/, 'wall-clock fires when idle resets keep happening');
-      assert.doesNotMatch(err.message, /CLI idle timeout/, 'idle timeout must not fire while data flows');
-      return true;
-    },
-    'runCli idle timer resets on incoming data',
-  );
-
   const cancelChild = createFakeChild();
   let cancelHandler = null;
   const cancelPromise = t.runCli(
@@ -483,7 +445,6 @@ const wallTimeout = new t.CliProcessError('whatever message text', {
   exitCode: null,
   signal: null,
   timeoutMs: 0,
-  idleTimeoutMs: 0,
 });
 assert.strictEqual(t.classifyGenerationError(wallTimeout), 'timeout', 'wall-timeout details → timeout kind');
 const spawnFailure = new t.CliProcessError('Failed to start claude', {
@@ -499,7 +460,6 @@ const spawnFailure = new t.CliProcessError('Failed to start claude', {
   exitCode: null,
   signal: null,
   timeoutMs: 0,
-  idleTimeoutMs: 0,
 });
 assert.strictEqual(t.classifyGenerationError(spawnFailure), 'config', 'spawn-failure details → config kind');
 // exit-nonzero falls through so stderr-derived auth/rate-limit messages can still classify.
@@ -516,7 +476,6 @@ const exitWithAuthStderr = new t.CliProcessError('CLI exited with code 1\nstderr
   exitCode: 1,
   signal: null,
   timeoutMs: 0,
-  idleTimeoutMs: 0,
 });
 assert.strictEqual(
   t.classifyGenerationError(exitWithAuthStderr),

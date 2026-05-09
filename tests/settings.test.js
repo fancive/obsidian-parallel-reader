@@ -111,19 +111,6 @@ assert.strictEqual(
   'normalizeSettings protects invalid cli timeout values',
 );
 
-// normalizeCliIdleTimeoutMs: 0 means disabled, anything below MIN coerces to 0, valid passes through
-assert.strictEqual(t.normalizeCliIdleTimeoutMs(0), 0, 'idle timeout 0 stays disabled');
-assert.strictEqual(t.normalizeCliIdleTimeoutMs(45000), 45000, 'idle timeout valid value passes through');
-assert.strictEqual(t.normalizeCliIdleTimeoutMs('30000'), 30000, 'idle timeout numeric string accepted');
-assert.strictEqual(t.normalizeCliIdleTimeoutMs(500), 0, 'idle timeout below 1000ms disables (treats as off)');
-assert.strictEqual(t.normalizeCliIdleTimeoutMs(-1), 0, 'idle timeout negative coerces to 0');
-assert.strictEqual(t.normalizeCliIdleTimeoutMs('bad'), 0, 'idle timeout non-numeric coerces to 0');
-assert.strictEqual(
-  t.normalizeSettings({ ...baseSettings, cliIdleTimeoutMs: 250 }).cliIdleTimeoutMs,
-  0,
-  'normalizeSettings disables sub-minimum idle timeout',
-);
-
 // applyApiProviderPreset clears credentials but keeps preset baseUrl (security: prevent cross-provider key leak)
 {
   const previous = {

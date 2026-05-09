@@ -10,6 +10,8 @@
     "lint": "biome check main.ts src/ tests/ scripts/ .e2e/scripts/",
     "lint:fix": "biome check --write main.ts src/ tests/ scripts/ .e2e/scripts/",
     "lint:obsidian": "eslint main.ts src/",
+    "lint:obsidian:review": "eslint --config eslint.obsidian-review.config.mjs --no-config-lookup main.ts src/",
+    "lint:obsidian:review:all": "npm run lint:obsidian:review -- --max-warnings=0",
     "version": "node scripts/bump-version.mjs",
     "test": "npm run build && npm run typecheck && node scripts/run-tests.mjs",
     "test:only": "node scripts/run-tests.mjs",

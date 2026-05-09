@@ -13,7 +13,6 @@ import {
   getApiFormat,
   getApiPreset,
   normalizeCardCount,
-  normalizeCliIdleTimeoutMs,
   normalizeCliTimeoutMs,
   normalizeStreamingTimeoutMs,
   PROMPT_LANGUAGES,
@@ -425,13 +424,7 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
   private renderAdvancedConnectionCli(containerEl: HTMLElement) {
     const settings = this.plugin.settings;
     const userChangedTimeout = !!(settings.cliTimeoutMs && settings.cliTimeoutMs !== DEFAULT_SETTINGS.cliTimeoutMs);
-    const userChangedIdleTimeout = !!settings.cliIdleTimeoutMs;
-    const userEnabledDebug = !!settings.debugLogging;
-    const details = this.openCollapsibleSection(
-      containerEl,
-      'sectionAdvancedConnection',
-      userChangedTimeout || userChangedIdleTimeout || userEnabledDebug,
-    );
+    const details = this.openCollapsibleSection(containerEl, 'sectionAdvancedConnection', userChangedTimeout);
     new Setting(details)
       .setName(this.tr('settingCliTimeoutName'))
       .setDesc(this.tr('settingCliTimeoutDesc'))
@@ -443,29 +436,6 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
             this.plugin.settings.cliTimeoutMs = normalizeCliTimeoutMs(v);
             this.plugin.saveSettingsDebounced();
           }),
-      );
-
-    new Setting(details)
-      .setName(this.tr('settingCliIdleTimeoutName'))
-      .setDesc(this.tr('settingCliIdleTimeoutDesc'))
-      .addText((t) =>
-        t
-          .setPlaceholder('0')
-          .setValue(String(this.plugin.settings.cliIdleTimeoutMs ?? 0))
-          .onChange((v) => {
-            this.plugin.settings.cliIdleTimeoutMs = normalizeCliIdleTimeoutMs(v);
-            this.plugin.saveSettingsDebounced();
-          }),
-      );
-
-    new Setting(details)
-      .setName(this.tr('settingDebugLoggingName'))
-      .setDesc(this.tr('settingDebugLoggingDesc'))
-      .addToggle((toggle) =>
-        toggle.setValue(!!this.plugin.settings.debugLogging).onChange(async (v) => {
-          this.plugin.settings.debugLogging = v;
-          await this.plugin.saveSettings();
-        }),
       );
   }
 

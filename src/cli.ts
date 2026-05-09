@@ -52,16 +52,8 @@ export function resolveCliPath(name: string, override: string): string {
   return name;
 }
 
-export interface RunCliOptions {
-  /** Idle timeout in ms — fail if no stdout/stderr data arrives for this long. 0 disables. */
-  idleTimeoutMs?: number;
-  /** When true, log spawn/settle lifecycle to console for diagnostics. */
-  debug?: boolean;
-}
-
 export type CliFailureReason =
   | 'wall-timeout'
-  | 'idle-timeout'
   | 'exit-nonzero'
   | 'streams-unavailable'
   | 'spawn-failure'
@@ -72,6 +64,7 @@ export interface CliErrorDetails {
   cmd: string;
   pid: number | null;
   elapsedMs: number;
+  /** ms since the last byte of stdout/stderr — useful to tell hung-mid-call from hung-from-start. */
   idleMs: number | null;
   stdoutBytes: number;
   stderrBytes: number;
@@ -82,7 +75,6 @@ export interface CliErrorDetails {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   timeoutMs: number;
-  idleTimeoutMs: number;
 }
 
 export class CliProcessError extends Error {
@@ -95,8 +87,8 @@ export class CliProcessError extends Error {
   }
 }
 
-const DIAG_STDERR_TAIL_CHARS = 800;
-const DIAG_STDOUT_TAIL_CHARS = 200;
+const DIAG_STDERR_TAIL_CHARS = 1500;
+const DIAG_STDOUT_TAIL_CHARS = 1500;
 
 function tail(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -123,15 +115,11 @@ export function runCli(
   timeoutMs: number,
   job?: GenerationJob,
   spawnImpl: typeof spawn = spawn,
-  options: RunCliOptions = {},
 ): Promise<{ stdout: string; stderr: string }> {
-  const idleTimeoutMs = Math.max(0, Math.floor(options.idleTimeoutMs ?? 0));
-  const debug = !!options.debug;
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
     let settled = false;
     let timer: number | null = null;
-    let idleTimer: number | null = null;
     const startedAt = Date.now();
     let lastActivityAt = startedAt;
     const clearTimers = () => {
@@ -139,42 +127,40 @@ export function runCli(
         activeWindow.clearTimeout(timer);
         timer = null;
       }
-      if (idleTimer) {
-        activeWindow.clearTimeout(idleTimer);
-        idleTimer = null;
-      }
     };
     const fail = (err: Error) => {
       if (settled) return;
       settled = true;
       clearTimers();
-      if (debug) {
-        console.warn('[parallel-reader] cli failed', {
-          cmd,
-          pid: child?.pid,
-          elapsedMs: Date.now() - startedAt,
-          error: err.message,
-        });
-      }
+      console.warn('[parallel-reader] cli failed', {
+        cmd,
+        pid: child?.pid,
+        elapsedMs: Date.now() - startedAt,
+        error: err.message,
+      });
       reject(err);
     };
     const succeed = (value: { stdout: string; stderr: string }) => {
       if (settled) return;
       settled = true;
       clearTimers();
-      if (debug) {
-        console.debug('[parallel-reader] cli ok', {
-          cmd,
-          pid: child?.pid,
-          elapsedMs: Date.now() - startedAt,
-          stdoutBytes: utf8ByteLength(value.stdout),
-          stderrBytes: utf8ByteLength(value.stderr),
-        });
-      }
+      console.debug('[parallel-reader] cli ok', {
+        cmd,
+        pid: child?.pid,
+        elapsedMs: Date.now() - startedAt,
+        stdoutBytes: utf8ByteLength(value.stdout),
+        stderrBytes: utf8ByteLength(value.stderr),
+      });
       resolve(value);
     };
     try {
       child = spawnImpl(cmd, args, {
+        // Lock cwd to the user's home dir. Inheriting Obsidian's cwd (often the Vault path)
+        // can break Claude CLI's per-project memory writes — iCloud-synced Vault paths
+        // contain characters like `~md~` that produce malformed `~/.claude/projects/...`
+        // slugs and an immediate exit-1 with empty modelUsage. Home dir is stable and
+        // writable; the LLM call itself is independent of cwd.
+        cwd: os.homedir(),
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -191,7 +177,7 @@ export function runCli(
       });
     } catch (e: unknown) {
       const message = `Failed to start ${cmd}: ${e instanceof Error ? e.message : String(e)}`;
-      if (debug) console.warn('[parallel-reader] cli spawn failed', { cmd, error: message });
+      console.warn('[parallel-reader] cli spawn failed', { cmd, error: message });
       return reject(
         new CliProcessError(message, {
           reason: 'spawn-failure',
@@ -206,20 +192,16 @@ export function runCli(
           exitCode: null,
           signal: null,
           timeoutMs,
-          idleTimeoutMs,
         }),
       );
     }
 
-    if (debug) {
-      console.debug('[parallel-reader] cli spawn', {
-        cmd,
-        argCount: args.length,
-        pid: child?.pid,
-        timeoutMs,
-        idleTimeoutMs,
-      });
-    }
+    console.debug('[parallel-reader] cli spawn', {
+      cmd,
+      argCount: args.length,
+      pid: child?.pid,
+      timeoutMs,
+    });
 
     let stdout = '';
     let stderr = '';
@@ -241,7 +223,6 @@ export function runCli(
       exitCode: extras.exitCode ?? null,
       signal: extras.signal ?? null,
       timeoutMs,
-      idleTimeoutMs,
     });
 
     const buildDiagSuffix = (details: CliErrorDetails): string => {
@@ -263,22 +244,6 @@ export function runCli(
       const details = collectDetails('wall-timeout', idleMs, { signal: 'SIGKILL' });
       fail(new CliProcessError(`CLI timed out (${timeoutMs}ms)${buildDiagSuffix(details)}`, details));
     }, timeoutMs);
-
-    const armIdleTimer = () => {
-      if (settled || !idleTimeoutMs) return;
-      if (idleTimer) activeWindow.clearTimeout(idleTimer);
-      idleTimer = activeWindow.setTimeout(() => {
-        const idleMs = Date.now() - lastActivityAt;
-        try {
-          child.kill('SIGKILL');
-        } catch (e: unknown) {
-          console.warn('[parallel-reader] failed to kill idle-timed-out CLI process', e);
-        }
-        const details = collectDetails('idle-timeout', idleMs, { signal: 'SIGKILL' });
-        fail(new CliProcessError(`CLI idle timeout (${idleTimeoutMs}ms)${buildDiagSuffix(details)}`, details));
-      }, idleTimeoutMs);
-    };
-    armIdleTimer();
 
     if (job) {
       job.onCancel(() => {
@@ -303,7 +268,6 @@ export function runCli(
     const noteActivity = () => {
       if (settled) return;
       lastActivityAt = Date.now();
-      armIdleTimer();
     };
 
     childStdout.on('data', (d) => {
@@ -328,7 +292,14 @@ export function runCli(
       if (code !== 0) {
         const idleMs = Date.now() - lastActivityAt;
         const details = collectDetails('exit-nonzero', idleMs, { exitCode: code, signal });
-        return fail(new CliProcessError(`CLI exited with code ${code}\nstderr:\n${stderr.slice(0, 1000)}`, details));
+        // Some CLIs (notably `claude --output-format json`) emit error events to stdout
+        // instead of stderr. Always include both tails so the failure mode is debuggable
+        // even when stderr is empty.
+        let suffix = '';
+        if (details.stderrTail) suffix += `\nstderr:\n${details.stderrTail}`;
+        if (details.stdoutTail) suffix += `\nstdout:\n${details.stdoutTail}`;
+        if (!suffix) suffix = '\n(no output on either stream)';
+        return fail(new CliProcessError(`CLI exited with code ${code} (signal=${signal ?? 'none'})${suffix}`, details));
       }
       succeed({ stdout, stderr });
     });
@@ -369,10 +340,7 @@ export async function summarizeViaClaudeCode(
   ];
   const claudeModel = (settings.model || '').trim();
   if (claudeModel) args.push('--model', claudeModel);
-  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl, {
-    idleTimeoutMs: settings.cliIdleTimeoutMs,
-    debug: settings.debugLogging,
-  });
+  const { stdout } = await runCli(cmd, args, user, settings.cliTimeoutMs, job, spawnImpl);
 
   // --output-format json produces a JSON array of event objects.
   // Find the "result" entry and extract its .result text field.
@@ -424,9 +392,6 @@ export async function summarizeViaCodex(
   // (claude-sonnet-4-6), which would break Codex if passed verbatim. Codex
   // uses its own config.toml profile for model selection.
   const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '-'];
-  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl, {
-    idleTimeoutMs: settings.cliIdleTimeoutMs,
-    debug: settings.debugLogging,
-  });
+  const { stdout } = await runCli(cmd, args, combined, settings.cliTimeoutMs, job, spawnImpl);
   return parseCardsJson(stdout, settings);
 }

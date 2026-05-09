@@ -48,7 +48,21 @@ function showActionableNotice(message: string, actions: ActionableNoticeAction[]
   return notice;
 }
 
-class TimeoutDiagnosticsModal extends Modal {
+function reasonCopyKeys(reason: CliErrorDetails['reason']): { titleKey: string; reasonKey: string } {
+  switch (reason) {
+    case 'wall-timeout':
+      return { titleKey: 'errorModalTimeoutTitle', reasonKey: 'errorModalReasonWall' };
+    case 'exit-nonzero':
+      return { titleKey: 'errorModalExitTitle', reasonKey: 'errorModalReasonExit' };
+    case 'spawn-failure':
+    case 'startup-error':
+      return { titleKey: 'errorModalStartupTitle', reasonKey: 'errorModalReasonStartup' };
+    default:
+      return { titleKey: 'errorModalTimeoutTitle', reasonKey: 'errorModalReasonWall' };
+  }
+}
+
+class CliDiagnosticsModal extends Modal {
   private readonly settings: PluginSettings;
   private readonly details: CliErrorDetails;
   private readonly fullMessage: string;
@@ -72,10 +86,18 @@ class TimeoutDiagnosticsModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('parallel-reader-error-modal');
-    contentEl.createEl('h2', { text: translate(this.settings, 'errorModalTimeoutTitle') });
-
-    const reasonKey = this.details.reason === 'idle-timeout' ? 'errorModalReasonIdle' : 'errorModalReasonWall';
+    const { titleKey, reasonKey } = reasonCopyKeys(this.details.reason);
+    contentEl.createEl('h2', { text: translate(this.settings, titleKey) });
     contentEl.createEl('p', { text: translate(this.settings, reasonKey) });
+    if (this.details.exitCode != null) {
+      contentEl.createEl('p', {
+        cls: 'parallel-reader-error-modal-exit',
+        text: translate(this.settings, 'errorModalFieldExit', {
+          code: String(this.details.exitCode),
+          signal: this.details.signal ?? 'none',
+        }),
+      });
+    }
 
     const grid = contentEl.createDiv({ cls: 'parallel-reader-error-modal-grid' });
     const addRow = (label: string, value: string) => {
@@ -95,13 +117,18 @@ class TimeoutDiagnosticsModal extends Modal {
       `stdout ${this.details.stdoutBytes}B / stderr ${this.details.stderrBytes}B`,
     );
 
+    let hasOutput = false;
     if (this.details.stderrTail) {
       contentEl.createEl('h3', { text: translate(this.settings, 'errorModalStderrTail') });
       contentEl.createEl('pre', { cls: 'parallel-reader-error-modal-tail', text: this.details.stderrTail });
-    } else if (this.details.stdoutTail) {
+      hasOutput = true;
+    }
+    if (this.details.stdoutTail) {
       contentEl.createEl('h3', { text: translate(this.settings, 'errorModalStdoutTail') });
       contentEl.createEl('pre', { cls: 'parallel-reader-error-modal-tail', text: this.details.stdoutTail });
-    } else {
+      hasOutput = true;
+    }
+    if (!hasOutput) {
       contentEl.createEl('p', {
         cls: 'parallel-reader-error-modal-empty',
         text: translate(this.settings, 'errorModalNoOutput'),
@@ -139,13 +166,17 @@ export function showGenerationError(
 ): void {
   const tr = (k: string, vars?: Record<string, string | number>) => translate(ctx.settings, k, vars);
 
+  // Any structured CLI error opens the diagnostics modal — even when classify falls
+  // through to 'unknown' (e.g. exit-nonzero with empty stderr) we want the stdout tail
+  // surfaced so the failure is debuggable.
+  const cliDetails = (error as { details?: CliErrorDetails }).details;
+  const isStructuredCliError = !!cliDetails && typeof cliDetails.reason === 'string';
+  if (isStructuredCliError) {
+    new CliDiagnosticsModal(ctx.app, ctx.settings, cliDetails, message, ctx.openSettings).open();
+    return;
+  }
+
   if (kind === 'timeout') {
-    const details = (error as { details?: CliErrorDetails }).details;
-    if (details) {
-      // Open a modal so users can read the stderr tail at leisure and copy it.
-      new TimeoutDiagnosticsModal(ctx.app, ctx.settings, details, message, ctx.openSettings).open();
-      return;
-    }
     // API streaming timeout: no structured details, show actionable notice with raw message tail.
     showActionableNotice(tr('errorNoticeTimeout'), [
       {

@@ -65,10 +65,8 @@ export interface PluginSettings {
   model: string;
   exportFolder: string;
   cliTimeoutMs: number;
-  cliIdleTimeoutMs: number;
   streaming: boolean;
   streamingTimeoutMs: number;
-  debugLogging: boolean;
 }
 
 /* ---------- Provider types ---------- */
@@ -173,7 +171,7 @@ export interface PluginHost {
     force: boolean,
     options?: RunForFileOptions,
     preloadedContent?: string,
-  ): Promise<RunForFileResult | void>;
+  ): Promise<RunForFileResult>;
   copyCurrentViewMarkdown(): Promise<void>;
   scrollEditorToLine(line: number, file: TFile | null): Promise<void>;
   cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;

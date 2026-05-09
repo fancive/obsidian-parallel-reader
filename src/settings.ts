@@ -13,7 +13,6 @@ export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
 export const MIN_STREAMING_TIMEOUT_MS = 1000;
 export const MIN_CLI_TIMEOUT_MS = 1000;
-export const MIN_CLI_IDLE_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
   zh: '中文',
   en: 'English',
@@ -46,10 +45,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   model: 'claude-sonnet-4-6',
   exportFolder: 'Reading/Articles',
   cliTimeoutMs: 120000,
-  cliIdleTimeoutMs: 0,
   streaming: true,
   streamingTimeoutMs: 120000,
-  debugLogging: false,
 };
 
 export const API_FORMATS: Record<string, ApiFormat> = {
@@ -218,9 +215,7 @@ export function normalizeSettings(settings: Readonly<PluginSettings>): PluginSet
   if (out.maxCards < out.minCards) out.maxCards = out.minCards;
   out.streamingTimeoutMs = normalizeStreamingTimeoutMs(out.streamingTimeoutMs);
   out.cliTimeoutMs = normalizeCliTimeoutMs(out.cliTimeoutMs);
-  out.cliIdleTimeoutMs = normalizeCliIdleTimeoutMs(out.cliIdleTimeoutMs);
   if (typeof out.customSystemPrompt !== 'string') out.customSystemPrompt = '';
-  out.debugLogging = !!out.debugLogging;
   return out;
 }
 
@@ -245,14 +240,6 @@ export function normalizeStreamingTimeoutMs(value: unknown): number {
 export function normalizeCliTimeoutMs(value: unknown): number {
   const n = Math.floor(Number(value));
   if (!Number.isFinite(n) || n < MIN_CLI_TIMEOUT_MS) return DEFAULT_SETTINGS.cliTimeoutMs;
-  return n;
-}
-
-export function normalizeCliIdleTimeoutMs(value: unknown): number {
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  if (n === 0) return 0;
-  if (n < MIN_CLI_IDLE_TIMEOUT_MS) return 0;
   return n;
 }
 

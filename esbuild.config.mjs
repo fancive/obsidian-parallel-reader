@@ -4,12 +4,7 @@ import { builtinModules } from 'module';
 const production = process.argv[2] === 'production';
 const watch = process.argv[2] === 'watch';
 
-const external = [
-  'obsidian',
-  'electron',
-  ...builtinModules,
-  ...builtinModules.map(m => `node:${m}`),
-];
+const external = ['obsidian', 'electron', ...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 const context = await esbuild.context({
   entryPoints: ['main.ts'],

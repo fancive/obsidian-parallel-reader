@@ -202,7 +202,6 @@ export function classifyGenerationError(error: unknown): ErrorKind {
   if (details && typeof details.reason === 'string') {
     switch (details.reason) {
       case 'wall-timeout':
-      case 'idle-timeout':
         return 'timeout';
       case 'spawn-failure':
       case 'startup-error':
