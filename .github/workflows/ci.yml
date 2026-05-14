@@ -24,6 +24,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Lint (Obsidian review rules)
+        run: npm run lint:obsidian
+
       - name: E2E gate
         run: timeout 600 npm run e2e
 

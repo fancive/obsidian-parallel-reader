@@ -263,12 +263,39 @@ async function testClaudeCodeArgs() {
     'stream-json',
     'claude output should stream JSON events',
   );
+  assert.ok(
+    capturedArgs.includes('--verbose'),
+    'stream-json requires --verbose in Claude CLI 2.1.131+',
+  );
   assert.ok(capturedArgs.includes('--append-system-prompt'), 'should include --append-system-prompt');
   assert.ok(capturedArgs.includes('--tools'), 'should explicitly restrict Claude tools');
   assert.strictEqual(capturedArgs[capturedArgs.indexOf('--tools') + 1], '', 'Claude tools should be disabled');
   assert.ok(capturedArgs.includes('--disallowed-tools'), 'should include --disallowed-tools');
   assert.ok(capturedArgs.includes('--no-session-persistence'), 'should avoid session persistence for plugin calls');
+  assert.ok(capturedArgs.includes('--disable-slash-commands'), 'should disable slash commands for plugin calls');
+  assert.ok(capturedArgs.includes('--no-chrome'), 'should suppress Claude TUI chrome');
   assert.ok(capturedArgs.includes('--strict-mcp-config'), 'should ignore user/project MCP servers');
+  assert.strictEqual(
+    capturedArgs[capturedArgs.indexOf('--mcp-config') + 1],
+    '{"mcpServers":{}}',
+    '--mcp-config must pair with an empty MCP server map',
+  );
+  assert.strictEqual(
+    capturedArgs[capturedArgs.indexOf('--disallowed-tools') + 1],
+    'Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite,Task,LSP,NotebookEdit',
+    '--disallowed-tools must list every tool that could exfiltrate or mutate',
+  );
+  // Ordering: -p must come before --output-format so Claude treats the run as print-mode.
+  assert.ok(
+    capturedArgs.indexOf('-p') < capturedArgs.indexOf('--output-format'),
+    '-p must appear before --output-format',
+  );
+  // --verbose must accompany --output-format stream-json (Claude CLI 2.1.131+ requirement).
+  // The CLI does not constrain position; we only check that --verbose is not consumed as the value of
+  // another flag — i.e. it must not appear at index `--output-format` + 1 (where 'stream-json' belongs).
+  const outputFmtIdx = capturedArgs.indexOf('--output-format');
+  const verboseIdx = capturedArgs.indexOf('--verbose');
+  assert.notStrictEqual(verboseIdx, outputFmtIdx + 1, '--verbose must not be parsed as the --output-format value');
 
   // Verify --max-tokens is NOT present (it's not a valid claude CLI flag)
   assert.ok(!capturedArgs.includes('--max-tokens'), 'should NOT include --max-tokens');
@@ -466,6 +493,195 @@ async function testClaudeCodeArgsWithModel() {
   assert.strictEqual(capturedArgs[modelIdx + 1], 'claude-opus-4-7', 'claude --model value matches settings.model');
 }
 
+// ── Claude stream-json parse resilience ──
+
+async function runClaudeCodeWithStdout(stdoutText) {
+  const fakeSpawn = () => {
+    const child = createFakeChild();
+    process.nextTick(() => {
+      if (stdoutText) child.stdout.emit('data', Buffer.from(stdoutText));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+  const settings = {
+    backend: 'claude-code',
+    cliPath: '/usr/bin/claude',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 1,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+  return t.summarizeViaClaudeCode('system', 'user', settings, undefined, fakeSpawn);
+}
+
+async function testClaudeCodeStreamJsonResilience() {
+  // B1: NDJSON with non-JSON banner line — must skip banner and still parse the result event.
+  const withBanner = [
+    'Claude Code 2.1.131',
+    JSON.stringify({ type: 'system', subtype: 'init', tools: ['LSP'] }),
+    JSON.stringify({
+      type: 'result',
+      result: '{"cards":[{"title":"B1","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    }),
+  ].join('\n');
+  const b1 = await runClaudeCodeWithStdout(withBanner);
+  assert.strictEqual(b1.length, 1, 'B1: banner line is skipped and result parsed');
+  assert.strictEqual(b1[0].title, 'B1', 'B1: card title preserved');
+
+  // B2: Missing result event — must throw a recognizable "no result" error (not a crash inside parser).
+  // Match both zh ("没有返回结果") and en ("returned no result") so the assertion survives translate() fallback differences.
+  const noResultRegex = /没有返回结果|returned no result/i;
+  const onlyInit = JSON.stringify({ type: 'system', subtype: 'init', tools: [] }) + '\n';
+  await assert.rejects(
+    () => runClaudeCodeWithStdout(onlyInit),
+    (err) => noResultRegex.test(err.message),
+    'B2: missing result event throws a descriptive "no result" error',
+  );
+
+  // B3: Empty stdout — same behavior: must throw, not crash on undefined / silent success.
+  await assert.rejects(
+    () => runClaudeCodeWithStdout(''),
+    (err) => noResultRegex.test(err.message),
+    'B3: empty stdout throws a descriptive "no result" error',
+  );
+
+  // B4: Multiple result events — last one wins (claudeResultText scans in reverse).
+  const twoResults = [
+    JSON.stringify({
+      type: 'result',
+      result: '{"cards":[{"title":"FIRST","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    }),
+    JSON.stringify({
+      type: 'result',
+      result: '{"cards":[{"title":"LAST","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+    }),
+  ].join('\n');
+  const b4 = await runClaudeCodeWithStdout(twoResults);
+  assert.strictEqual(b4.length, 1, 'B4: latest result event is used');
+  assert.strictEqual(b4[0].title, 'LAST', 'B4: last result wins over earlier ones');
+
+  // B5: Single-event object with `content` (not `result`) — covers the legacy fallback path
+  // where claudeResultText reads `events[0].content` when no `type: result` event exists.
+  const contentFallback = JSON.stringify({
+    content: '{"cards":[{"title":"B5","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}',
+  });
+  const b5 = await runClaudeCodeWithStdout(contentFallback);
+  assert.strictEqual(b5.length, 1, 'B5: events[0].content fallback parses card');
+  assert.strictEqual(b5[0].title, 'B5', 'B5: content-fallback card title preserved');
+}
+
+// ── Claude verbose-missing error-path plumbing ──
+// This does NOT guard the --verbose flag itself (that is locked by
+// `testClaudeCodeArgs`'s `capturedArgs.includes('--verbose')` assertion, which fails
+// in fake-spawn before any stderr is even simulated).
+// Instead, this test simulates the *real* stderr that Claude CLI emits when
+// --verbose is missing, and asserts that the error-propagation pipeline preserves
+// exit code + stderr tail so the UI can render a useful diagnostic. If we ever
+// rework error handling and accidentally swallow CLI stderr, this catches it.
+
+async function testClaudeCodeVerboseRegressionCanary() {
+  const fakeSpawn = () => {
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stderr.emit(
+        'data',
+        Buffer.from('Error: When using --print, --output-format=stream-json requires --verbose'),
+      );
+      child.emit('close', 1, null);
+    });
+    return child;
+  };
+  const settings = {
+    backend: 'claude-code',
+    cliPath: '/usr/bin/claude',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 1,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+  await assert.rejects(
+    () => t.summarizeViaClaudeCode('system', 'user', settings, undefined, fakeSpawn),
+    (err) => {
+      assert.ok(err instanceof t.CliProcessError, 'canary: throws CliProcessError on exit-nonzero');
+      assert.strictEqual(err.details.reason, 'exit-nonzero', 'canary: exit-nonzero reason');
+      assert.strictEqual(err.details.exitCode, 1, 'canary: surfaces CLI exit code');
+      assert.match(err.details.stderrTail, /requires --verbose/, 'canary: preserves verbose-flag hint in stderr');
+      return true;
+    },
+    'Claude CLI verbose-missing stderr surfaces as a structured CliProcessError',
+  );
+}
+
+// ── Codex error path ──
+
+async function testCodexErrorPath() {
+  const fakeSpawn = () => {
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stderr.emit('data', Buffer.from('error: not authenticated, please run codex login'));
+      child.emit('close', 2, null);
+    });
+    return child;
+  };
+  const settings = {
+    backend: 'codex',
+    cliPath: '/usr/bin/codex',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 1,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+  await assert.rejects(
+    () => t.summarizeViaCodex('system', 'user', settings, undefined, fakeSpawn),
+    (err) => {
+      assert.ok(err instanceof t.CliProcessError, 'codex: throws CliProcessError on exit-nonzero');
+      assert.strictEqual(err.details.exitCode, 2, 'codex: exit code preserved');
+      assert.match(err.details.stderrTail, /not authenticated/, 'codex: stderr tail preserves auth hint');
+      return true;
+    },
+    'codex non-zero exit propagates structured error',
+  );
+}
+
+// ── Codex args minimal contract ──
+// Lock in the exact minimal arg shape: any drift means we are leaking new flags
+// into a CLI that is intentionally kept minimal (no --model, no --cd, no -c).
+
+async function testCodexArgsMinimalContract() {
+  let capturedArgs = null;
+  const resultJson = '{"cards":[{"title":"T","anchor":"hello world test anchor","gist":"G","bullets":["B"]}]}';
+  const fakeSpawn = (_cmd, args) => {
+    capturedArgs = args;
+    const child = createFakeChild();
+    process.nextTick(() => {
+      child.stdout.emit('data', Buffer.from(resultJson));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+  const settings = {
+    backend: 'codex',
+    cliPath: '/usr/bin/codex',
+    cliTimeoutMs: 5000,
+    promptLanguage: 'zh',
+    minCards: 1,
+    maxCards: 15,
+    maxDocChars: 100000,
+  };
+  await t.summarizeViaCodex('system', 'user', settings, undefined, fakeSpawn);
+
+  // Exact list lock: changes here are intentional and require updating the test.
+  assert.deepStrictEqual(
+    capturedArgs,
+    ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '-'],
+    'codex exec args must remain minimal (exec + skip-git + read-only sandbox + stdin marker)',
+  );
+}
+
 // ── classifyGenerationError ──
 
 assert.strictEqual(t.classifyGenerationError(new Error('API key 未设置')), 'auth');
@@ -562,9 +778,13 @@ assert.strictEqual(t.classifyGenerationError('string error'), 'unknown', 'string
   await testRunCliEdgeCases();
   await testClaudeCodeArgs();
   await testClaudeCodeStreamJsonOutput();
+  await testClaudeCodeStreamJsonResilience();
+  await testClaudeCodeVerboseRegressionCanary();
   await testClaudeCodeArgsWithModel();
   await testCodexArgs();
   await testCodexArgsIgnoresClaudeDefaultModel();
+  await testCodexArgsMinimalContract();
+  await testCodexErrorPath();
   console.log('cli tests passed');
 })().catch((e) => {
   console.error(e);

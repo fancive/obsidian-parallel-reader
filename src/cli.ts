@@ -366,6 +366,7 @@ export async function summarizeViaClaudeCode(
     '-p',
     '--output-format',
     'stream-json',
+    '--verbose',
     '--append-system-prompt',
     system,
     '--tools',
