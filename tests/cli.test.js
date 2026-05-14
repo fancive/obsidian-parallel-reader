@@ -263,10 +263,7 @@ async function testClaudeCodeArgs() {
     'stream-json',
     'claude output should stream JSON events',
   );
-  assert.ok(
-    capturedArgs.includes('--verbose'),
-    'stream-json requires --verbose in Claude CLI 2.1.131+',
-  );
+  assert.ok(capturedArgs.includes('--verbose'), 'stream-json requires --verbose in Claude CLI 2.1.131+');
   assert.ok(capturedArgs.includes('--append-system-prompt'), 'should include --append-system-prompt');
   assert.ok(capturedArgs.includes('--tools'), 'should explicitly restrict Claude tools');
   assert.strictEqual(capturedArgs[capturedArgs.indexOf('--tools') + 1], '', 'Claude tools should be disabled');
