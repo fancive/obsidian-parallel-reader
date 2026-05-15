@@ -1,7 +1,7 @@
 'use strict';
 
 import { requestUrl } from 'obsidian';
-import { findLineForAnchor } from './anchor';
+import { buildLineOffsets, findLineForAnchor } from './anchor';
 import { summarizeViaClaudeCode, summarizeViaCodex } from './cli';
 import type { GenerationJob } from './generation-job-manager';
 import { buildPrompts } from './prompt';
@@ -44,12 +44,13 @@ export async function summarizeDocument(
       break;
     }
   }
+  const lineOffsets = buildLineOffsets(content);
   const resolved: ResolvedCard[] = cards.map((c) => ({
     title: c.title,
     level: 2,
     anchor: c.anchor,
     gist: c.gist,
-    startLine: findLineForAnchor(content, c.anchor),
+    startLine: findLineForAnchor(content, c.anchor, lineOffsets),
     bullets: c.bullets,
   }));
   resolved.sort((a, b) => {

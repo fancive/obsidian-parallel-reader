@@ -268,7 +268,24 @@ export function pruneCacheEntries(cache: Record<string, CacheEntry>, maxEntries:
   return removed;
 }
 
+// Memoize by settings object identity. The plugin replaces this.settings with
+// a fresh object only on load/save, so the same reference always yields the
+// same fingerprint — this collapses the SHA-1 + stableStringify work done on
+// every file-open / cache check down to once per settings change.
+const fingerprintCache = new WeakMap<object, string>();
+
 export function generationFingerprint(settings: PluginSettings): string {
+  const cacheKey = settings as unknown as object;
+  if (cacheKey) {
+    const cached = fingerprintCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+  }
+  const result = computeGenerationFingerprint(settings);
+  if (cacheKey) fingerprintCache.set(cacheKey, result);
+  return result;
+}
+
+function computeGenerationFingerprint(settings: PluginSettings): string {
   const normalized = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, settings || {}));
   const apiBackend = isApiBackend(normalized.backend);
   const preset = getApiPreset(normalized);

@@ -22,4 +22,22 @@ assert.strictEqual(
   'unicode anchor match',
 );
 
+// ── perf: precomputed line-offset index must yield identical results ──
+const doc = 'l0\nl1\nl2 needle here\nl3\n\nl5 tail';
+const offsets = t.buildLineOffsets(doc);
+assert.deepStrictEqual(offsets, [0, 3, 6, 21, 24, 25], 'buildLineOffsets marks each line start');
+assert.strictEqual(
+  t.findLineForAnchor(doc, 'needle here', offsets),
+  t.findLineForAnchor(doc, 'needle here'),
+  'threaded offsets match self-computed result (exact path)',
+);
+assert.strictEqual(t.findLineForAnchor(doc, 'tail', offsets), 5, 'threaded offsets resolve trailing line');
+// Non-ASCII whitespace (NBSP  ) must still normalize like /\s/ did.
+assert.strictEqual(
+  t.findLineForAnchor('x\ny\nAlpha  beta gamma\nz', 'Alpha beta gamma'),
+  2,
+  'NBSP collapses to single space in normalized fallback match',
+);
+assert.strictEqual(t.buildLineOffsets('')[0], 0, 'empty content still has line 0');
+
 console.log('anchor tests passed');

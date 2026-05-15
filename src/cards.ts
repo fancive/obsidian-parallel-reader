@@ -1,6 +1,6 @@
 'use strict';
 
-import { findLineForAnchor } from './anchor';
+import { buildLineOffsets, findLineForAnchor } from './anchor';
 import type { CardPatch, RawCard, ResolvedCard } from './types';
 
 export function removeCardAt<T extends RawCard>(cards: T[], index: number): T[] {
@@ -29,12 +29,15 @@ export function updateCardAt<T extends RawCard>(cards: T[], index: number, patch
 }
 
 export function resolveCardAnchors(content: string, rawCards: RawCard[]): ResolvedCard[] {
+  // Build the line-offset index once and reuse it for every card instead of
+  // rescanning the whole document per anchor.
+  const lineOffsets = buildLineOffsets(content);
   const resolved: ResolvedCard[] = (rawCards || []).map((c: RawCard) => ({
     title: c.title,
     level: 2,
     anchor: c.anchor,
     gist: c.gist,
-    startLine: findLineForAnchor(content, c.anchor),
+    startLine: findLineForAnchor(content, c.anchor, lineOffsets),
     bullets: c.bullets || [],
   }));
   resolved.sort((a, b) => {

@@ -11,6 +11,7 @@ const expectedExports = [
   'runCli',
   'buildPrompts',
   'buildOpenAiChatBody',
+  'buildLineOffsets',
   'extractJson',
   'findLineForAnchor',
   'folderPathsForTarget',

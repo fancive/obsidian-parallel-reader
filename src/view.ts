@@ -20,6 +20,8 @@ export class ParallelReaderView extends ItemView {
   stale = false;
   loadingMessage = '';
   errorMessage = '';
+  private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private keydownTarget: Element | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: PluginHost) {
     super(leaf);
@@ -45,13 +47,20 @@ export class ParallelReaderView extends ItemView {
     container.empty();
     container.addClass('parallel-reader-container');
     container.setAttr('tabindex', '0');
-    container.addEventListener('keydown', (e) => this.handleKeydown(e as KeyboardEvent));
+    this.keydownHandler = (e) => this.handleKeydown(e);
+    this.keydownTarget = container;
+    container.addEventListener('keydown', this.keydownHandler as EventListener);
     this.renderEmpty();
     this.focusSummaryPane();
     return Promise.resolve();
   }
 
   onClose() {
+    if (this.keydownHandler && this.keydownTarget) {
+      this.keydownTarget.removeEventListener('keydown', this.keydownHandler as EventListener);
+    }
+    this.keydownHandler = null;
+    this.keydownTarget = null;
     return Promise.resolve();
   }
 
