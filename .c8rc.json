@@ -1,0 +1,16 @@
+{
+  "all": false,
+  "src": ["src"],
+  "include": ["src/**/*.ts", "main.ts"],
+  "exclude": [
+    "src/test-exports.ts",
+    "tests/**",
+    "scripts/**",
+    ".e2e/**",
+    "**/node_modules/**"
+  ],
+  "excludeAfterRemap": true,
+  "reporter": ["text-summary", "text", "html", "json-summary"],
+  "reportsDirectory": "coverage",
+  "tempDirectory": "coverage/.tmp"
+}

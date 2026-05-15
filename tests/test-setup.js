@@ -17,7 +17,12 @@ const { getRequestUrlMock, setRequestUrlMock } = require('./obsidian-mock');
 // Bundle test-exports.ts synchronously with obsidian marked as external.
 // The bundled code will require('obsidian') at runtime, hitting our mock.
 const repoRoot = path.join(__dirname, '..');
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-reader-test-setup-'));
+// Under c8, bundles must live inside the repo so c8 processes their coverage
+// (it ignores scripts outside cwd before source-map remap). Otherwise /tmp.
+const bundleParent = process.env.NODE_V8_COVERAGE
+  ? fs.mkdirSync(path.join(repoRoot, '.test-bundles'), { recursive: true }) || path.join(repoRoot, '.test-bundles')
+  : os.tmpdir();
+const tempDir = fs.mkdtempSync(path.join(bundleParent, 'parallel-reader-test-setup-'));
 const outfile = path.join(tempDir, 'test-exports.cjs');
 
 esbuild.buildSync({
@@ -27,12 +32,20 @@ esbuild.buildSync({
   format: 'cjs',
   outfile,
   external: ['obsidian'],
+  sourcemap: 'inline',
+  sourcesContent: true,
+  sourceRoot: repoRoot,
 });
+
+require('./coverage-sourcemap').fixInlineSourceMap(outfile, repoRoot);
 
 const t = require(outfile);
 
-// Clean up temp bundle on process exit.
+// Clean up temp bundle on process exit. Skipped under c8 coverage:
+// c8 reads V8 coverage at exit and needs the bundled file (with its
+// inline source map) still on disk to remap back to src/*.ts.
 process.on('exit', () => {
+  if (process.env.NODE_V8_COVERAGE) return;
   try {
     fs.rmSync(tempDir, { recursive: true, force: true });
   } catch (_) {

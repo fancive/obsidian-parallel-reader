@@ -10,7 +10,12 @@ if (typeof globalThis.activeWindow === 'undefined') {
 }
 
 const repoRoot = path.join(__dirname, '..');
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-reader-tests-'));
+// Under c8, bundles must live inside the repo so c8 processes their coverage
+// (it ignores scripts outside cwd before source-map remap). Otherwise /tmp.
+const bundleParent = process.env.NODE_V8_COVERAGE
+  ? fs.mkdirSync(path.join(repoRoot, '.test-bundles'), { recursive: true }) || path.join(repoRoot, '.test-bundles')
+  : os.tmpdir();
+const tempDir = fs.mkdtempSync(path.join(bundleParent, 'parallel-reader-tests-'));
 
 async function requireBundledModule(relativePath) {
   const entry = path.join(repoRoot, relativePath);
@@ -21,6 +26,9 @@ async function requireBundledModule(relativePath) {
     platform: 'node',
     format: 'cjs',
     outfile,
+    sourcemap: 'inline',
+    sourcesContent: true,
+    sourceRoot: repoRoot,
     plugins: [
       {
         name: 'obsidian-stub',
@@ -35,10 +43,14 @@ async function requireBundledModule(relativePath) {
       },
     ],
   });
+  require('./coverage-sourcemap').fixInlineSourceMap(outfile, repoRoot);
   return require(outfile);
 }
 
 function cleanup() {
+  // Skipped under c8 coverage: c8 reads V8 coverage at exit and needs the
+  // bundled file (with its inline source map) still on disk to remap to src/.
+  if (process.env.NODE_V8_COVERAGE) return;
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 

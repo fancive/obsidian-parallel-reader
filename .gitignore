@@ -18,6 +18,10 @@ dist/
 main.js
 main.js.map
 
+# Coverage
+coverage/
+.test-bundles/
+
 # Agent state
 .agent/
 .claude/
