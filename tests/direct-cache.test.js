@@ -35,6 +35,31 @@ function createFakeAdapter() {
     assert.strictEqual(cacheEntry.lastAccessedAt, undefined, 'direct cache import keeps cache entries immutable');
     assert.strictEqual(JSON.parse(cache.serializeCacheFile({ 'a.md': { cards: [] } })).version, 1);
 
+    // touchCacheEntry: null entry short-circuits to null
+    assert.strictEqual(cache.touchCacheEntry(null), null, 'touchCacheEntry returns null for null entry');
+    // touchCacheEntry: omitted `now` falls back to a generated ISO timestamp
+    const touchedDefault = cache.touchCacheEntry({ generatedAt: '2024-01-01T00:00:00.000Z' });
+    assert.ok(
+      /^\d{4}-\d{2}-\d{2}T/.test(touchedDefault.lastAccessedAt),
+      'touchCacheEntry defaults lastAccessedAt to current ISO time',
+    );
+    // serializeCacheFile: falsy entries map serializes to an empty object
+    assert.deepStrictEqual(
+      JSON.parse(cache.serializeCacheFile(null)).entries,
+      {},
+      'serializeCacheFile coerces falsy entries to {}',
+    );
+    // shouldConfirmRegenerate: every guard branch
+    assert.strictEqual(cache.shouldConfirmRegenerate(null, true), false, 'no entry → false');
+    assert.strictEqual(cache.shouldConfirmRegenerate({ updatedAt: 'x' }, false), false, 'force=false → false');
+    assert.strictEqual(cache.shouldConfirmRegenerate({}, true), false, 'missing updatedAt → false');
+    assert.strictEqual(cache.shouldConfirmRegenerate({ updatedAt: '   ' }, true), false, 'blank updatedAt → false');
+    assert.strictEqual(
+      cache.shouldConfirmRegenerate({ updatedAt: '2024-01-01' }, true),
+      true,
+      'force + non-blank updatedAt → true',
+    );
+
     // ── CacheManager: load + prune ──
     const adapter = createFakeAdapter();
     const manager = new cacheManagerModule.CacheManager(adapter, '.obsidian', 'parallel-reader', () => ({

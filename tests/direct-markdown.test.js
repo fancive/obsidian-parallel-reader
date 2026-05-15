@@ -60,6 +60,9 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const plainMinimal = md.cardToPlain({ title: 'T', anchor: '', gist: '', bullets: [] });
     assert.strictEqual(plainMinimal, 'T', 'title only when gist and bullets empty');
 
+    const plainNullBullets = md.cardToPlain({ title: 'T', anchor: '', gist: 'G' });
+    assert.strictEqual(plainNullBullets, 'T\nG', 'undefined bullets coerced to [] (no crash)');
+
     // ── cardsToMarkdown ──
     const multi = md.cardsToMarkdown('My Title', [
       { title: 'A', anchor: 'q', gist: 'g', bullets: ['b'] },
