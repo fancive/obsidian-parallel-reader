@@ -14,7 +14,7 @@ const CLI_TEST_TIMEOUT_MS = 60000;
 
 type SpawnImpl = Parameters<typeof runCli>[5];
 
-export interface BackendTestDeps {
+interface BackendTestDeps {
   requestUrlImpl?: RequestUrlFunction;
   spawnImpl?: SpawnImpl;
 }

@@ -6,7 +6,7 @@ import { translate } from './i18n';
 import type { ErrorKind, PluginSettings } from './types';
 import { copyToClipboard } from './ui-helpers';
 
-export interface GenerationErrorContext {
+interface GenerationErrorContext {
   app: App;
   settings: PluginSettings;
   /** Open the plugin settings tab (best-effort; falls back to no-op if unavailable). */

@@ -52,12 +52,7 @@ export function resolveCliPath(name: string, override: string): string {
   return name;
 }
 
-export type CliFailureReason =
-  | 'wall-timeout'
-  | 'exit-nonzero'
-  | 'streams-unavailable'
-  | 'spawn-failure'
-  | 'startup-error';
+type CliFailureReason = 'wall-timeout' | 'exit-nonzero' | 'streams-unavailable' | 'spawn-failure' | 'startup-error';
 
 export interface CliErrorDetails {
   reason: CliFailureReason;

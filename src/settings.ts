@@ -8,12 +8,12 @@ import type { ApiFormat, ApiProviderPreset, CacheEntry, PluginSettings } from '.
 export { API_PROVIDER_PRESETS } from './provider-presets';
 
 export const MAX_DOC_CHARS = 100000;
-export const PROMPT_VERSION = 2;
+const PROMPT_VERSION = 2;
 export const CACHE_SCHEMA_VERSION = 2;
 export const DEFAULT_MAX_CACHE_ENTRIES = 100;
-export const DEFAULT_CLI_TIMEOUT_MS = 300000;
-export const MIN_STREAMING_TIMEOUT_MS = 1000;
-export const MIN_CLI_TIMEOUT_MS = 1000;
+const DEFAULT_CLI_TIMEOUT_MS = 300000;
+const MIN_STREAMING_TIMEOUT_MS = 1000;
+const MIN_CLI_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
   zh: '中文',
   en: 'English',

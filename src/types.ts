@@ -37,11 +37,6 @@ export interface CacheEntry {
   updatedAt?: string;
 }
 
-export interface CacheFile {
-  version: number;
-  entries: Record<string, CacheEntry>;
-}
-
 /* ---------- Settings types ---------- */
 
 export interface PluginSettings {

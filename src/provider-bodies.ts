@@ -12,7 +12,7 @@ import type { PluginSettings } from './types';
 
 /* ---------- Body type interfaces ---------- */
 
-export interface AnthropicMessagesBody {
+interface AnthropicMessagesBody {
   model: string;
   max_tokens: number;
   system: string;
@@ -22,7 +22,7 @@ export interface AnthropicMessagesBody {
   stream?: boolean;
 }
 
-export interface OpenAiChatBody {
+interface OpenAiChatBody {
   model: string;
   messages: Array<{ role: string; content: string }>;
   response_format?: unknown;
@@ -30,7 +30,7 @@ export interface OpenAiChatBody {
   [tokenField: string]: unknown;
 }
 
-export interface OpenAiResponsesBody {
+interface OpenAiResponsesBody {
   model: string;
   instructions: string;
   input: string;
@@ -46,7 +46,7 @@ interface GeminiGenerationConfig {
   responseJsonSchema?: unknown;
 }
 
-export interface GeminiBody {
+interface GeminiBody {
   systemInstruction: { parts: Array<{ text: string }> };
   contents: Array<{ role: string; parts: Array<{ text: string }> }>;
   generationConfig: GeminiGenerationConfig;
