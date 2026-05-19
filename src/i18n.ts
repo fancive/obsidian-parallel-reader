@@ -3,14 +3,23 @@
 import { STRINGS } from './i18n-strings';
 import type { PluginSettings } from './types';
 
-export { STRINGS } from './i18n-strings';
+export { LOCALE_OVERRIDES, STRINGS } from './i18n-strings';
+
+function supportedBaseLanguage(value: unknown): string | null {
+  const base = String(value || '')
+    .trim()
+    .toLowerCase()
+    .split(/[-_]/)[0];
+  return base && STRINGS[base] ? base : null;
+}
 
 export function resolveUiLanguage(settings: Pick<PluginSettings, 'uiLanguage'> | null): string {
   const configured = settings?.uiLanguage;
-  if (configured === 'zh' || configured === 'en') return configured;
+  if (configured && configured !== 'auto') {
+    return supportedBaseLanguage(configured) || 'en';
+  }
   const nav = typeof navigator !== 'undefined' ? navigator : null;
-  const language = String(nav?.language || '').toLowerCase();
-  return language.startsWith('zh') ? 'zh' : 'en';
+  return supportedBaseLanguage(nav?.language) || 'en';
 }
 
 export function translate(

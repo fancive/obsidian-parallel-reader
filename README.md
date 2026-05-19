@@ -39,7 +39,7 @@ Inspired by [this reading workflow demo](https://www.bilibili.com/video/BV1FxoGB
 - **Rich rendering** — cards render through Obsidian's `MarkdownRenderer`, so tables, bold, code, and wikilinks all work natively.
 - **Card editing** — right-click any card to copy, edit, delete, or jump to source.
 - **Export** — save cards as a Markdown note in your vault, or copy to clipboard.
-- **Bilingual UI** — full Chinese and English support for commands, settings, and notices.
+- **Multi-language UI and output** — UI supports Auto, Chinese, English, Japanese, Korean, French, German, and Spanish; generated titles, gists, and bullets can use the same fixed languages or follow the source document.
 
 ## Quick Start
 

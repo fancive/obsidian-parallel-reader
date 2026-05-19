@@ -1,7 +1,7 @@
 {
 	"id": "parallel-reader",
 	"name": "Parallel Reader",
-	"version": "1.0.22",
+	"version": "1.0.23",
 	"minAppVersion": "1.8.7",
 	"description": "AI-powered split-view reading: source note on the left, LLM-generated summary cards on the right with scroll-sync highlighting.",
 	"author": "lancivez",

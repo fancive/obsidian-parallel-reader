@@ -3,21 +3,51 @@
 import { DEFAULT_SETTINGS, MAX_DOC_CHARS, normalizeCardCount, PROMPT_LANGUAGES } from './settings';
 import type { PluginSettings, PromptPair } from './types';
 
+const PROMPT_LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  auto: 'Write title, gist, and bullets in the main language of the source document.',
+  zh: '用中文输出 title、gist 和 bullets。',
+  en: 'Write title, gist, and bullets in English.',
+  ja: 'Write title, gist, and bullets in Japanese.',
+  ko: 'Write title, gist, and bullets in Korean.',
+  fr: 'Write title, gist, and bullets in French.',
+  de: 'Write title, gist, and bullets in German.',
+  es: 'Write title, gist, and bullets in Spanish.',
+};
+
+const PROMPT_SCHEMA_EXAMPLES: Record<string, string> = {
+  zh: `{"cards":[
+  {"title":"U 型收益曲线","anchor":"那谁又会被 AI 所受益？整体来看，它把整个分数变成了一分到七分","gist":"AI 生产力收益呈 U 型，两端受益最大、中间层塌陷","bullets":["最高薪岗位（软件管理）通过加速既有工作受益最大","最低薪岗位（外卖员、园艺工）用 AI 开副业创造新收入","中间层科学家、律师收益最少，部分因对 prompt 精度信任不足","全体均分 5.1/7，42% 报告收益模糊"]}
+]}`,
+  en: `{"cards":[
+  {"title":"U-shaped gains","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI productivity gains form a U shape, with both ends benefiting most","bullets":["Top-paid software managers benefit by accelerating existing work","Low-paid workers use AI to create new side income","Middle-layer specialists gain less because prompt precision is hard to trust","Average reported benefit is 5.1/7, with 42% describing gains as unclear"]}
+]}`,
+  ja: `{"cards":[
+  {"title":"U字型の利益","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AIによる生産性向上はU字型になり、両端の層がもっとも大きな恩恵を受ける","bullets":["高所得のソフトウェア管理職は既存業務を加速できるため大きく恩恵を受ける","低所得の労働者はAIを使って新しい副収入を作り出せる","中間層の専門職は、プロンプト精度への信頼が難しいため利益が小さい","平均利益は5.1/7で、42%が効果は不明確だと報告している"]}
+]}`,
+  ko: `{"cards":[
+  {"title":"U자형 이득","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI 생산성 향상은 U자형을 보이며 양끝 집단이 가장 큰 혜택을 얻는다","bullets":["고소득 소프트웨어 관리자는 기존 업무를 더 빠르게 처리해 큰 이득을 얻는다","저소득 노동자는 AI로 새로운 부수입 기회를 만들 수 있다","중간층 전문가는 프롬프트 정확도를 신뢰하기 어려워 상대적으로 이득이 작다","평균 체감 이득은 5.1/7이며 42%는 효과가 불명확하다고 답했다"]}
+]}`,
+  fr: `{"cards":[
+  {"title":"Gains en U","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"Les gains de productivité liés à l'AI forment une courbe en U, les deux extrémités en profitant le plus","bullets":["Les managers logiciels très rémunérés gagnent surtout en accélérant leur travail existant","Les travailleurs peu rémunérés utilisent l'AI pour créer de nouveaux revenus complémentaires","Les spécialistes intermédiaires gagnent moins, car la précision des prompts reste difficile à fiabiliser","Le bénéfice moyen déclaré est de 5,1/7, avec 42% de gains jugés peu clairs"]}
+]}`,
+  de: `{"cards":[
+  {"title":"U-förmige Gewinne","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI-Produktivitätsgewinne bilden eine U-Form, bei der beide Enden am stärksten profitieren","bullets":["Hochbezahlte Softwaremanager profitieren, weil sie bestehende Arbeit beschleunigen","Geringverdienende nutzen AI, um neue Nebeneinnahmen zu schaffen","Spezialisten in der Mitte gewinnen weniger, weil präzise Prompts schwer zu vertrauen sind","Der gemeldete Durchschnittsnutzen liegt bei 5,1/7; 42% beschreiben die Gewinne als unklar"]}
+]}`,
+  es: `{"cards":[
+  {"title":"Ganancias en forma de U","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"Las mejoras de productividad con AI forman una U: los extremos son quienes más se benefician","bullets":["Los gerentes de software mejor pagados se benefician al acelerar su trabajo existente","Los trabajadores con menores ingresos usan AI para crear nuevas fuentes de ingreso","Los especialistas intermedios ganan menos porque es difícil confiar en la precisión del prompt","El beneficio medio reportado es 5,1/7, con un 42% que describe las ganancias como poco claras"]}
+]}`,
+};
+
+function usesEnglishPromptShell(language: string): boolean {
+  return language !== 'zh' && language !== 'auto';
+}
+
 export function promptLanguageInstruction(language: string): string {
-  if (language === 'en') return 'Write title, gist, and bullets in English.';
-  if (language === 'auto') return 'Write title, gist, and bullets in the main language of the source document.';
-  return '用中文输出 title、gist 和 bullets。';
+  return PROMPT_LANGUAGE_INSTRUCTIONS[language] || PROMPT_LANGUAGE_INSTRUCTIONS.zh;
 }
 
 export function promptSchemaExample(language: string): string {
-  if (language === 'en') {
-    return `{"cards":[
-  {"title":"U-shaped gains","anchor":"Who benefits from AI? Overall, it shifts the score from one to seven","gist":"AI productivity gains form a U shape, with both ends benefiting most","bullets":["Top-paid software managers benefit by accelerating existing work","Low-paid workers use AI to create new side income","Middle-layer specialists gain less because prompt precision is hard to trust","Average reported benefit is 5.1/7, with 42% describing gains as unclear"]}
-]}`;
-  }
-  return `{"cards":[
-  {"title":"U 型收益曲线","anchor":"那谁又会被 AI 所受益？整体来看，它把整个分数变成了一分到七分","gist":"AI 生产力收益呈 U 型，两端受益最大、中间层塌陷","bullets":["最高薪岗位（软件管理）通过加速既有工作受益最大","最低薪岗位（外卖员、园艺工）用 AI 开副业创造新收入","中间层科学家、律师收益最少，部分因对 prompt 精度信任不足","全体均分 5.1/7，42% 报告收益模糊"]}
-]}`;
+  return PROMPT_SCHEMA_EXAMPLES[language] || PROMPT_SCHEMA_EXAMPLES.zh;
 }
 
 export function renderPromptTemplate(template: string, vars: Record<string, string | number>): string {
@@ -34,7 +64,7 @@ function defaultSystemPrompt(
   schema: string,
   example: string,
 ): string {
-  if (language === 'en') {
+  if (usesEnglishPromptShell(language)) {
     return `You are a long-form reading summary assistant. After reading the full document, split it into ${minCards}-${maxCards} natural topic units. They do not need to match markdown headings; use a complete argument or topic as the unit, merging short sections and splitting long ones when needed.
 
 Each card has one guiding sentence plus several bullets. Bullets carry details; gist is the lead-in.
@@ -98,7 +128,7 @@ function systemPromptContract(
   languageInstruction: string,
   schema: string,
 ): string {
-  if (language === 'en') {
+  if (usesEnglishPromptShell(language)) {
     return `Non-overridable output contract:
 - Must output ${minCards}-${maxCards} cards.
 - ${languageInstruction}
@@ -125,7 +155,7 @@ export function buildPrompts(content: string, settings: PluginSettings): PromptP
   const doc =
     content.length > maxDocChars
       ? content.slice(0, maxDocChars) +
-        (promptLanguage === 'en' ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
+        (usesEnglishPromptShell(promptLanguage) ? '\n\n[Document truncated]' : '\n\n[文档过长，已截断]')
       : content;
 
   const schema = '{"cards":[{"title":"...","anchor":"...","gist":"...","bullets":["...","..."]}]}';
@@ -141,6 +171,8 @@ export function buildPrompts(content: string, settings: PluginSettings): PromptP
 ${contract}`
     : defaultSystem;
 
-  const user = promptLanguage === 'en' ? `Source document:\n\n${doc}` : `以下是需要处理的文档全文：\n\n${doc}`;
+  const user = usesEnglishPromptShell(promptLanguage)
+    ? `Source document:\n\n${doc}`
+    : `以下是需要处理的文档全文：\n\n${doc}`;
   return { system, user };
 }

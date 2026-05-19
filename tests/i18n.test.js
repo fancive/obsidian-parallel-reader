@@ -2,11 +2,21 @@ const { assert, t } = require('./test-setup');
 
 assert.strictEqual(t.translate({ uiLanguage: 'zh' }, 'appTitle'), '对照阅读笔记', 'zh translation');
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'appTitle'), 'Parallel Reader', 'en translation');
+assert.strictEqual(t.translate({ uiLanguage: 'ja' }, 'settingTestBackendButton'), 'テスト');
+assert.strictEqual(t.translate({ uiLanguage: 'ko' }, 'settingTestBackendButton'), '테스트');
+assert.strictEqual(t.translate({ uiLanguage: 'fr' }, 'settingTestBackendButton'), 'Tester');
+assert.strictEqual(t.translate({ uiLanguage: 'de' }, 'settingTestBackendButton'), 'Testen');
+assert.strictEqual(t.translate({ uiLanguage: 'es' }, 'settingTestBackendButton'), 'Probar');
 assert.strictEqual(t.translate({ uiLanguage: 'en' }, 'nonexistent_key'), 'nonexistent_key', 'missing key returns key');
 assert.strictEqual(
   t.translate({ uiLanguage: 'en' }, 'cacheClearedAll', { count: 5 }),
   'Cleared 5 cache entries',
   'variable interpolation',
+);
+assert.strictEqual(
+  t.translate({ uiLanguage: 'fr' }, 'cacheClearedAll', { count: 5 }),
+  '5 entrées de cache effacées',
+  'new locale interpolation',
 );
 assert.strictEqual(
   t.translate({ uiLanguage: 'en' }, 'exported', { path: 'foo/bar.md' }),

@@ -13,8 +13,13 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
       prompt.promptLanguageInstruction('auto'),
       'Write title, gist, and bullets in the main language of the source document.',
     );
+    assert.strictEqual(prompt.promptLanguageInstruction('ja'), 'Write title, gist, and bullets in Japanese.');
+    assert.strictEqual(prompt.promptLanguageInstruction('ko'), 'Write title, gist, and bullets in Korean.');
+    assert.strictEqual(prompt.promptLanguageInstruction('fr'), 'Write title, gist, and bullets in French.');
+    assert.strictEqual(prompt.promptLanguageInstruction('de'), 'Write title, gist, and bullets in German.');
+    assert.strictEqual(prompt.promptLanguageInstruction('es'), 'Write title, gist, and bullets in Spanish.');
     assert.strictEqual(
-      prompt.promptLanguageInstruction('fr'),
+      prompt.promptLanguageInstruction('xx'),
       '用中文输出 title、gist 和 bullets。',
       'unknown language falls to zh',
     );
@@ -29,6 +34,11 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     assert.ok(zhExample.includes('"cards"'), 'zh example is JSON-like');
 
     assert.ok(prompt.promptSchemaExample('auto').includes('U 型收益曲线'), 'auto falls to zh example');
+    assert.ok(prompt.promptSchemaExample('ja').includes('U字型の利益'), 'ja example has expected title');
+    assert.ok(prompt.promptSchemaExample('ko').includes('U자형 이득'), 'ko example has expected title');
+    assert.ok(prompt.promptSchemaExample('fr').includes('Gains en U'), 'fr example has expected title');
+    assert.ok(prompt.promptSchemaExample('de').includes('U-förmige Gewinne'), 'de example has expected title');
+    assert.ok(prompt.promptSchemaExample('es').includes('Ganancias en forma de U'), 'es example has expected title');
 
     // ── renderPromptTemplate ──
     assert.strictEqual(prompt.renderPromptTemplate('Hello {name}!', { name: 'World' }), 'Hello World!');
@@ -54,6 +64,19 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     // ── buildPrompts: auto language ──
     const autoResult = prompt.buildPrompts('content', { ...base, promptLanguage: 'auto' });
     assert.ok(autoResult.system.includes('main language'), 'auto language instruction');
+
+    // ── buildPrompts: expanded output languages ──
+    for (const [language, expected] of [
+      ['ja', 'Japanese'],
+      ['ko', 'Korean'],
+      ['fr', 'French'],
+      ['de', 'German'],
+      ['es', 'Spanish'],
+    ]) {
+      const result = prompt.buildPrompts('content', { ...base, promptLanguage: language });
+      assert.ok(result.system.includes(expected), `${language} language instruction`);
+      assert.ok(result.user.includes('Source document:'), `${language} uses provider-facing source prefix`);
+    }
 
     // ── buildPrompts: truncation ──
     const longDoc = 'x'.repeat(25000);

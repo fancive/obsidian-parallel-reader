@@ -15,14 +15,24 @@ const DEFAULT_CLI_TIMEOUT_MS = 300000;
 const MIN_STREAMING_TIMEOUT_MS = 1000;
 const MIN_CLI_TIMEOUT_MS = 1000;
 export const PROMPT_LANGUAGES = {
+  auto: 'Auto-detect',
   zh: '中文',
   en: 'English',
-  auto: 'Auto-detect',
+  ja: '日本語',
+  ko: '한국어',
+  fr: 'Français',
+  de: 'Deutsch',
+  es: 'Español',
 };
 export const UI_LANGUAGES = {
   auto: 'Auto',
   zh: '中文',
   en: 'English',
+  ja: '日本語',
+  ko: '한국어',
+  fr: 'Français',
+  de: 'Deutsch',
+  es: 'Español',
 };
 
 export const DEFAULT_SETTINGS: PluginSettings = {

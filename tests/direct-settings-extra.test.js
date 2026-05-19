@@ -4,6 +4,10 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
   try {
     const settings = await requireBundledModule('src/settings.ts');
     const base = settings.DEFAULT_SETTINGS;
+    const supportedLanguageIds = ['auto', 'zh', 'en', 'ja', 'ko', 'fr', 'de', 'es'];
+
+    assert.deepStrictEqual(Object.keys(settings.PROMPT_LANGUAGES), supportedLanguageIds, 'prompt language order');
+    assert.deepStrictEqual(Object.keys(settings.UI_LANGUAGES), supportedLanguageIds, 'ui language order');
 
     // ── stableStringify ──
     assert.strictEqual(settings.stableStringify(42), '42', 'number');
@@ -98,6 +102,19 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     assert.strictEqual(normed.apiMaxTokens, base.apiMaxTokens, 'invalid apiMaxTokens → default');
     assert.strictEqual(normed.maxDocChars, base.maxDocChars, 'maxDocChars <1000 → default');
     assert.strictEqual(normed.customSystemPrompt, '', 'non-string customSystemPrompt → empty string');
+
+    for (const language of supportedLanguageIds) {
+      assert.strictEqual(
+        settings.normalizeSettings({ ...base, uiLanguage: language }).uiLanguage,
+        language,
+        `normalizeSettings preserves uiLanguage ${language}`,
+      );
+      assert.strictEqual(
+        settings.normalizeSettings({ ...base, promptLanguage: language }).promptLanguage,
+        language,
+        `normalizeSettings preserves promptLanguage ${language}`,
+      );
+    }
 
     // ── pruneCacheEntries edge cases ──
     assert.deepStrictEqual(settings.pruneCacheEntries(null, 10), [], 'null cache');

@@ -28,16 +28,64 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
 
     assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'en' }), 'en');
     assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'zh' }), 'zh');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'ja' }), 'ja');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'ko' }), 'ko');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'fr' }), 'fr');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'de' }), 'de');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'es' }), 'es');
     assert.strictEqual(i18n.resolveUiLanguage(null), 'en');
     assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'en');
 
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const setNavigatorLanguage = (language) => {
+      Object.defineProperty(globalThis, 'navigator', {
+        value: { language },
+        configurable: true,
+      });
+    };
+    try {
+      setNavigatorLanguage('ja-JP');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'ja');
+      setNavigatorLanguage('ko-KR');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'ko');
+      setNavigatorLanguage('fr-CA');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'fr');
+      setNavigatorLanguage('de_DE');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'de');
+      setNavigatorLanguage('es-MX');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'es');
+      setNavigatorLanguage('it-IT');
+      assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'en');
+    } finally {
+      if (originalNavigator) {
+        Object.defineProperty(globalThis, 'navigator', originalNavigator);
+      } else {
+        delete globalThis.navigator;
+      }
+    }
+
     assert.ok(i18n.STRINGS.zh);
     assert.ok(i18n.STRINGS.en);
-    const zhKeys = Object.keys(i18n.STRINGS.zh);
-    const enKeys = Object.keys(i18n.STRINGS.en);
-    assert.strictEqual(zhKeys.length, enKeys.length);
-    for (const key of zhKeys) {
-      assert.ok(i18n.STRINGS.en[key], `en missing key: ${key}`);
+    assert.ok(i18n.STRINGS.ja);
+    assert.ok(i18n.STRINGS.ko);
+    assert.ok(i18n.STRINGS.fr);
+    assert.ok(i18n.STRINGS.de);
+    assert.ok(i18n.STRINGS.es);
+    const supportedLocales = ['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es'];
+    const enKeys = Object.keys(i18n.STRINGS.en).sort();
+    for (const locale of supportedLocales) {
+      const keys = Object.keys(i18n.STRINGS[locale]).sort();
+      assert.deepStrictEqual(keys, enKeys, `${locale} keys must match en`);
+      for (const key of enKeys) {
+        assert.ok(i18n.STRINGS[locale][key], `${locale} empty key: ${key}`);
+      }
+    }
+    for (const locale of ['ja', 'ko', 'fr', 'de', 'es']) {
+      const overrideKeys = Object.keys(i18n.LOCALE_OVERRIDES[locale]).sort();
+      assert.deepStrictEqual(overrideKeys, enKeys, `${locale} raw override keys must match en`);
+      for (const key of enKeys) {
+        assert.ok(i18n.LOCALE_OVERRIDES[locale][key], `${locale} empty raw override: ${key}`);
+      }
     }
 
     console.log('direct i18n tests passed');
