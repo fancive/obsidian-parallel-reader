@@ -6,10 +6,10 @@ import type { PluginSettings } from './types';
 export { LOCALE_OVERRIDES, STRINGS } from './i18n-strings';
 
 function supportedBaseLanguage(value: unknown): string | null {
-  const base = String(value || '')
-    .trim()
-    .toLowerCase()
-    .split(/[-_]/)[0];
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const base = value.trim().toLowerCase().split(/[-_]/)[0];
   return base && STRINGS[base] ? base : null;
 }
 

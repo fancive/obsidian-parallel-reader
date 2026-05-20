@@ -35,6 +35,7 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'es' }), 'es');
     assert.strictEqual(i18n.resolveUiLanguage(null), 'en');
     assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: 'auto' }), 'en');
+    assert.strictEqual(i18n.resolveUiLanguage({ uiLanguage: { toString: () => 'ja' } }), 'en');
 
     const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
     const setNavigatorLanguage = (language) => {
