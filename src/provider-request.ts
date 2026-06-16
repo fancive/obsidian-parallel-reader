@@ -94,8 +94,12 @@ export async function requestJsonBody(
   return responseJson(resp, label, settings);
 }
 
+// Bare `unknown`/`unrecognized` were intentionally dropped: they false-positive on
+// model-name errors ("unknown model", "unrecognized model ID") and trigger a wasted
+// fallback retry. The specific feature tokens + bare `schema` cover real structured-
+// output rejections (e.g. "Unknown field: responseSchema" still matches `schema`).
 const STRUCTURED_OUTPUT_REJECTION_KEYWORDS =
-  /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i;
+  /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|schema/i;
 const STRUCTURED_OUTPUT_FALLBACK_STATUSES = new Set([400, 404, 422]);
 
 export function shouldRetryWithoutStructuredOutput(error: unknown): boolean {

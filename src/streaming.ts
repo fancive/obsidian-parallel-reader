@@ -42,13 +42,14 @@ export function streamErrorMessage(json: Record<string, unknown>): string | null
     if (typeof err.type === 'string' && err.type) return err.type;
     return null;
   };
+  // Anthropic: an explicit error event is an error even if its details are sparse.
   if (json.type === 'error') {
     return messageFromError(json.error) ?? 'Provider returned a streaming error';
   }
-  if (json.error) {
-    return messageFromError(json.error) ?? 'Provider returned a streaming error';
-  }
-  return null;
+  // OpenAI-compatible: { error: { message, type, code } }. Only treat it as an error
+  // when it actually carries a message/type, so a stray empty `error: {}` (or a
+  // code-only object) in an otherwise-normal chunk does not abort the stream.
+  return messageFromError(json.error);
 }
 
 export type DeltaExtractor = (json: Record<string, unknown>) => string;

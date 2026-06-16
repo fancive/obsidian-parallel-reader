@@ -118,6 +118,16 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
       shouldRetryWithoutStructuredOutput(new ProviderApiError('bad request', 400, 'missing required field: model')),
       false,
     );
+    // Model-name errors ("unknown model" / "unrecognized model ID") must NOT trigger a
+    // wasted fallback retry — bare unknown/unrecognized keywords were dropped for this.
+    assert.strictEqual(
+      shouldRetryWithoutStructuredOutput(new ProviderApiError('bad request', 400, 'unknown model: gpt-5')),
+      false,
+    );
+    assert.strictEqual(
+      shouldRetryWithoutStructuredOutput(new ProviderApiError('bad request', 400, 'unrecognized model ID: x')),
+      false,
+    );
     // Legacy path: a plain Error carrying the English template still works (back-compat).
     assert.strictEqual(
       shouldRetryWithoutStructuredOutput(new Error('OpenAI API returned HTTP 400: response_format not supported')),

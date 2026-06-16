@@ -85,10 +85,10 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     );
     assert.strictEqual(streaming.streamErrorMessage({ type: 'error' }), 'Provider returned a streaming error');
     assert.strictEqual(streaming.streamErrorMessage({ error: { message: 'Quota exceeded' } }), 'Quota exceeded');
-    assert.strictEqual(
-      streaming.streamErrorMessage({ error: { code: 'insufficient_quota' } }),
-      'Provider returned a streaming error',
-    );
+    // OpenAI-style error object without a message/type is NOT treated as an error
+    // (avoids aborting a normal chunk that carries a stray empty/code-only `error`).
+    assert.strictEqual(streaming.streamErrorMessage({ error: { code: 'insufficient_quota' } }), null);
+    assert.strictEqual(streaming.streamErrorMessage({ error: {} }), null);
     assert.strictEqual(streaming.streamErrorMessage({ choices: [{ delta: { content: 'hi' } }] }), null);
     assert.strictEqual(streaming.streamErrorMessage({ type: 'content_block_delta', delta: { text: 'x' } }), null);
     assert.strictEqual(streaming.streamErrorMessage({ error: null }), null);
