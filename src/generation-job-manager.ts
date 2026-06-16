@@ -189,6 +189,20 @@ export class GenerationJobManager {
     if (!job) return false;
     return job.cancel();
   }
+
+  /**
+   * Cancel every in-flight job — firing each job's cancel handlers, which abort the
+   * streaming HTTP request and SIGKILL any CLI child process — and reject all queued
+   * waiters. Used on plugin unload so nothing keeps running after teardown. Returns
+   * the total number of jobs and waiters cancelled.
+   */
+  cancelAll(): number {
+    let cancelled = 0;
+    for (const job of this.jobs.values()) {
+      if (job.cancel()) cancelled++;
+    }
+    return cancelled + this.cancelAllWaiters();
+  }
 }
 
 export function classifyGenerationError(error: unknown): ErrorKind {
@@ -216,6 +230,12 @@ export function classifyGenerationError(error: unknown): ErrorKind {
   if (/api key|unauthorized|401|403|认证|权限/i.test(message)) return 'auth';
   if (/timeout|超时|timed out/i.test(message)) return 'timeout';
   if (/429|rate limit|too many requests/i.test(message)) return 'rate-limit';
+  if (
+    /ECONNREFUSED|ENOTFOUND|ENETUNREACH|EAI_AGAIN|ECONNRESET|EHOSTUNREACH|Failed to fetch|NetworkError|net::ERR_|fetch failed/i.test(
+      message,
+    )
+  )
+    return 'network';
   if (
     /非 JSON|非预期输出|没有返回结果|non-JSON|unexpected output|no result|json_schema|schema|structured/i.test(message)
   )

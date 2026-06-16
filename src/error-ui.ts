@@ -11,6 +11,8 @@ interface GenerationErrorContext {
   settings: PluginSettings;
   /** Open the plugin settings tab (best-effort; falls back to no-op if unavailable). */
   openSettings: () => void;
+  /** Re-run the generation that failed (used by retryable error kinds such as network). */
+  onRetry?: () => void;
 }
 
 interface ActionableNoticeAction {
@@ -202,6 +204,17 @@ export function showGenerationError(
         onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
       },
     ]);
+    return;
+  }
+
+  if (kind === 'network') {
+    const actions: ActionableNoticeAction[] = [];
+    if (ctx.onRetry) actions.push({ label: tr('errorActionRetry'), primary: true, onClick: ctx.onRetry });
+    actions.push({
+      label: tr('errorActionCopyDetails'),
+      onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+    });
+    showActionableNotice(tr('errorNoticeNetwork'), actions);
     return;
   }
 

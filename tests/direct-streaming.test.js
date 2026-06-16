@@ -74,6 +74,47 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const empty = streaming.parseSseBuffer('', openAiExtractor);
     assert.deepStrictEqual(empty.deltas, []);
 
+    // ── streamErrorMessage: provider errors delivered as a 200-status SSE payload ──
+    assert.strictEqual(
+      streaming.streamErrorMessage({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }),
+      'Overloaded',
+    );
+    assert.strictEqual(
+      streaming.streamErrorMessage({ type: 'error', error: { type: 'overloaded_error' } }),
+      'overloaded_error',
+    );
+    assert.strictEqual(streaming.streamErrorMessage({ type: 'error' }), 'Provider returned a streaming error');
+    assert.strictEqual(streaming.streamErrorMessage({ error: { message: 'Quota exceeded' } }), 'Quota exceeded');
+    assert.strictEqual(
+      streaming.streamErrorMessage({ error: { code: 'insufficient_quota' } }),
+      'Provider returned a streaming error',
+    );
+    assert.strictEqual(streaming.streamErrorMessage({ choices: [{ delta: { content: 'hi' } }] }), null);
+    assert.strictEqual(streaming.streamErrorMessage({ type: 'content_block_delta', delta: { text: 'x' } }), null);
+    assert.strictEqual(streaming.streamErrorMessage({ error: null }), null);
+
+    // ── parseSseBuffer: surface in-stream provider errors instead of swallowing them ──
+    assert.throws(
+      () =>
+        streaming.parseSseBuffer(
+          'data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n\n',
+          anthropicExtractor,
+        ),
+      /Overloaded/,
+      'anthropic in-stream error must throw, not be swallowed as a non-JSON line',
+    );
+    assert.throws(
+      () => streaming.parseSseBuffer('data: {"error":{"message":"Rate limit reached"}}\n\n', openAiExtractor),
+      /Rate limit reached/,
+      'openai-compatible in-stream error must throw',
+    );
+    // Normal deltas through the same parse path still work.
+    const okAfterError = streaming.parseSseBuffer(
+      'data: {"choices":[{"delta":{"content":"fine"}}]}\n\n',
+      openAiExtractor,
+    );
+    assert.deepStrictEqual(okAfterError.deltas, ['fine']);
+
     // ── streamingRequestUrl ──
     function trackedSignal() {
       const controller = new AbortController();

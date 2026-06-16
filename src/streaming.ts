@@ -26,6 +26,31 @@ function anthropicDelta(json: Record<string, unknown>): string {
   return '';
 }
 
+/**
+ * Detect a provider error delivered as an SSE payload inside an HTTP 200 stream.
+ * These bypass the `response.status >= 400` guard, so without this they would be
+ * extracted as empty deltas and later misreported as "non-JSON LLM output".
+ *   Anthropic:         { type: 'error', error: { type, message } }
+ *   OpenAI-compatible: { error: { message, type, code } }
+ * Returns a human-readable error message for an error payload, or null otherwise.
+ */
+export function streamErrorMessage(json: Record<string, unknown>): string | null {
+  const messageFromError = (value: unknown): string | null => {
+    if (!value || typeof value !== 'object') return null;
+    const err = value as { message?: unknown; type?: unknown };
+    if (typeof err.message === 'string' && err.message) return err.message;
+    if (typeof err.type === 'string' && err.type) return err.type;
+    return null;
+  };
+  if (json.type === 'error') {
+    return messageFromError(json.error) ?? 'Provider returned a streaming error';
+  }
+  if (json.error) {
+    return messageFromError(json.error) ?? 'Provider returned a streaming error';
+  }
+  return null;
+}
+
 export type DeltaExtractor = (json: Record<string, unknown>) => string;
 
 export function deltaExtractorForFormat(format: string): DeltaExtractor | null {
@@ -61,13 +86,18 @@ export function parseSseBuffer(buffer: string, extractDelta: DeltaExtractor): { 
 
     const data = dataLines.join('\n');
     if (data.trim() === '[DONE]') continue;
+    let json: Record<string, unknown>;
     try {
-      const json = JSON.parse(data) as Record<string, unknown>;
-      const delta = extractDelta(json);
-      if (delta) deltas.push(delta);
+      json = JSON.parse(data) as Record<string, unknown>;
     } catch {
-      // skip non-JSON SSE lines
+      continue; // skip non-JSON SSE lines (keep-alives, partial frames)
     }
+    // Provider errors arrive as a 200-status SSE payload — surface them instead of
+    // swallowing them, so a transient overload/quota error is not misreported downstream.
+    const errorMessage = streamErrorMessage(json);
+    if (errorMessage) throw new Error(errorMessage);
+    const delta = extractDelta(json);
+    if (delta) deltas.push(delta);
   }
   return { deltas, rest };
 }

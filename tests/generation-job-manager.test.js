@@ -166,6 +166,38 @@ async function testCancelAllWaiters() {
   assert.strictEqual(manager.waitingCount(), 0);
 }
 
+async function testCancelAll() {
+  const manager = new GenerationJobManager(1);
+  let release;
+  const blocker = new Promise((r) => {
+    release = r;
+  });
+  let runningCancelHook = false;
+
+  const running = manager.start('run.md', async (job) => {
+    job.onCancel(() => {
+      runningCancelHook = true;
+    });
+    await blocker;
+    job.throwIfCancelled();
+    return 'run';
+  });
+  const queued = manager.start('q.md', async () => 'q');
+
+  await new Promise((r) => setTimeout(r, 5));
+  assert.strictEqual(manager.isRunning('run.md'), true, 'one running');
+  assert.strictEqual(manager.waitingCount(), 1, 'one queued');
+
+  const cancelled = manager.cancelAll();
+  assert.strictEqual(cancelled, 2, 'cancelAll cancels the running job and drains the queued waiter');
+  assert.strictEqual(runningCancelHook, true, 'running job cancel handler fired (aborts in-flight HTTP/CLI)');
+
+  release();
+  await assert.rejects(running, GenerationJobCancelledError, 'cancelled running job rejects');
+  await assert.rejects(queued, GenerationJobCancelledError, 'queued job rejects');
+  assert.strictEqual(manager.waitingCount(), 0);
+}
+
 async function testCancelSignalsRunnerAndCleansUp() {
   const manager = new GenerationJobManager();
   let cancelHookCalled = false;
@@ -190,6 +222,12 @@ function testErrorClassification() {
   assert.strictEqual(classifyGenerationError(new Error('API key 未设置')), 'auth');
   assert.strictEqual(classifyGenerationError(new Error('CLI 超时 (120000ms)')), 'timeout');
   assert.strictEqual(classifyGenerationError(new Error('OpenAI API 429: rate limit')), 'rate-limit');
+  assert.strictEqual(
+    classifyGenerationError(new Error('request to https://api failed, reason: ECONNREFUSED')),
+    'network',
+  );
+  assert.strictEqual(classifyGenerationError(new Error('Failed to fetch')), 'network');
+  assert.strictEqual(classifyGenerationError(new Error('getaddrinfo ENOTFOUND api.openai.com')), 'network');
   assert.strictEqual(classifyGenerationError(new Error('LLM 返回非 JSON')), 'schema');
   assert.strictEqual(classifyGenerationError(new Error('Model 未设置')), 'config');
   assert.strictEqual(classifyGenerationError(new Error('something else')), 'unknown');
@@ -200,6 +238,7 @@ function testErrorClassification() {
   await testGlobalConcurrencyLimit();
   await testNoOverbookingDuringRelease();
   await testCancelAllWaiters();
+  await testCancelAll();
   await testCancelSignalsRunnerAndCleansUp();
   testErrorClassification();
   console.log('generation job manager tests passed');

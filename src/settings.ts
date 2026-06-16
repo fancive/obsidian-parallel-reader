@@ -49,7 +49,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   apiMaxTokens: 4096,
   maxDocChars: MAX_DOC_CHARS,
   maxCacheEntries: DEFAULT_MAX_CACHE_ENTRIES,
-  promptLanguage: 'zh',
+  // 'auto' = match the source document's main language, so a new user reading an
+  // English (or any non-Chinese) note gets summaries in that language by default
+  // instead of forced Chinese. Existing users keep whatever they have persisted.
+  promptLanguage: 'auto',
   minCards: 5,
   maxCards: 15,
   customSystemPrompt: '',

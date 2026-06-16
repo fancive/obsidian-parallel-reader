@@ -9,7 +9,7 @@
   <a href="https://github.com/fancive/obsidian-parallel-reader/releases"><img src="https://img.shields.io/github/downloads/fancive/obsidian-parallel-reader/total?style=flat-square&color=4c1" alt="累计下载"></a>
   <a href="https://github.com/fancive/obsidian-parallel-reader/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/fancive/obsidian-parallel-reader/ci.yml?style=flat-square&label=CI" alt="CI 状态"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/fancive/obsidian-parallel-reader?style=flat-square" alt="开源协议"></a>
-  <img src="https://img.shields.io/badge/Obsidian-%E2%89%A5%201.4.0-7c3aed?style=flat-square&logo=obsidian&logoColor=white" alt="Obsidian 1.4+">
+  <img src="https://img.shields.io/badge/Obsidian-%E2%89%A5%201.8.7-7c3aed?style=flat-square&logo=obsidian&logoColor=white" alt="Obsidian 1.8.7+">
 </p>
 
 <p align="center">

@@ -7,7 +7,7 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs watch",
     "typecheck": "tsc --noEmit",
-    "coverage": "c8 node scripts/run-tests.mjs --all; rm -rf .test-bundles",
+    "coverage": "c8 node scripts/run-tests.mjs --all; status=$?; rm -rf .test-bundles; exit $status",
     "lint": "biome check main.ts src/ tests/ scripts/ .e2e/scripts/",
     "lint:fix": "biome check --write main.ts src/ tests/ scripts/ .e2e/scripts/",
     "lint:obsidian": "eslint main.ts src/",
