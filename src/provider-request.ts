@@ -11,6 +11,22 @@ export type RequestUrlFunction = (params: {
   throw?: boolean;
 }) => Promise<{ status: number; json: unknown; text: string }>;
 
+/**
+ * Thrown when a provider responds with HTTP >= 400. Carries the raw status code
+ * and response body so callers can make locale-independent decisions (e.g. the
+ * structured-output fallback) instead of pattern-matching a translated message.
+ */
+export class ProviderApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(message: string, status: number, body: string) {
+    super(message);
+    this.name = 'ProviderApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export function endpointUrl(baseUrl: string, suffixes: string[]) {
   const base = baseUrl.replace(/\/+$/, '');
   for (const suffix of suffixes) {
@@ -65,24 +81,43 @@ export async function requestJsonBody(
   }
 
   if (resp.status >= 400) {
-    throw new Error(
+    throw new ProviderApiError(
       translate(settings || null, 'errorProviderApiStatus', {
         label,
         status: resp.status,
         excerpt: (resp.text || '').slice(0, 500),
       }),
+      resp.status,
+      resp.text || '',
     );
   }
   return responseJson(resp, label, settings);
 }
 
+// Bare `unknown`/`unrecognized` were intentionally dropped: they false-positive on
+// model-name errors ("unknown model", "unrecognized model ID") and trigger a wasted
+// fallback retry. The specific feature tokens + bare `schema` cover real structured-
+// output rejections (e.g. "Unknown field: responseSchema" still matches `schema`).
+const STRUCTURED_OUTPUT_REJECTION_KEYWORDS =
+  /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|schema/i;
+const STRUCTURED_OUTPUT_FALLBACK_STATUSES = new Set([400, 404, 422]);
+
 export function shouldRetryWithoutStructuredOutput(error: unknown): boolean {
+  // Preferred path: decide on the locale-independent HTTP status + raw provider body.
+  // The error message is i18n-translated, so matching it would only work for the two
+  // languages whose templates happen to contain the English/Chinese status phrasing.
+  if (error instanceof ProviderApiError) {
+    if (!STRUCTURED_OUTPUT_FALLBACK_STATUSES.has(error.status)) return false;
+    return (
+      STRUCTURED_OUTPUT_REJECTION_KEYWORDS.test(error.body) || STRUCTURED_OUTPUT_REJECTION_KEYWORDS.test(error.message)
+    );
+  }
+  // Fallback for errors without a status (e.g. wrapped transport failures): keep the
+  // legacy English/Chinese template match so existing behavior is preserved.
   const message = error instanceof Error ? error.message : String(error);
   if (!/(?:API (?:400|404|422):|API returned HTTP (?:400|404|422)|API 返回 HTTP (?:400|404|422))/.test(message))
     return false;
-  return /response_format|json_schema|responseJsonSchema|responseMimeType|tools?|tool_choice|unsupported|unrecognized|unknown|schema/i.test(
-    message,
-  );
+  return STRUCTURED_OUTPUT_REJECTION_KEYWORDS.test(message);
 }
 
 export async function requestJsonBodyWithStructuredFallback(

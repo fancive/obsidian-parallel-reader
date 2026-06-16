@@ -12,5 +12,10 @@
   "excludeAfterRemap": true,
   "reporter": ["text-summary", "text", "html", "json-summary"],
   "reportsDirectory": "coverage",
-  "tempDirectory": "coverage/.tmp"
+  "tempDirectory": "coverage/.tmp",
+  "check-coverage": true,
+  "branches": 100,
+  "statements": 0,
+  "lines": 0,
+  "functions": 0
 }

@@ -34,6 +34,14 @@ export { cardsToMarkdown } from './markdown';
 export { activeSectionLine, nextCardIndex } from './navigation';
 export { buildPrompts } from './prompt';
 export {
+  endpointUrl,
+  ProviderApiError,
+  requestJsonBody,
+  requestJsonBodyWithStructuredFallback,
+  responseJson,
+  shouldRetryWithoutStructuredOutput,
+} from './provider-request';
+export {
   buildAnthropicMessagesBody,
   buildGeminiBody,
   buildOpenAiChatBody,
@@ -58,7 +66,7 @@ export {
   normalizeStreamingTimeoutMs,
   pruneCacheEntries,
 } from './settings';
-export { deltaExtractorForFormat, parseSseBuffer } from './streaming';
+export { deltaExtractorForFormat, parseSseBuffer, streamErrorMessage } from './streaming';
 export { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
 export { folderPathsForTarget } from './vault';
 export { ParallelReaderView } from './view';

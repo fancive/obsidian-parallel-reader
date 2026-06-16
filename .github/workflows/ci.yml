@@ -27,6 +27,12 @@ jobs:
       - name: Lint (Obsidian review rules)
         run: npm run lint:obsidian
 
+      - name: Lint (Obsidian strict review)
+        run: npm run lint:obsidian:review:all
+
+      - name: Coverage (branch threshold)
+        run: npm run coverage
+
       - name: E2E gate
         run: timeout 600 npm run e2e
 

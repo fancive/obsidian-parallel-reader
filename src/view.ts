@@ -76,6 +76,18 @@ export class ParallelReaderView extends ItemView {
     hint.createEl('h3', { text: this.plugin.t('appTitle') });
     hint.createEl('p', { text: this.plugin.t('emptyOpenNote') });
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
+    this.appendSetupNudge(hint);
+  }
+
+  /**
+   * When no credential is configured, append a "set up your AI provider" call-to-action
+   * so a first-run user does not hit a dead-end (Generate → immediate API-key error).
+   */
+  private appendSetupNudge(parent: HTMLElement): boolean {
+    if (this.plugin.isCredentialConfigured()) return false;
+    parent.createEl('p', { cls: 'parallel-reader-setup-hint', text: this.plugin.t('emptyNeedsSetup') });
+    addTextButton(parent, 'settings', this.plugin.t('actionSetupProvider'), () => this.plugin.openSettings());
+    return true;
   }
 
   focusSummaryPane() {
@@ -157,6 +169,7 @@ export class ParallelReaderView extends ItemView {
     hint.createEl('h3', { text: file.basename });
     hint.createEl('p', { text: this.plugin.t('emptyNoCache') });
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
+    this.appendSetupNudge(hint);
     addTextButton(hint, null, this.plugin.t('actionGenerate'), () => {
       if (this.plugin.isGeneratingFile(file)) return;
       void this.plugin.runForFile(file, false);

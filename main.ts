@@ -30,7 +30,14 @@ import { translate } from './src/i18n';
 import { cardsToMarkdown } from './src/markdown';
 import { confirmRegenerateEditedCards } from './src/modal';
 import { createRafThrottledHandler, visibleTopProbeY } from './src/scroll';
-import { cacheEntryMatches, DEFAULT_SETTINGS, normalizeSettings } from './src/settings';
+import {
+  cacheEntryMatches,
+  DEFAULT_SETTINGS,
+  getApiAuthType,
+  getApiKey,
+  isApiBackend,
+  normalizeSettings,
+} from './src/settings';
 import { ParallelReaderSettingTab } from './src/settings-tab';
 import type { StreamProgress } from './src/streaming';
 import type {
@@ -177,7 +184,7 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   onunload() {
-    if (this.jobs) this.jobs.cancelAllWaiters();
+    if (this.jobs) this.jobs.cancelAll();
     this.flushSettingsSave().catch((e: unknown) => console.error('[parallel-reader] flush settings on unload', e));
     this.flushCacheSave().catch((e: unknown) => console.error('[parallel-reader] flush cache on unload', e));
   }
@@ -555,6 +562,9 @@ class ParallelReaderPlugin extends Plugin {
         }
         const rawCards = sections.map((s) => ({ title: s.title, anchor: s.anchor, gist: s.gist, bullets: s.bullets }));
         job.setPhase('saving');
+        // Check BEFORE persisting: a job cancelled during the generate→disk window must not
+        // poison the cache (a later force=false run would otherwise serve the cancelled output).
+        job.throwIfCancelled();
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
         if (view && shouldRender) view.loadFor(file, sections, false);
@@ -568,7 +578,7 @@ class ParallelReaderPlugin extends Plugin {
         outcome = 'generated';
       })
       .catch((e: unknown) => {
-        this.handleGenerationError(e, file, view);
+        this.handleGenerationError(e, file, view, force);
         if (e instanceof GenerationJobAlreadyRunningError) outcome = 'already-running';
         else if (e instanceof GenerationJobCancelledError) outcome = 'cancelled';
         else outcome = 'error';
@@ -590,7 +600,7 @@ class ParallelReaderPlugin extends Plugin {
     };
   }
 
-  private handleGenerationError(e: unknown, file: TFile, view: ParallelReaderView | null) {
+  private handleGenerationError(e: unknown, file: TFile, view: ParallelReaderView | null, force = false) {
     if (e instanceof GenerationJobAlreadyRunningError) {
       new Notice(this.t('generationAlreadyRunning'));
       return;
@@ -608,7 +618,8 @@ class ParallelReaderPlugin extends Plugin {
       {
         app: this.app,
         settings: this.settings,
-        openSettings: () => this.openPluginSettings(),
+        openSettings: () => this.openSettings(),
+        onRetry: () => void this.runForFile(file, force),
       },
       kind,
       e,
@@ -616,7 +627,7 @@ class ParallelReaderPlugin extends Plugin {
     );
   }
 
-  private openPluginSettings(): void {
+  openSettings(): void {
     // Obsidian doesn't expose a typed API for opening a specific plugin tab; use the documented
     // (but technically internal) setting/openTabById path with safe fallbacks.
     const setting = (this.app as unknown as { setting?: { open: () => void; openTabById: (id: string) => void } })
@@ -627,6 +638,23 @@ class ParallelReaderPlugin extends Plugin {
       setting.openTabById(this.manifest.id);
     } catch (err: unknown) {
       console.warn('[parallel-reader] failed to open settings tab', err);
+    }
+  }
+
+  /**
+   * True when the active backend has a usable credential: an API key (direct or via
+   * env var) for API backends, or any keyless/local provider (auth type 'none').
+   * CLI backends authenticate out-of-band (claude/codex login), so they are treated
+   * as configured. Used to show a first-run setup nudge instead of a dead-end.
+   */
+  isCredentialConfigured(): boolean {
+    if (!isApiBackend(this.settings.backend)) return true;
+    try {
+      if (getApiAuthType(this.settings) === 'none') return true;
+      return !!getApiKey(this.settings);
+    } catch {
+      // Settings resolution can throw for half-configured custom providers — treat as not configured.
+      return false;
     }
   }
 

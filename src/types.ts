@@ -96,7 +96,7 @@ export type GenerationPhase =
   | 'done'
   | 'cancelled';
 
-export type ErrorKind = 'auth' | 'timeout' | 'rate-limit' | 'schema' | 'config' | 'cancelled' | 'unknown';
+export type ErrorKind = 'auth' | 'timeout' | 'rate-limit' | 'network' | 'schema' | 'config' | 'cancelled' | 'unknown';
 
 export interface RunForFileOptions {
   rethrowErrors?: boolean;
@@ -159,6 +159,10 @@ export interface PluginHost {
   cache: Record<string, CacheEntry>;
   manifest: PluginManifest;
   t(key: string, vars?: Record<string, string | number>): string;
+  /** Open the plugin's settings tab (best-effort; no-op if the API is unavailable). */
+  openSettings(): void;
+  /** True if a usable credential is configured for the current backend (API key, env var, or keyless local provider). */
+  isCredentialConfigured(): boolean;
   isGeneratingFile(file: TFile | null): boolean;
   cancelGenerationForFile(file: TFile | null): boolean;
   runForFile(

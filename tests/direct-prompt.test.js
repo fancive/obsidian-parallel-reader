@@ -104,9 +104,11 @@ const { assert, requireBundledModule, cleanup } = require('./direct-test-setup')
     const wsCustom = prompt.buildPrompts('doc', { ...base, customSystemPrompt: '   ' });
     assert.ok(wsCustom.system.includes('long-form reading'), 'default prompt used when custom is whitespace-only');
 
-    // ── buildPrompts: invalid promptLanguage falls back ──
+    // ── buildPrompts: invalid promptLanguage falls back to the default ('auto') ──
     const badLang = prompt.buildPrompts('doc', { ...base, promptLanguage: 'xyz' });
-    assert.ok(badLang.system.includes('中文'), 'invalid promptLanguage falls back to zh default');
+    const autoFallback = prompt.buildPrompts('doc', { ...base, promptLanguage: 'auto' });
+    assert.strictEqual(badLang.system, autoFallback.system, 'invalid promptLanguage falls back to the default (auto)');
+    assert.ok(badLang.system.includes('main language'), 'fallback uses the auto language instruction');
 
     // ── buildPrompts: card count normalization ──
     // 0 is falsy so || picks DEFAULT (5), then Math.max(1, 5) = 5

@@ -98,6 +98,10 @@ class FakeElement {
     return this.createEl('div', options);
   }
 
+  createSpan(options = {}) {
+    return this.createEl('span', options);
+  }
+
   addEventListener(type, handler) {
     if (typeof handler !== 'function') return;
     if (!this._listeners.has(type)) this._listeners.set(type, []);
