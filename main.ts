@@ -601,7 +601,7 @@ class ParallelReaderPlugin extends Plugin {
             this.cacheTouch(file.path);
             if (view && shouldRender && this.activeFileStillMatches(file)) {
               view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
-              this.syncActiveFromEditor(this.getActiveView());
+              this.syncActiveFromFile(file);
             }
             outcome = 'cached';
             return;
@@ -631,7 +631,7 @@ class ParallelReaderPlugin extends Plugin {
         job.throwIfCancelled();
         if (view && shouldRender) {
           view.loadFor(file, sections, false);
-          this.syncActiveFromEditor(this.getActiveView());
+          this.syncActiveFromFile(file);
         }
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
@@ -818,7 +818,7 @@ class ParallelReaderPlugin extends Plugin {
     view.loadFor(file, resolveCardAnchors(content, entry.cards), stale);
     // loadFor() cleared the highlight (the file changed); point it at wherever the
     // editor is already scrolled to instead of waiting for the user to scroll.
-    this.syncActiveFromEditor(this.getActiveView());
+    this.syncActiveFromFile(file);
   }
 
   bindScrollSync() {
@@ -863,13 +863,50 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   /**
+   * The Markdown editor showing `file`, resolved from the FILE rather than from whatever
+   * happens to be focused right now.
+   *
+   * "What is active?" is the wrong question at post-load synchronization time.
+   * `ensureView()` reveals — and therefore FOCUSES — the right-side panel, so on the
+   * ribbon/open-view path the active view by then is our own `ItemView` and
+   * `getActiveViewOfType(MarkdownView)` returns null: the panel loaded its cached cards
+   * and highlighted none of them. Resolving from the file is stateless and cannot go
+   * stale when focus moves.
+   *
+   * The active view is consulted only as a fallback, and only when it demonstrably shows
+   * THIS file — for layouts where the file's leaf is not enumerated as a `markdown` leaf.
+   */
+  getMarkdownViewForFile(file: TFile | null): MarkdownView | null {
+    if (!file) return null;
+    const leaf = this.findLeafForFile(file);
+    // findLeafForFile only ever scans `getLeavesOfType('markdown')`, so the view it
+    // returns is a MarkdownView; the cast just narrows the leaf's declared `View` type.
+    if (leaf) return leaf.view as MarkdownView;
+    const active = this.getActiveView();
+    return active?.file?.path === file.path ? active : null;
+  }
+
+  /**
+   * Point the active-card highlight at the editor showing `file`.
+   *
+   * Used by every post-load synchronization (`syncViewToFile`, and both of
+   * `runForFile`'s render points), all of which run AFTER `ensureView()` may have moved
+   * focus to the panel. See `getMarkdownViewForFile` for why they must not ask for the
+   * active view instead.
+   */
+  syncActiveFromFile(file: TFile | null) {
+    this.syncActiveFromEditor(this.getMarkdownViewForFile(file));
+  }
+
+  /**
    * Point the active-card highlight at whatever the editor's viewport currently shows.
    *
    * Extracted from the scroll handler because a scroll EVENT is not the only moment the
    * highlight can be wrong: `loadFor()` resets `activeIdx` to -1 whenever the file
    * changes, so opening or switching to a note with cached cards used to leave every
-   * card unhighlighted until the user physically scrolled. Both `bindScrollSync()` and
-   * `syncViewToFile()` call this directly for that first synchronization.
+   * card unhighlighted until the user physically scrolled. `bindScrollSync()` calls this
+   * directly with the leaf it just bound; every other first-synchronization caller goes
+   * through `syncActiveFromFile()`.
    */
   syncActiveFromEditor(mdView: MarkdownView | null) {
     if (!mdView) return;

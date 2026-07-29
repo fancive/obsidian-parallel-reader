@@ -156,6 +156,9 @@ function makeFakeFile(path) {
   return { path, basename: path.replace(/\.md$/, '') };
 }
 
+/** Lets every pending microtask (and the macrotask turn after it) drain. */
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
 function makeBasePlugin(settings, { view, leaves, vaultRead } = {}) {
   const plugin = new t.ParallelReaderPlugin();
   plugin.settings = settings;
@@ -742,7 +745,11 @@ async function testViewDeleteCard_FileSwitchedMidWrite_DoesNotRepaintNewNote() {
   view.sections = [makeSection('a1', 0), makeSection('a2', 5)];
   view.activeIdx = 1;
 
+  // Card mutations are serialized on a per-view queue, so the write starts on the next
+  // microtask rather than synchronously; let it start before switching notes, which is
+  // what this test is about ("the write is still in flight").
   const pending = view.deleteCard(0);
+  await tick();
 
   // The user opens B.md while the delete's cache write is still in flight.
   const fileB = makeFakeFile('B.md');
@@ -786,7 +793,9 @@ async function testViewUpdateCard_FileSwitchedMidWrite_DoesNotRepaintNewNote() {
   view.sourceFile = makeFakeFile('A.md');
   view.sections = [makeSection('a1', 0)];
 
+  // See the delete variant above: let the queued write start before switching notes.
   const pending = view.updateCard(0, { title: 'a1-edited' });
+  await tick();
 
   const sectionsB = [makeSection('b1', 0)];
   view.sourceFile = makeFakeFile('B.md');
@@ -799,6 +808,147 @@ async function testViewUpdateCard_FileSwitchedMidWrite_DoesNotRepaintNewNote() {
   assert.strictEqual(view.sections, sectionsB, "B.md must keep its own cards after A.md's edit lands");
   assert.strictEqual(view.sections[0].title, 'b1', "A.md's edited title must not leak into B.md");
   assert.strictEqual(renderCalls, rendersBeforeWriteLands, 'a write that lands after a file switch must not repaint');
+}
+
+/* ============================================================
+ * Round-3 review P1 (src/view.ts): two card mutations issued before the first one's
+ * write lands used to compute their replacement arrays from the same untouched
+ * `sections`, so the later (stale) payload silently overwrote the earlier successful
+ * one — and BOTH reported success. Deleting cards 0 and 1 wrote `[b,c]` and then
+ * `[a,c]`, ending at `[a,c]` instead of `[c]`.
+ *
+ * Serializing the CACHE writes cannot fix this: by the time a write is ordered, its
+ * payload was already computed from a stale snapshot. The computation and the
+ * persistence have to share one ordering boundary, in the view.
+ *
+ * The fake below models the real CacheManager: writes are asynchronous, serialized, and
+ * the last payload to arrive is what remains on disk.
+ * ============================================================ */
+function makeSerializedCardStore(view, { failNthWrite = 0 } = {}) {
+  const store = { writes: [], disk: null };
+  view.plugin.cacheReplaceCards = async (path, sections) => {
+    const titles = sections.map((s) => s.title);
+    store.writes.push([path, titles]);
+    const attempt = store.writes.length;
+    await tick(); // a real write is asynchronous
+    if (attempt === failNthWrite) return false;
+    store.disk = titles;
+    return true;
+  };
+  return store;
+}
+
+function makeThreeCardView(plugin) {
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  view.containerEl = { children: [{}, new FakeEl('div')] };
+  view.loadFor(makeFakeFile('A.md'), [makeSection('a', 0), makeSection('b', 10), makeSection('c', 20)], false);
+  return view;
+}
+
+const titlesOf = (sections) => sections.map((s) => s.title);
+
+async function testConcurrentDeletes_BothApply_NeitherIsOverwritten() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin);
+  const store = makeSerializedCardStore(view);
+
+  // The user deletes the first card and then the second card of the list they are
+  // looking at, before the first write has landed.
+  const [firstOk, secondOk] = await Promise.all([view.deleteCard(0), view.deleteCard(1)]);
+
+  assert.strictEqual(firstOk, true, 'the first delete succeeded');
+  assert.strictEqual(secondOk, true, 'the second delete succeeded');
+  assert.deepStrictEqual(
+    store.disk,
+    ['c'],
+    'both deletes must survive: the second must be computed from the first’s result, not from a stale snapshot ' +
+      'that silently resurrects the card the first one deleted',
+  );
+  assert.deepStrictEqual(titlesOf(view.sections), ['c'], 'the panel must show what was actually persisted');
+}
+
+async function testConcurrentUpdateAndDelete_BothApply() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin);
+  const store = makeSerializedCardStore(view);
+
+  const [updated, deleted] = await Promise.all([view.updateCard(0, { title: 'a-edited' }), view.deleteCard(1)]);
+
+  assert.strictEqual(updated, true, 'the edit succeeded');
+  assert.strictEqual(deleted, true, 'the delete succeeded');
+  assert.deepStrictEqual(
+    store.disk,
+    ['a-edited', 'c'],
+    'a delete racing an edit of a different card must not roll the edit back',
+  );
+  assert.deepStrictEqual(titlesOf(view.sections), ['a-edited', 'c'], 'the panel must show what was actually persisted');
+}
+
+/**
+ * The same overwrite, arriving through the file-switch door: both deletes are requested
+ * while A.md is showing, but the user opens B.md while the first write is in flight. The
+ * queued second mutation can no longer read A's state off the view — it must inherit it
+ * from the link that ran before it, or it recomputes from the pre-first-delete snapshot
+ * and resurrects the deleted card on disk.
+ */
+async function testConcurrentDeletes_FileSwitchesMidQueue_SecondInheritsTheFirstsResult() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin);
+  const writes = [];
+  let disk = null;
+  let releaseFirstWrite = null;
+  plugin.cacheReplaceCards = async (path, sections) => {
+    const titles = sections.map((s) => s.title);
+    writes.push([path, titles]);
+    if (writes.length === 1) {
+      await new Promise((resolve) => {
+        releaseFirstWrite = resolve;
+      });
+    } else {
+      await tick();
+    }
+    disk = titles;
+    return true;
+  };
+
+  const first = view.deleteCard(0);
+  const second = view.deleteCard(1);
+  await tick(); // the first delete's write is now in flight
+
+  // The user opens B.md before A.md's first write lands.
+  view.loadFor(makeFakeFile('B.md'), [makeSection('b1', 0)], false);
+  releaseFirstWrite();
+  const [firstOk, secondOk] = await Promise.all([first, second]);
+
+  assert.strictEqual(firstOk, true, 'the first delete was persisted for the note it started on');
+  assert.strictEqual(secondOk, true, 'so was the second');
+  assert.deepStrictEqual(
+    writes,
+    [
+      ['A.md', ['b', 'c']],
+      ['A.md', ['c']],
+    ],
+    'both writes target A.md, and the second payload is computed from the first’s result',
+  );
+  assert.deepStrictEqual(disk, ['c'], 'A.md ends with both deletes applied, not with the first one undone');
+  assert.deepStrictEqual(titlesOf(view.sections), ['b1'], 'and neither write may repaint B.md');
+}
+
+async function testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin);
+  const store = makeSerializedCardStore(view, { failNthWrite: 2 });
+
+  const [firstOk, secondOk] = await Promise.all([view.deleteCard(0), view.deleteCard(1)]);
+
+  assert.strictEqual(firstOk, true, 'the first delete persisted and must still report success');
+  assert.strictEqual(secondOk, false, 'the delete whose write failed must report failure');
+  assert.deepStrictEqual(store.disk, ['b', 'c'], 'disk keeps the first delete and nothing of the failed second');
+  assert.deepStrictEqual(
+    titlesOf(view.sections),
+    ['b', 'c'],
+    'a failed mutation must roll back only itself — it may not undo the mutation that already committed',
+  );
 }
 
 /* ============================================================
@@ -895,6 +1045,97 @@ async function testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent() {
     view.activeIdx,
     1,
     'opening a note with cached cards must highlight the card at the editor viewport top, with no scroll event',
+  );
+}
+
+/* ============================================================
+ * Round-3 review P1 (main.ts): the post-load synchronization asked the workspace for
+ * the ACTIVE Markdown view — but `ensureView()` reveals and FOCUSES the right-side
+ * panel first, so by the time the sync runs the active view is our own ItemView and
+ * `getActiveViewOfType(MarkdownView)` returns null. The panel loaded its cached cards
+ * and highlighted none of them, on the two most common entry points (ribbon/open-view
+ * toggle, and a run that hits the cache).
+ *
+ * These drive the REAL entry points end to end — `toggleParallelView()` and
+ * `runForFile()`, both through `ensureView()` — against a workspace that models the
+ * focus steal. Calling `syncActiveFromEditor` by hand cannot see this bug at all: the
+ * defect is entirely in WHICH editor the caller hands it.
+ * ============================================================ */
+function makeFocusStealingPanel({ topLineNumber = 13 } = {}) {
+  const settings = makeSettings();
+  const content = Array.from({ length: 30 }, (_, i) => (i === 2 ? 'Alpha' : i === 12 ? 'Beta' : `filler ${i}`)).join(
+    '\n',
+  );
+  const plugin = makeBasePlugin(settings);
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  view.containerEl = { children: [{}, new FakeEl('div')] };
+
+  const file = makeFakeFile('B.md');
+  const mdView = makeFakeEditorMdView(file, makeFakeEditorScrollDom(), topLineNumber);
+  const markdownLeaf = { view: mdView };
+  const state = { panelOpen: false, panelFocused: false };
+  const panelLeaf = {
+    view,
+    setViewState: async () => {
+      state.panelOpen = true;
+    },
+  };
+
+  plugin.app.workspace.getLeavesOfType = (type) => {
+    if (type === 'markdown') return [markdownLeaf];
+    return state.panelOpen ? [panelLeaf] : [];
+  };
+  plugin.app.workspace.getRightLeaf = () => panelLeaf;
+  plugin.app.workspace.revealLeaf = async () => {
+    state.panelFocused = true;
+  };
+  // The real `getActiveViewOfType(MarkdownView)` returns null once our own ItemView is
+  // the active view — which is precisely what revealing the right-side panel causes.
+  plugin.getActiveView = () => (state.panelFocused ? null : mdView);
+  plugin.getParallelView = () => (state.panelOpen ? view : undefined);
+  plugin.app.vault.read = async () => content;
+  plugin.cacheManager.get = () => ({
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    contentHash: hashContent(content),
+    settingsHash: generationFingerprint(settings),
+    cards: [
+      { title: 'Alpha', anchor: 'Alpha', gist: '', bullets: [] },
+      { title: 'Beta', anchor: 'Beta', gist: '', bullets: [] },
+    ],
+    generatedAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  return { plugin, view, file, state };
+}
+
+async function testToggleParallelView_CachedCards_HighlightsCardAfterPanelTakesFocus() {
+  const { plugin, view, state } = makeFocusStealingPanel();
+
+  await plugin.toggleParallelView();
+
+  assert.strictEqual(state.panelFocused, true, 'sanity: opening the panel reveals (and therefore focuses) it');
+  assert.strictEqual(view.sections.length, 2, 'sanity: the cached cards were loaded into the panel');
+  assert.strictEqual(
+    view.activeIdx,
+    1,
+    'opening the panel over a note with cached cards must highlight the card the editor is already sitting on — ' +
+      'the sync must resolve the editor from the FILE, not from whatever is focused after the panel steals focus',
+  );
+  assert.ok(view.cards[1].hasClass('is-active'), 'the synchronized card must carry is-active');
+}
+
+async function testRunForFile_CacheHit_HighlightsCardAfterPanelTakesFocus() {
+  const { plugin, view, file, state } = makeFocusStealingPanel();
+
+  const result = await plugin.runForFile(file, false);
+
+  assert.strictEqual(result, 'cached', 'sanity: the run hit the cache');
+  assert.strictEqual(state.panelFocused, true, 'sanity: the run opened (and focused) the panel via ensureView');
+  assert.strictEqual(view.sections.length, 2, 'sanity: the cached cards were loaded into the panel');
+  assert.strictEqual(
+    view.activeIdx,
+    1,
+    'a run that opens the panel and lands on the cache must still highlight the card at the editor viewport top',
   );
 }
 
@@ -1229,8 +1470,14 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testViewUpdateCard_PersistThrows_RollsBack();
   await testViewDeleteCard_FileSwitchedMidWrite_DoesNotRepaintNewNote();
   await testViewUpdateCard_FileSwitchedMidWrite_DoesNotRepaintNewNote();
+  await testConcurrentDeletes_BothApply_NeitherIsOverwritten();
+  await testConcurrentUpdateAndDelete_BothApply();
+  await testConcurrentDeletes_FileSwitchesMidQueue_SecondInheritsTheFirstsResult();
+  await testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself();
   testBindScrollSync_SyncsActiveCardWithoutAnyScrollEvent();
   await testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent();
+  await testToggleParallelView_CachedCards_HighlightsCardAfterPanelTakesFocus();
+  await testRunForFile_CacheHit_HighlightsCardAfterPanelTakesFocus();
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
   await testClickSuppression_DoesNotLeakAcrossAFileSwitch();

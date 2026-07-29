@@ -522,38 +522,126 @@ export class ParallelReaderView extends ItemView {
     return this.sourceFile?.path === sourcePath;
   }
 
-  async deleteCard(index: number) {
-    if (!this.sourceFile) return false;
-    const sourcePath = this.sourceFile.path;
-    const nextSections = removeCardAt(this.sections, index);
-    if (nextSections.length === this.sections.length) return false;
-    const previousLength = this.sections.length;
-    const nextActiveIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
+  /**
+   * Runs card mutations one at a time, so that computing a replacement array,
+   * persisting it, and committing the visible state form ONE ordered step.
+   *
+   * Two mutations issued before the first one's write landed used to compute their
+   * payloads from the same untouched `sections` array and then race: the later, stale
+   * payload silently overwrote the earlier successful one, and BOTH reported success
+   * (deleting cards 0 and 1 wrote `[b,c]` and then `[a,c]`, ending at `[a,c]` instead of
+   * `[c]`). Serializing the cache writes cannot fix that — by the time a write is
+   * ordered, its payload was computed from a snapshot that is already stale. The
+   * computation and the persistence have to share a single ordering boundary, and this
+   * queue is it.
+   *
+   * Deadlock safety: a link only ever awaits `plugin.cacheReplaceCards`, i.e.
+   * CacheManager's own transaction queue. CacheManager never calls back into the view —
+   * its transaction bodies touch only its lock-free internals and the vault adapter — so
+   * no cache transaction can wait on this queue while this queue waits on it. The
+   * dependency is strictly one-way: view queue → cache queue.
+   *
+   * Invariant: the tail never rejects, so one failed mutation cannot wedge every later
+   * one. Each caller still sees its own outcome through the promise it is handed.
+   */
+  private cardMutationQueue: Promise<void> = Promise.resolve();
 
-    // Await the cache write BEFORE touching any visible state. `sections` and
-    // `removeCardAt`/`updateCardAt`'s outputs are always fresh arrays (never
-    // mutated in place), so `this.sections` still holds the untouched
-    // previous value at this point — nothing to "restore" if the write fails,
-    // because nothing was changed yet (S8, hole 2).
+  /**
+   * The card array this queue last treated as authoritative, and for which note.
+   *
+   * Consulted ONLY when the panel moved to a different note while a mutation was still
+   * queued: the view no longer holds that note's cards, but the link that ran before
+   * this one does. On a successful write this is the array that was persisted; on a
+   * failed one it is the array the write was computed from, which is what disk still
+   * holds.
+   */
+  private lastMutationState: { path: string; sections: ResolvedCard[] } | null = null;
+
+  private enqueueCardMutation(task: () => Promise<boolean>): Promise<boolean> {
+    const run = this.cardMutationQueue.then(task);
+    this.cardMutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * The array a queued mutation must compute from at the moment it actually runs.
+   *
+   * Normally the view's own `sections`: every mutation that ran before this one already
+   * committed into it, which is exactly what makes the second of two concurrent edits
+   * see the first one's result instead of a stale snapshot. `snapshot` (the array the
+   * user was looking at when they acted) is the last resort, for a mutation whose note
+   * left the panel before it could run and that has no predecessor to inherit from.
+   */
+  private cardMutationBase(sourcePath: string, snapshot: ResolvedCard[]): ResolvedCard[] {
+    if (this.stillShowing(sourcePath)) return this.sections;
+    if (this.lastMutationState?.path === sourcePath) return this.lastMutationState.sections;
+    return snapshot;
+  }
+
+  /**
+   * Persist `nextSections` for `sourcePath` and record what the queue should treat as
+   * authoritative afterwards. Never throws: a rejected write is reported as `false`, so
+   * the caller leaves every piece of visible state untouched (S8, hole 2).
+   */
+  private async persistCards(
+    sourcePath: string,
+    base: ResolvedCard[],
+    nextSections: ResolvedCard[],
+    failureLabel: string,
+  ): Promise<boolean> {
     let ok = false;
     try {
       ok = await this.plugin.cacheReplaceCards(sourcePath, nextSections);
     } catch (e: unknown) {
-      console.error('[parallel-reader] failed to persist card delete', e);
+      console.error(failureLabel, e);
       ok = false;
     }
-    if (!ok) {
-      new Notice(this.plugin.t('cardPersistFailed'));
-      return false;
-    }
+    this.lastMutationState = { path: sourcePath, sections: ok ? nextSections : base };
+    return ok;
+  }
 
-    new Notice(this.plugin.t('cardDeleted'));
-    // The write above is committed either way; only the visible state is conditional.
-    if (!this.stillShowing(sourcePath)) return true;
-    this.sections = nextSections;
-    this.activeIdx = nextActiveIdx;
-    this.render();
-    return true;
+  async deleteCard(index: number): Promise<boolean> {
+    if (!this.sourceFile) return false;
+    const sourcePath = this.sourceFile.path;
+    // Capture WHICH card the user acted on (by identity) and the list they saw it in,
+    // synchronously, before anything is awaited. Positions shift under a mutation that
+    // runs first; the card the user right-clicked does not.
+    const snapshot = this.sections;
+    const target = snapshot[index];
+    if (!target) return false;
+
+    return this.enqueueCardMutation(async () => {
+      const base = this.cardMutationBase(sourcePath, snapshot);
+      const targetIdx = base.indexOf(target);
+      // Already removed by a mutation that ran first — nothing left to delete.
+      if (targetIdx < 0) return false;
+      const nextSections = removeCardAt(base, targetIdx);
+
+      // Await the cache write BEFORE touching any visible state. `removeCardAt`/
+      // `updateCardAt` always return fresh arrays (never mutate in place), so nothing is
+      // changed yet and a failed write has nothing to restore (S8, hole 2).
+      const ok = await this.persistCards(
+        sourcePath,
+        base,
+        nextSections,
+        '[parallel-reader] failed to persist card delete',
+      );
+      if (!ok) {
+        new Notice(this.plugin.t('cardPersistFailed'));
+        return false;
+      }
+
+      new Notice(this.plugin.t('cardDeleted'));
+      // The write above is committed either way; only the visible state is conditional.
+      if (!this.stillShowing(sourcePath)) return true;
+      this.activeIdx = activeIndexAfterCardDelete(targetIdx, base.length, this.activeIdx);
+      this.sections = nextSections;
+      this.render();
+      return true;
+    });
   }
 
   openEditCardModal(index: number) {
@@ -564,31 +652,38 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  async updateCard(index: number, patch: CardPatch) {
+  async updateCard(index: number, patch: CardPatch): Promise<boolean> {
     if (!this.sourceFile) return false;
     const sourcePath = this.sourceFile.path;
-    const nextSections = updateCardAt(this.sections, index, patch);
-    if (nextSections.length !== this.sections.length) return false;
+    // Same identity capture + queue as deleteCard (see the comments there).
+    const snapshot = this.sections;
+    const target = snapshot[index];
+    if (!target) return false;
 
-    // Same await-before-mutate ordering as deleteCard (see comment there).
-    let ok = false;
-    try {
-      ok = await this.plugin.cacheReplaceCards(sourcePath, nextSections);
-    } catch (e: unknown) {
-      console.error('[parallel-reader] failed to persist card update', e);
-      ok = false;
-    }
-    if (!ok) {
-      new Notice(this.plugin.t('cardPersistFailed'));
-      return false;
-    }
+    return this.enqueueCardMutation(async () => {
+      const base = this.cardMutationBase(sourcePath, snapshot);
+      const targetIdx = base.indexOf(target);
+      if (targetIdx < 0) return false;
+      const nextSections = updateCardAt(base, targetIdx, patch);
 
-    new Notice(this.plugin.t('cardSaved'));
-    // See deleteCard: the note may have changed under the await.
-    if (!this.stillShowing(sourcePath)) return true;
-    this.sections = nextSections;
-    this.render();
-    return true;
+      const ok = await this.persistCards(
+        sourcePath,
+        base,
+        nextSections,
+        '[parallel-reader] failed to persist card update',
+      );
+      if (!ok) {
+        new Notice(this.plugin.t('cardPersistFailed'));
+        return false;
+      }
+
+      new Notice(this.plugin.t('cardSaved'));
+      // See deleteCard: the note may have changed under the await.
+      if (!this.stillShowing(sourcePath)) return true;
+      this.sections = nextSections;
+      this.render();
+      return true;
+    });
   }
 
   async exportToVault() {
