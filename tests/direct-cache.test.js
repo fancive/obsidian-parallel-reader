@@ -299,6 +299,88 @@ function createFakeAdapter() {
     await scheduleManager.flush();
     assert.strictEqual(scheduleAdapter.files.has(scheduleManager.filePath()), false, 'flush is no-op when not dirty');
 
+    // ── CacheManager.touch(): N touches coalesce into exactly one adapter write ──
+    // This replaces two architecture.test.js regex guards that could never match (they
+    // grepped main.ts for `this.saveCache` and `cacheManager.cache[`, neither of which
+    // main.ts contains — it delegates entirely to CacheManager). The real invariant those
+    // guards were pretending to enforce — touching the cache debounces its write instead of
+    // writing synchronously — is asserted behaviorally here, using a fake `activeWindow`
+    // clock instead of real timers so the test doesn't depend on wall-clock time and can
+    // fire the debounce deterministically.
+    {
+      const debounceAdapter = createFakeAdapter();
+      const debounceManager = new cacheManagerModule.CacheManager(
+        debounceAdapter,
+        '.obsidian',
+        'parallel-reader',
+        () => settings.DEFAULT_SETTINGS,
+      );
+      debounceManager.cache = {
+        'debounce.md': {
+          schemaVersion: 2,
+          contentHash: 'x',
+          settingsHash: 'x',
+          cards: [],
+          generatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      };
+
+      // CacheManager reads the debounce delay/timer off the ambient `activeWindow` global
+      // (polyfilled to real Node timers by direct-test-setup.js). Swap in a fake clock for
+      // the duration of this block so we control exactly when the debounce "fires" instead
+      // of waiting out a real 5000ms delay.
+      const originalActiveWindow = globalThis.activeWindow;
+      let nextTimerId = 1;
+      const pendingTimers = new Map();
+      globalThis.activeWindow = {
+        setTimeout: (fn) => {
+          const id = nextTimerId++;
+          pendingTimers.set(id, fn);
+          return id;
+        },
+        clearTimeout: (id) => {
+          pendingTimers.delete(id);
+        },
+      };
+
+      let writeCount = 0;
+      const originalWrite = debounceAdapter.write;
+      debounceAdapter.write = async (filePath, content) => {
+        writeCount++;
+        return originalWrite(filePath, content);
+      };
+
+      // Capture the promise CacheManager's internal (fire-and-forget) `this.save().catch(...)`
+      // produces, so the test can await the actual persisted write instead of racing it.
+      let lastSavePromise = null;
+      const originalSave = debounceManager.save.bind(debounceManager);
+      debounceManager.save = () => {
+        lastSavePromise = originalSave();
+        return lastSavePromise;
+      };
+
+      try {
+        for (let i = 0; i < 5; i++) {
+          debounceManager.touch('debounce.md');
+        }
+        assert.strictEqual(pendingTimers.size, 1, '5 touches schedule exactly one pending debounce timer');
+        assert.strictEqual(writeCount, 0, 'touch() must not write to the adapter synchronously');
+
+        const [[timerId, fireTimer]] = pendingTimers;
+        pendingTimers.delete(timerId);
+        fireTimer(); // simulate the fake clock elapsing past the debounce delay
+        await lastSavePromise;
+
+        assert.strictEqual(writeCount, 1, '5 cacheTouch-equivalent calls produce exactly one adapter write');
+        assert.ok(
+          JSON.parse(debounceAdapter.files.get(debounceManager.filePath())).entries['debounce.md'].lastAccessedAt,
+          'the single write reflects the touched entry',
+        );
+      } finally {
+        globalThis.activeWindow = originalActiveWindow;
+      }
+    }
+
     // ── readFile drops malformed entries (cards not array / bullets not array) ──
     {
       const validateAdapter = createFakeAdapter();
