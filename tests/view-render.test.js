@@ -10,6 +10,85 @@ const { CACHE_SCHEMA_VERSION, generationFingerprint } = t;
 const crypto = require('crypto');
 const hashContent = (text) => crypto.createHash('sha1').update(text, 'utf8').digest('hex');
 
+// The real ParallelReaderView.renderCard click handler reads `window.getSelection()`
+// (to skip clicks that are actually text-selection drags). Node has no `window`;
+// Obsidian's Electron renderer does. Polyfill just enough to exercise the handler.
+if (typeof globalThis.window === 'undefined') {
+  globalThis.window = { getSelection: () => ({ toString: () => '' }) };
+}
+
+/**
+ * Minimal fake DOM element supporting the subset of Obsidian's HTMLElement
+ * extensions (createDiv/createEl/createSpan/addClass/removeClass/dataset/
+ * addEventListener) that ParallelReaderView's render path uses. Obsidian's real
+ * mock in obsidian-mock.js only stubs `containerEl.children` as plain `{}`
+ * objects, which is enough for tests that stub `view.render`, but the S3
+ * card-highlight regressions only manifest through a REAL render (is-active
+ * classes, real card element identity), so this fixture drives that render.
+ */
+class FakeEl {
+  constructor(tag = 'div') {
+    this.tagName = tag.toUpperCase();
+    this.children = [];
+    this._classes = new Set();
+    this.dataset = {};
+    this._listeners = {};
+    this.textContent = '';
+  }
+  createDiv(opts = {}) {
+    return this._append('div', opts);
+  }
+  createEl(tag, opts = {}) {
+    return this._append(tag, opts);
+  }
+  createSpan(opts = {}) {
+    return this._append('span', opts);
+  }
+  _append(tag, opts) {
+    const el = new FakeEl(tag);
+    if (opts.cls) el.addClass(opts.cls);
+    if (opts.text != null) el.textContent = opts.text;
+    if (opts.title) el.title = opts.title;
+    this.children.push(el);
+    return el;
+  }
+  empty() {
+    this.children = [];
+  }
+  addClass(cls) {
+    this._classes.add(cls);
+  }
+  removeClass(cls) {
+    this._classes.delete(cls);
+  }
+  hasClass(cls) {
+    return this._classes.has(cls);
+  }
+  addEventListener(type, handler) {
+    if (!this._listeners[type]) this._listeners[type] = [];
+    this._listeners[type].push(handler);
+  }
+  removeEventListener(type, handler) {
+    const arr = this._listeners[type];
+    if (!arr) return;
+    const i = arr.indexOf(handler);
+    if (i >= 0) arr.splice(i, 1);
+  }
+  dispatch(type, evtOverrides = {}) {
+    const handlers = this._listeners[type] || [];
+    const e = { target: this, preventDefault() {}, stopPropagation() {}, ...evtOverrides };
+    for (const h of handlers) h(e);
+  }
+  scrollIntoView() {}
+  querySelector() {
+    return null;
+  }
+  setAttr(k, v) {
+    this[k] = v;
+  }
+  focus() {}
+}
+
 // Settings used by all tests in this file. Anthropic backend by default so we
 // never accidentally hit any HTTP code path — the cache-hit path returns before
 // summarizeDocument is called.
@@ -513,6 +592,115 @@ async function testRefreshViewAfterCacheClear_NoView() {
   plugin.refreshViewAfterCacheClear();
 }
 
+/* ============================================================
+ * S3: card highlight — stale on file switch, stolen on click.
+ * loadFor(file, sections, stale) must reset activeIdx to -1 (and clear any
+ * stale `cards` element references) exactly when the incoming file differs
+ * from the one currently shown — never on an ordinary same-file refresh,
+ * or scroll-sync position would be lost on every regenerate.
+ * ============================================================ */
+async function testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile() {
+  const plugin = makeBasePlugin(makeSettings());
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  view.render = () => {}; // asserting on state directly; DOM not needed here
+
+  const fileA = makeFakeFile('A.md');
+  const fileB = makeFakeFile('B.md');
+  const sectionsA = [
+    { title: 'a1', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
+    { title: 'a2', anchor: '', gist: '', bullets: [], startLine: 5, level: 0 },
+  ];
+  const sectionsB = [{ title: 'b1', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+
+  view.loadFor(fileA, sectionsA, false);
+  view.activeIdx = 1; // simulate scroll-sync having highlighted card #2 of note A
+  view.cards = ['stale-card-el-from-note-A']; // simulate leftover DOM refs from note A's render
+
+  view.loadFor(fileB, sectionsB, false);
+  assert.strictEqual(view.activeIdx, -1, "switching notes must reset activeIdx (was stuck highlighting note A's card)");
+  assert.deepStrictEqual(view.cards, [], 'switching notes must clear stale card element references too');
+
+  // Ordinary refresh/regenerate of the SAME file (e.g. after an edit) must NOT
+  // reset activeIdx, or scroll-sync position would be lost on every refresh.
+  view.activeIdx = 0;
+  view.loadFor(fileB, sectionsB, false);
+  assert.strictEqual(view.activeIdx, 0, 'reloading the same file must preserve activeIdx');
+}
+
+/* ============================================================
+ * S3: clicking a card must own the highlight — both immediately (before the
+ * editor even scrolls) and durably (the scroll-sync handler's centered-scroll
+ * probe must not steal it back to the preceding card for a short window).
+ * ============================================================ */
+async function testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard() {
+  const plugin = makeBasePlugin(makeSettings());
+  const scrollCalls = [];
+  plugin.scrollEditorToLine = async (line, file) => {
+    scrollCalls.push([line, file?.path]);
+  };
+
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  const rootEl = new FakeEl('div');
+  view.containerEl = { children: [{}, rootEl] };
+  plugin.getParallelView = () => view;
+
+  const file = makeFakeFile('A.md');
+  const sections = [
+    { title: 'c0', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
+    { title: 'c1', anchor: '', gist: '', bullets: [], startLine: 10, level: 0 },
+    { title: 'c2', anchor: '', gist: '', bullets: [], startLine: 20, level: 0 },
+  ];
+  view.loadFor(file, sections, false); // real render — populates view.cards with FakeEl instances
+  assert.strictEqual(view.cards.length, 3, 'sanity check: three cards rendered');
+
+  // Click card #2 (the last card).
+  view.cards[2].dispatch('click');
+
+  assert.strictEqual(scrollCalls.length, 1, 'click must trigger exactly one scroll-to-line call');
+  assert.deepStrictEqual(scrollCalls[0], [20, 'A.md'], "click scrolls to the clicked card's line");
+  assert.strictEqual(
+    view.activeIdx,
+    2,
+    'click must set the CLICKED card active immediately, before the scroll resolves',
+  );
+  assert.ok(view.cards[2].hasClass('is-active'), 'clicked card must carry is-active synchronously');
+  assert.ok(!view.cards[1].hasClass('is-active'), 'preceding card must not be highlighted after the click');
+  assert.ok(view.isScrollSyncSuppressed(), 'click must arm the scroll-sync suppression window');
+
+  // Simulate main.ts's handleEditorScroll firing right after — as it would once
+  // editor.scrollIntoView's CENTERED landing point resolves near the TOP of the
+  // viewport, inside the PRECEDING card's (index 1) line range. This is the
+  // exact mechanism that used to steal the highlight back (S3 bug 2).
+  const mdView = {
+    file,
+    editor: {
+      cm: {
+        scrollDOM: { getBoundingClientRect: () => ({ top: 0, height: 400, left: 0 }) },
+        posAtCoords: () => 1,
+        state: { doc: { lineAt: () => ({ number: 11 }) } }, // -> topLine 10 -> resolves to card index 1
+      },
+    },
+  };
+
+  plugin.handleEditorScroll(mdView);
+  assert.strictEqual(
+    view.activeIdx,
+    2,
+    'while suppressed, scroll-sync must NOT steal the highlight back to the preceding card',
+  );
+
+  // Once the suppression window elapses, scroll-sync must resume normally — a
+  // timestamp deadline (not a boolean latch) so a scroll event that never
+  // arrives cannot wedge sync off forever.
+  view.scrollSyncSuppressedUntil = Date.now() - 1;
+  assert.ok(!view.isScrollSyncSuppressed(), 'suppression must self-expire once the deadline passes');
+
+  plugin.handleEditorScroll(mdView);
+  assert.strictEqual(view.activeIdx, 1, 'after suppression expires, scroll-sync resumes reassigning as normal');
+}
+
 (async () => {
   await testShouldRender_NonSilent_FreshView();
   await testShouldRender_NonSilent_DifferentFile();
@@ -535,6 +723,8 @@ async function testRefreshViewAfterCacheClear_NoView() {
   await testViewDeleteCard_PersistFails_ReturnsFalse();
   await testViewDeleteCard_PersistOk_ReturnsTrue();
   await testViewUpdateCard_PersistFails_ReturnsFalse();
+  await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
+  await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
   console.log('view-render tests passed');
 })().catch((e) => {
   console.error(e);

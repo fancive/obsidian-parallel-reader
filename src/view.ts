@@ -11,6 +11,18 @@ import { ensureVaultFolder, normalizeVaultPath } from './vault';
 
 export const VIEW_TYPE_PARALLEL = 'parallel-reader-view';
 
+/**
+ * How long (ms) to ignore scroll-sync reassignment after a card click drives an
+ * editor scroll. `editor.scrollIntoView(..., true)` centers the target line, so
+ * the scroll handler's near-top probe (see `visibleTopProbeY` in scroll.ts) can
+ * land inside the PRECEDING card's line range and steal the highlight straight
+ * back from the card the user just clicked. A short window absorbs that one
+ * scroll event. A timestamp deadline is used rather than a boolean latch: if the
+ * expected scroll event never fires, a boolean would leave the view permanently
+ * desynced, whereas a deadline self-expires and can never wedge sync forever.
+ */
+const SCROLL_SYNC_CLICK_SUPPRESS_MS = 400;
+
 export class ParallelReaderView extends ItemView {
   plugin: PluginHost;
   sections: ResolvedCard[];
@@ -22,6 +34,8 @@ export class ParallelReaderView extends ItemView {
   errorMessage = '';
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private keydownTarget: Element | null = null;
+  /** Date.now()-based deadline; see SCROLL_SYNC_CLICK_SUPPRESS_MS. */
+  private scrollSyncSuppressedUntil = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: PluginHost) {
     super(leaf);
@@ -64,9 +78,25 @@ export class ParallelReaderView extends ItemView {
     return Promise.resolve();
   }
 
+  /**
+   * Bookkeeping that must happen every time `sections` is replaced — including
+   * with an empty array for a loading/error/empty state. `cards` is always
+   * cleared, since the DOM elements it references are about to be rebuilt or
+   * removed by the caller's own render pass. `activeIdx` only resets when the
+   * file actually changed: this keeps scroll-sync position intact across an
+   * ordinary refresh/regenerate of the SAME note, while guaranteeing a stale
+   * highlight from the PREVIOUS note can never survive a file switch.
+   */
+  private beginSectionsReplace(file: TFile | null, sections: ResolvedCard[]) {
+    const switchedFile = (this.sourceFile?.path ?? null) !== (file?.path ?? null);
+    this.sourceFile = file;
+    this.sections = sections;
+    this.cards = [];
+    if (switchedFile) this.activeIdx = -1;
+  }
+
   renderEmpty() {
-    this.sourceFile = null;
-    this.sections = [];
+    this.beginSectionsReplace(null, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -98,8 +128,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   loadFor(file: TFile, sections: ResolvedCard[], stale: boolean) {
-    this.sourceFile = file;
-    this.sections = sections;
+    this.beginSectionsReplace(file, sections);
     this.stale = !!stale;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -107,8 +136,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderLoading(file: TFile, message: string) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = message || this.plugin.t('loadingDefault');
     this.errorMessage = '';
@@ -149,8 +177,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderError(file: TFile, message: string) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = message || this.plugin.t('errorTitle');
@@ -158,8 +185,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderEmptyWithHint(file: TFile) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -305,7 +331,13 @@ export class ParallelReaderView extends ItemView {
       if (sel && sel.toString().length > 0) return;
       const target = e.target as HTMLElement | null;
       if (target && target.tagName === 'A') return;
-      if (s.startLine >= 0) void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
+      if (s.startLine < 0) return;
+      // Own the highlight immediately: don't wait for the scroll-sync handler
+      // to (maybe) agree, since its centered-scroll probe can otherwise land
+      // on the preceding card and steal it back (see SCROLL_SYNC_CLICK_SUPPRESS_MS).
+      this.setActiveSection(i);
+      this.suppressScrollSync();
+      void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
     });
 
     card.addEventListener('contextmenu', (e) => {
@@ -373,6 +405,16 @@ export class ParallelReaderView extends ItemView {
       this.cards[idx].addClass('is-active');
       this.cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
+  }
+
+  /** Arms the click-vs-scroll-sync suppression window (see SCROLL_SYNC_CLICK_SUPPRESS_MS). */
+  private suppressScrollSync() {
+    this.scrollSyncSuppressedUntil = Date.now() + SCROLL_SYNC_CLICK_SUPPRESS_MS;
+  }
+
+  /** Whether the scroll-sync handler should skip reassigning the active card right now. */
+  isScrollSyncSuppressed(): boolean {
+    return Date.now() < this.scrollSyncSuppressedUntil;
   }
 
   moveActiveSection(delta: number) {

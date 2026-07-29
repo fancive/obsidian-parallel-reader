@@ -775,6 +775,10 @@ class ParallelReaderPlugin extends Plugin {
   handleEditorScroll(mdView: MarkdownView) {
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
+    // A card click just drove this scroll; let the click's own highlight stand
+    // instead of letting the centered-scroll landing point reassign it (often
+    // to the preceding card). See view.ts's SCROLL_SYNC_CLICK_SUPPRESS_MS.
+    if (view.isScrollSyncSuppressed()) return;
     const editor = mdView.editor;
     const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     if (!cm?.scrollDOM) return;
