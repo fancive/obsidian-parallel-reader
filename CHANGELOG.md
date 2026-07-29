@@ -1,0 +1,164 @@
+# Changelog
+
+All notable changes to this project are documented here. Format is a flat,
+conventional-commit-prefixed bullet list per release (not strict Keep a
+Changelog) to match this repo's existing commit style. Entries for `1.0.0`
+through `1.0.24` were derived from `git log` between each release tag; entries
+are intentionally brief and only cover what the commit history can verify.
+
+The release workflow (`.github/workflows/release.yml`) reads the section for
+the tag being released and uses it as the GitHub release body via
+`gh release create --notes-file`. Add a `## [<version>] - <date>` section
+here **before** tagging a release, or the release job will fail its
+changelog-guard step.
+
+## [Unreleased]
+
+- ci: guard the release workflow so a pushed tag must match `manifest.json`'s
+  version and must exist as a key in `versions.json`, failing before any
+  publish/upload step (S5)
+- ci: use this CHANGELOG's per-version section as the GitHub release body
+  instead of `--generate-notes` (S5)
+- build: `scripts/bump-version.mjs` gains a `--tag` flag that commits and tags
+  the version bump in one step, instead of leaving commit+tag as separate
+  manual actions (S5)
+- docs: point install instructions at the official community plugin registry;
+  fix `manifest.json` identity fields (author, drop stale `fundingUrl`) (S2)
+- ci(coverage): stop reporting a fabricated 100% branch-coverage gate (S1a)
+
+## [1.0.24] - 2026-06-16
+
+- feat: provider/lifecycle robustness, onboarding nudge, CI coverage gate
+- fix: avoid stringifying locale objects
+- fix: address codex review — drop false-positive fallback keywords, tighten
+  stream-error detection
+
+## [1.0.23] - 2026-05-19
+
+- feat: expand i18n language support
+- perf: eliminate per-card document rescans and redundant hashing
+- refactor: remove dead code and over-broad exports
+- test: add c8 coverage harness with source-map remapping
+
+## [1.0.22] - 2026-05-14
+
+- style: apply Biome formatter to `cli.test.js` (no functional change)
+
+## [1.0.21] - 2026-05-14
+
+- fix: pass `--verbose` with `stream-json` for Claude CLI 2.1.131+
+- fix: clear Obsidian review unused bindings
+
+## [1.0.20] - 2026-05-09
+
+- fix: harden CLI backend smoke checks
+- ci: make release upload idempotent
+
+## [1.0.19] - 2026-05-09
+
+- chore: prepare 1.0.19 release (no functional change noted in history)
+
+## [1.0.18] - 2026-05-08
+
+- fix: address Obsidian plugin review scan issues
+
+## [1.0.17] - 2026-05-05
+
+- feat(error-ui): structured `CliProcessError` + `ErrorKind`-driven UI dispatch
+- feat(cli): enrich CLI timeout diagnostics + idle timeout + debug logging
+
+## [1.0.16] - 2026-05-03
+
+- chore: bump `minAppVersion` to 1.7.2 to match the `revealLeaf` API
+  requirement
+
+## [1.0.15] - 2026-05-02
+
+- refactor(settings): collapsible sections + smart auto-expand
+
+## [1.0.14] - 2026-05-02
+
+- feat: toggle right sidebar instead of detaching tab
+
+## [1.0.13] - 2026-05-02
+
+- fix: regressions in 1.0.12 — sidebar render guard + open-view toggle
+
+## [1.0.12] - 2026-05-02
+
+- fix: address 10 P2 behavioral and concurrency findings
+
+## [1.0.11] - 2026-05-02
+
+- fix: address 13 review findings (security, UX, i18n)
+
+## [1.0.10] - 2026-04-30
+
+- fix: add cancel action to batch prompt
+- fix: localize batch prompt confirmation and remaining action labels
+- fix: confirm before overwriting exports
+- fix: count batch generation failures
+- ci: add e2e contract gate; enforce self-contained release gate
+
+## [1.0.9] - 2026-04-27
+
+- fix: add `void` operator to all floating promises in callbacks
+
+## [1.0.8] - 2026-04-27
+
+- fix: address CR findings — bump script, test runner, temp cleanup
+- build: remove `main.js` from git tracking; add version bump script; add
+  tag-triggered release workflow
+
+## [1.0.7] - 2026-04-27
+
+- fix: remove unsupported `--max-tokens` flag from Claude CLI args
+
+## [1.0.6] - 2026-04-27
+
+- fix: address CR findings — test runner, CI dedup, error cause
+- fix: update CI to use `npm test` instead of a hardcoded test file list
+- refactor: split `view.ts`, the settings tab, and `main.ts` into focused
+  modules
+
+## [1.0.5] - 2026-04-27
+
+> Note: `1.0.4` was never tagged/released; `versions.json` retains an orphan
+> entry for it, harmless because it shares `minAppVersion` with `1.0.14` so
+> Obsidian's updater can never select it.
+
+- fix: eliminate unsafe casts in `scroll.ts` and CLI/provider code
+- fix: close abort signal race window in streaming fetch
+- fix: prevent modal confirmation promise from resolving twice
+- fix: add logging to silent catch blocks
+- fix: pass `--max-tokens` to Claude Code CLI to prevent output truncation
+- fix: salvage truncated LLM JSON and make errors copyable
+
+## [1.0.3] - 2026-04-27
+
+- feat: add generate button to empty state panel
+- feat: expose streaming timeout setting
+- feat: validate batch folder input
+- feat: support cancellable batch generation
+- fix: address remaining Obsidian review bot required issues
+- fix: clean up streaming abort listener; parse multiline SSE events
+
+## [1.0.2] - 2026-04-26
+
+- feat: add folder-level batch summarization command
+- feat: add streaming timeout protection
+- fix: address all required issues from the Obsidian plugin review bot
+- docs: simplify installation guide and CLI backend description
+
+## [1.0.1] - 2026-04-26
+
+- fix: remove `authorUrl` pointing to repo (rejected by marketplace)
+- fix: raise CLI timeout from 120s to 300s
+- fix: parse Claude Code JSON array output and drop `--model` flag
+- docs: modern English README with badges and star history
+
+## [1.0.0] - 2026-04-26
+
+- Initial release: split-view reading with a source note on the left and
+  LLM-generated summary cards on the right, provider architecture, scroll
+  sync, and regeneration guard.

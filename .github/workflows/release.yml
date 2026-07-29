@@ -21,6 +21,27 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Verify tag matches manifest.json and versions.json
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const tag = process.env.RELEASE_TAG;
+            const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            const versions = JSON.parse(fs.readFileSync('versions.json', 'utf8'));
+            if (manifest.version !== tag) {
+              console.error('Tag ' + tag + ' does not match manifest.json version ' + manifest.version + '.');
+              console.error('Run scripts/bump-version.mjs ' + tag + ' before tagging, or retag the correct commit.');
+              process.exit(1);
+            }
+            if (!Object.prototype.hasOwnProperty.call(versions, tag)) {
+              console.error('Tag ' + tag + ' has no matching key in versions.json.');
+              process.exit(1);
+            }
+            console.log('OK: tag ' + tag + ' matches manifest.json (' + manifest.version + ') and versions.json.');
+          "
+
       - run: npm ci
 
       - name: Lint
@@ -39,6 +60,26 @@ jobs:
             .e2e/artifact.json
             .e2e/results/
 
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const tag = process.env.RELEASE_TAG;
+            const lines = fs.readFileSync('CHANGELOG.md', 'utf8').split(/\r?\n/);
+            const start = lines.findIndex((l) => l.startsWith('## [' + tag + ']'));
+            if (start === -1) {
+              console.error('CHANGELOG.md has no \"## [' + tag + ']\" section.');
+              console.error('Add one before tagging a release (see CHANGELOG.md header for the convention).');
+              process.exit(1);
+            }
+            let end = lines.findIndex((l, i) => i > start && l.startsWith('## '));
+            if (end === -1) end = lines.length;
+            const section = lines.slice(start, end).join('\n').trim() + '\n';
+            fs.writeFileSync('release-notes.md', section);
+          "
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,6 +90,6 @@ jobs:
           else
             gh release create "$tag" \
               --title "$tag" \
-              --generate-notes \
+              --notes-file release-notes.md \
               main.js main.js.map manifest.json styles.css
           fi
