@@ -14,7 +14,8 @@
   "reportsDirectory": "coverage",
   "tempDirectory": "coverage/.tmp",
   "check-coverage": true,
-  "branches": 100,
+  "_comment_branches": "This file is parsed with JSON.parse (see node_modules/c8/lib/parse-args.js), so JS-style // comments are not tolerated here — hence this _comment_* key instead. `branches: 100` used to look like a real 100% branch-coverage gate, but c8's source-map remap discards branch data for 27 of the 30 files under src/, so only ~32 branches (from src/cache.ts, src/markdown.ts, src/vault.ts) are ever measured; every other file reports 0/0 branches, which trivially satisfies any percentage threshold. The 100 was therefore a fabricated pass, not an earned one. Lowered to 0 so this gate stops asserting a coverage level it cannot actually verify. See the follow-up harness migration task (T12 / S1b in docs/scope-ship-now-batch.md) which converts both test harnesses to import src/*.ts directly, makes real branch counts observable, and is the task that should raise this threshold again alongside a CI assertion on total.branches.total.",
+  "branches": 0,
   "statements": 0,
   "lines": 0,
   "functions": 0
