@@ -792,9 +792,10 @@ class ParallelReaderPlugin extends Plugin {
     if (!mdView) return;
     const editor = mdView.editor;
     const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
-    const scrollDom = cm?.scrollDOM
-      ? cm.scrollDOM
-      : (mdView.contentEl.querySelector('.cm-scroller') as HTMLElement | null);
+    // querySelector's generic (rather than an `as` cast) keeps both tsc and
+    // @typescript-eslint/no-unnecessary-type-assertion satisfied: registerDomEvent
+    // needs HTMLElement, but an assertion here is reported as redundant.
+    const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector<HTMLElement>('.cm-scroller');
     if (!scrollDom) return;
     const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
     // Own the listener with a dedicated child Component (not a bare `this.registerDomEvent`
