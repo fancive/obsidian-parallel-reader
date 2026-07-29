@@ -879,7 +879,13 @@ async function testRenderStaleBanner_HasIconCueAndRegenerateAction() {
 function testAddIconButton_UsesObsidianTooltip_NotNativeTitle() {
   takeTooltips(); // drain setTooltip calls accumulated by earlier tests' renders in this file
   const parent = new FakeEl('div');
-  t.addIconButton(parent, 'refresh-cw', 'Regenerate', () => {});
+  t.addIconButton(
+    parent,
+    'refresh-cw',
+    'Regenerate',
+    () => {},
+    (key) => key,
+  );
 
   const button = parent.children[0];
   assert.strictEqual(

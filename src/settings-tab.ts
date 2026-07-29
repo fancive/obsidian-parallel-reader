@@ -392,10 +392,19 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
 
     // Streaming + timeout merged. We build the timeout in a dedicated wrapper
     // and toggle that wrapper's visibility so we never accidentally hide the
-    // shared controlEl (which would also hide the toggle itself).
-    const streamingSetting = new Setting(details)
-      .setName(this.tr('settingStreamingName'))
-      .setDesc(this.tr('settingStreamingDesc'));
+    // shared controlEl (which would also hide the toggle itself). The row's
+    // description covers both the toggle (settingStreamingDesc) and the inline
+    // timeout input (settingStreamingTimeoutDesc) -- a second `new Setting` for
+    // the timeout alone would nest an Obsidian `.setting-item` inside this one's
+    // controlEl, which is the exact CSS-conflict pattern the env-var fallback
+    // in renderCredentialRow() deliberately avoids.
+    const streamingSetting = new Setting(details).setName(this.tr('settingStreamingName')).setDesc(
+      createFragment((frag) => {
+        frag.appendText(this.tr('settingStreamingDesc'));
+        frag.createEl('br');
+        frag.appendText(this.tr('settingStreamingTimeoutDesc'));
+      }),
+    );
 
     let timeoutWrap: HTMLElement | null = null;
 

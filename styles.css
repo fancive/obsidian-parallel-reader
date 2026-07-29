@@ -319,14 +319,6 @@
   text-align: left;
 }
 
-
-.parallel-reader-lvl {
-  color: var(--text-muted);
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  margin-right: 2px;
-}
-
 .parallel-reader-card-unanchored {
   opacity: 0.75;
 }
@@ -340,18 +332,6 @@
   font-size: 11px;
   margin-left: 4px;
   cursor: help;
-}
-
-.parallel-reader-bullets {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.parallel-reader-bullets li {
-  margin-bottom: 3px;
 }
 
 .parallel-reader-empty-li {

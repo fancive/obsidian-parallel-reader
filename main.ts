@@ -489,6 +489,7 @@ class ParallelReaderPlugin extends Plugin {
     await copyToClipboard(
       cardsToMarkdown(`${view.sourceFile.basename} · ${this.t('displayName')}`, view.sections),
       this.t('copiedAllMarkdown'),
+      (key, vars) => this.t(key, vars),
     );
   }
 

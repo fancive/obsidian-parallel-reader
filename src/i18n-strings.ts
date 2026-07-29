@@ -3,7 +3,6 @@
 export const STRINGS: Record<string, Record<string, string>> = {
   zh: {
     appTitle: '对照阅读笔记',
-    settingsTitle: 'Parallel Reader 设置',
     emptyOpenNote: '打开一篇笔记，然后运行命令：',
     emptyNoCache: '该笔记尚无对照笔记缓存。运行命令：',
     emptyNeedsSetup: '尚未配置 AI 服务商。填写 API Key 后即可开始生成。',
@@ -130,7 +129,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     errorApiKeyMissing: 'API key 未设置。请在设置里填写 API Key{hint}。',
     errorApiKeyEnvHint: ' 或环境变量 {envVar}',
     errorLlmNonJson: 'LLM 返回非 JSON（长度 {length} 字符），详见 console',
-    errorClaudeCliBadJson: 'Claude CLI 返回了非预期输出（长度 {length} 字符），详见 console',
     errorClaudeCliNoResult: 'Claude CLI 没有返回结果（长度 {length} 字符），详见 console',
     errorCustomHeadersJsonParse: '自定义 headers JSON 解析失败：{error}',
     errorCustomHeadersJsonObject: '自定义 headers JSON 必须是对象',
@@ -155,7 +153,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     sectionCacheMaintenance: '缓存与维护',
     settingApiKeyEnvSummary: '改用环境变量',
     settingProviderPresetSummaryEmpty: '（未配置 base URL）',
-    apiProviderHeader: 'API Provider',
     settingProviderPresetName: 'Provider preset',
     settingProviderPresetDesc: '参考 OpenClaw 的 provider/model 思路：preset 只负责协议、base URL 和认证默认值',
     settingApiFormatName: 'API format',
@@ -177,7 +174,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingModelDescCli: 'Claude Code 下会以 --model 透传；Codex 始终使用自身 config 的默认 model',
     settingMaxInputName: '最大输入字符数',
     settingMaxInputDesc: '超过该长度会截断后再发送给模型；长上下文模型可适当调大',
-    promptHeader: 'Prompt',
     settingPromptLanguageName: '输出语言',
     settingPromptLanguageDesc: '控制 title/gist/bullets 的语言；anchor 始终逐字复制原文',
     settingCardRangeName: '卡片数量范围',
@@ -193,7 +189,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     backendTestFailed: '✗ 后端测试失败：{error}',
     settingExportFolderName: '导出文件夹',
     settingExportFolderDesc: '对照笔记生成位置（相对 Vault 根）',
-    cacheHeader: '缓存',
     settingMaxCacheName: '最大缓存篇数',
     settingMaxCacheDesc: '超过上限后按最近访问时间淘汰最旧的笔记缓存；缓存保存在插件目录的 cache.json',
     cachePruned: '已淘汰 {count} 条旧缓存',
@@ -220,7 +215,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
   },
   en: {
     appTitle: 'Parallel Reader',
-    settingsTitle: 'Parallel Reader Settings',
     emptyOpenNote: 'Open a note, then run:',
     emptyNoCache: 'This note has no cached parallel notes. Run:',
     emptyNeedsSetup: 'No AI provider is configured yet. Add an API key to start generating.',
@@ -350,7 +344,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     errorApiKeyMissing: 'API key is not set. Enter an API Key in settings{hint}.',
     errorApiKeyEnvHint: ' or set environment variable {envVar}',
     errorLlmNonJson: 'LLM returned non-JSON ({length} chars). See console for excerpt.',
-    errorClaudeCliBadJson: 'Claude CLI returned unexpected output ({length} chars). See console for excerpt.',
     errorClaudeCliNoResult: 'Claude CLI returned no result ({length} chars). See console for excerpt.',
     errorCustomHeadersJsonParse: 'Custom headers JSON parse failed: {error}',
     errorCustomHeadersJsonObject: 'Custom headers JSON must be an object',
@@ -377,7 +370,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     sectionCacheMaintenance: 'Cache & maintenance',
     settingApiKeyEnvSummary: 'Use env var instead',
     settingProviderPresetSummaryEmpty: '(no base URL)',
-    apiProviderHeader: 'API Provider',
     settingProviderPresetName: 'Provider preset',
     settingProviderPresetDesc:
       'OpenClaw-style provider/model setup: presets define protocol, base URL, and auth defaults.',
@@ -400,7 +392,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     settingModelDescCli: 'Passed as --model for Claude Code. Codex always uses its own config default.',
     settingMaxInputName: 'Max input characters',
     settingMaxInputDesc: 'Longer notes are truncated before sending to the model. Raise this for long-context models.',
-    promptHeader: 'Prompt',
     settingPromptLanguageName: 'Output language',
     settingPromptLanguageDesc: 'Controls title/gist/bullets language. Anchor is always copied verbatim from source.',
     settingCardRangeName: 'Card count range',
@@ -417,7 +408,6 @@ export const STRINGS: Record<string, Record<string, string>> = {
     backendTestFailed: '✗ Backend test failed: {error}',
     settingExportFolderName: 'Export folder',
     settingExportFolderDesc: 'Parallel-note output location, relative to the Vault root.',
-    cacheHeader: 'Cache',
     settingMaxCacheName: 'Max cached notes',
     settingMaxCacheDesc:
       'Prunes least-recently accessed note caches above this limit. Cache is stored in plugin cache.json.',
@@ -460,7 +450,6 @@ function defineLocale(locale: string, overrides: Record<string, string>): void {
 
 defineLocale('ja', {
   appTitle: 'Parallel Reader',
-  settingsTitle: 'Parallel Reader 設定',
   emptyOpenNote: 'ノートを開いてから実行:',
   emptyNoCache: 'このノートにはキャッシュ済みの並列ノートがありません。実行:',
   emptyNeedsSetup: 'AI プロバイダーがまだ設定されていません。API キーを追加して生成を開始してください。',
@@ -582,7 +571,6 @@ defineLocale('ja', {
   settingMaxTokensName: '最大出力 tokens',
   settingModelName: 'Model',
   settingMaxInputName: '最大入力文字数',
-  promptHeader: 'プロンプト',
   settingPromptLanguageName: '出力言語',
   settingPromptLanguageDesc: 'title/gist/bullets の言語を制御します。anchor は常に原文から逐字コピーされます。',
   settingCardRangeName: 'カード数の範囲',
@@ -594,7 +582,6 @@ defineLocale('ja', {
   settingTestBackendButtonRunning: 'テスト中...',
   settingExportFolderName: 'エクスポートフォルダー',
   settingExportFolderDesc: 'Vault ルートからの相対パスで並列ノートの出力先を指定します。',
-  cacheHeader: 'キャッシュ',
   settingMaxCacheName: '最大キャッシュノート数',
   cachePruned: '{count} 件の古いキャッシュを削除しました',
   cachedNotesName: 'キャッシュ済みノート: {count}',
@@ -646,7 +633,6 @@ defineLocale('ja', {
   errorApiKeyMissing: 'API key が設定されていません。設定で API Key を入力してください{hint}。',
   errorApiKeyEnvHint: ' または環境変数 {envVar} を設定してください',
   errorLlmNonJson: 'LLM が JSON 以外を返しました（{length} 文字）。抜粋は console を確認してください。',
-  errorClaudeCliBadJson: 'Claude CLI が想定外の出力を返しました（{length} 文字）。抜粋は console を確認してください。',
   errorClaudeCliNoResult: 'Claude CLI が結果を返しませんでした（{length} 文字）。抜粋は console を確認してください。',
   errorCustomHeadersJsonParse: 'カスタム headers JSON の解析に失敗しました: {error}',
   errorCustomHeadersJsonObject: 'カスタム headers JSON はオブジェクトである必要があります',
@@ -657,7 +643,6 @@ defineLocale('ja', {
   settingCliPathPlaceholder: '例: /Users/you/bin/codex',
   settingApiKeyEnvSummary: '代わりに環境変数を使用',
   settingProviderPresetSummaryEmpty: '（base URL なし）',
-  apiProviderHeader: 'API Provider',
   settingProviderPresetDesc:
     'OpenClaw 風の provider/model 設定: プリセットはプロトコル、base URL、認証の既定値を定義します。',
   settingApiFormatDesc: 'provider の wire protocol。OpenAI 互換プロキシでは通常 Chat Completions を使います。',
@@ -691,7 +676,6 @@ defineLocale('ja', {
 
 defineLocale('ko', {
   appTitle: 'Parallel Reader',
-  settingsTitle: 'Parallel Reader 설정',
   emptyOpenNote: '노트를 연 다음 실행:',
   emptyNoCache: '이 노트에는 캐시된 병렬 노트가 없습니다. 실행:',
   emptyNeedsSetup: 'AI 제공업체가 아직 설정되지 않았습니다. API 키를 추가하여 생성을 시작하세요.',
@@ -805,7 +789,6 @@ defineLocale('ko', {
   settingAuthTypeName: '인증 방식',
   settingHeadersName: '추가 headers',
   settingModelName: 'Model',
-  promptHeader: '프롬프트',
   settingPromptLanguageName: '출력 언어',
   settingPromptLanguageDesc: 'title/gist/bullets의 언어를 제어합니다. anchor는 항상 원문에서 그대로 복사됩니다.',
   settingCardRangeName: '카드 수 범위',
@@ -815,7 +798,6 @@ defineLocale('ko', {
   settingTestBackendButton: '테스트',
   settingTestBackendButtonRunning: '테스트 중...',
   settingExportFolderName: '내보내기 폴더',
-  cacheHeader: '캐시',
   settingMaxCacheName: '최대 캐시 노트 수',
   cachePruned: '오래된 캐시 {count}개를 정리했습니다',
   cachedNotesName: '캐시된 노트: {count}',
@@ -866,7 +848,6 @@ defineLocale('ko', {
   errorApiKeyMissing: 'API key가 설정되지 않았습니다. 설정에서 API Key를 입력하세요{hint}.',
   errorApiKeyEnvHint: ' 또는 환경 변수 {envVar}를 설정하세요',
   errorLlmNonJson: 'LLM이 JSON이 아닌 출력을 반환했습니다({length}자). 발췌는 console을 확인하세요.',
-  errorClaudeCliBadJson: 'Claude CLI가 예상치 못한 출력을 반환했습니다({length}자). 발췌는 console을 확인하세요.',
   errorClaudeCliNoResult: 'Claude CLI가 결과를 반환하지 않았습니다({length}자). 발췌는 console을 확인하세요.',
   errorCustomHeadersJsonParse: '사용자 지정 headers JSON 파싱 실패: {error}',
   errorCustomHeadersJsonObject: '사용자 지정 headers JSON은 객체여야 합니다',
@@ -880,7 +861,6 @@ defineLocale('ko', {
   settingCliTimeoutDesc: 'CLI 호출의 최대 대기 시간(ms). 최소 1000, 기본값 300000.',
   settingApiKeyEnvSummary: '대신 환경 변수 사용',
   settingProviderPresetSummaryEmpty: '(base URL 없음)',
-  apiProviderHeader: 'API Provider',
   settingProviderPresetDesc:
     'OpenClaw 스타일 provider/model 설정: preset은 프로토콜, base URL, 인증 기본값을 정의합니다.',
   settingApiFormatDesc: 'provider의 wire protocol입니다. OpenAI 호환 프록시는 보통 Chat Completions를 사용합니다.',
@@ -920,7 +900,6 @@ defineLocale('ko', {
 
 defineLocale('fr', {
   appTitle: 'Parallel Reader',
-  settingsTitle: 'Paramètres de Parallel Reader',
   emptyOpenNote: 'Ouvrez une note, puis lancez :',
   emptyNoCache: 'Cette note n’a pas de notes parallèles en cache. Lancez :',
   emptyNeedsSetup: 'Aucun fournisseur IA n’est encore configuré. Ajoutez une clé API pour commencer à générer.',
@@ -1035,7 +1014,6 @@ defineLocale('fr', {
   settingAuthTypeName: 'Type d’authentification',
   settingHeadersName: 'Headers supplémentaires',
   settingModelName: 'Model',
-  promptHeader: 'Prompt',
   settingPromptLanguageName: 'Langue de sortie',
   settingPromptLanguageDesc:
     'Contrôle la langue de title/gist/bullets. anchor est toujours copié mot pour mot depuis la source.',
@@ -1046,7 +1024,6 @@ defineLocale('fr', {
   settingTestBackendButton: 'Tester',
   settingTestBackendButtonRunning: 'Test en cours...',
   settingExportFolderName: 'Dossier d’export',
-  cacheHeader: 'Cache',
   settingMaxCacheName: 'Notes en cache max.',
   cachePruned: '{count} anciens caches supprimés',
   cachedNotesName: 'Notes en cache : {count}',
@@ -1099,8 +1076,6 @@ defineLocale('fr', {
   errorApiKeyMissing: 'API key n’est pas définie. Saisissez une API Key dans les paramètres{hint}.',
   errorApiKeyEnvHint: ' ou définissez la variable d’environnement {envVar}',
   errorLlmNonJson: 'Le LLM a renvoyé une sortie non JSON ({length} caractères). Voir la console pour un extrait.',
-  errorClaudeCliBadJson:
-    'Claude CLI a renvoyé une sortie inattendue ({length} caractères). Voir la console pour un extrait.',
   errorClaudeCliNoResult:
     'Claude CLI n’a renvoyé aucun résultat ({length} caractères). Voir la console pour un extrait.',
   errorCustomHeadersJsonParse: 'Échec du parsing JSON des headers personnalisés : {error}',
@@ -1115,7 +1090,6 @@ defineLocale('fr', {
   settingCliTimeoutDesc: 'Temps d’attente maximal des appels CLI (ms). Minimum 1000, défaut 300000.',
   settingApiKeyEnvSummary: 'Utiliser plutôt une variable d’environnement',
   settingProviderPresetSummaryEmpty: '(pas de base URL)',
-  apiProviderHeader: 'API Provider',
   settingProviderPresetDesc:
     'Configuration provider/model façon OpenClaw : les presets définissent le protocole, la base URL et les valeurs d’auth par défaut.',
   settingApiFormatDesc:
@@ -1158,7 +1132,6 @@ defineLocale('fr', {
 
 defineLocale('de', {
   appTitle: 'Parallel Reader',
-  settingsTitle: 'Parallel Reader Einstellungen',
   emptyOpenNote: 'Öffnen Sie eine Notiz und führen Sie dann aus:',
   emptyNoCache: 'Diese Notiz hat keine zwischengespeicherten Parallelnotizen. Ausführen:',
   emptyNeedsSetup:
@@ -1276,7 +1249,6 @@ defineLocale('de', {
   settingAuthTypeName: 'Auth-Typ',
   settingHeadersName: 'Zusätzliche headers',
   settingModelName: 'Model',
-  promptHeader: 'Prompt',
   settingPromptLanguageName: 'Ausgabesprache',
   settingPromptLanguageDesc:
     'Steuert die Sprache von title/gist/bullets. anchor wird immer wortgetreu aus der Quelle kopiert.',
@@ -1287,7 +1259,6 @@ defineLocale('de', {
   settingTestBackendButton: 'Testen',
   settingTestBackendButtonRunning: 'Test läuft...',
   settingExportFolderName: 'Exportordner',
-  cacheHeader: 'Cache',
   settingMaxCacheName: 'Max. zwischengespeicherte Notizen',
   cachePruned: '{count} alte Cache-Einträge entfernt',
   cachedNotesName: 'Zwischengespeicherte Notizen: {count}',
@@ -1340,8 +1311,6 @@ defineLocale('de', {
   errorApiKeyMissing: 'API key ist nicht gesetzt. Geben Sie in den Einstellungen eine API Key ein{hint}.',
   errorApiKeyEnvHint: ' oder setzen Sie die Umgebungsvariable {envVar}',
   errorLlmNonJson: 'LLM gab Nicht-JSON zurück ({length} Zeichen). Siehe console für einen Auszug.',
-  errorClaudeCliBadJson:
-    'Claude CLI gab unerwartete Ausgabe zurück ({length} Zeichen). Siehe console für einen Auszug.',
   errorClaudeCliNoResult: 'Claude CLI gab kein Ergebnis zurück ({length} Zeichen). Siehe console für einen Auszug.',
   errorCustomHeadersJsonParse: 'Parsing von benutzerdefinierten headers als JSON fehlgeschlagen: {error}',
   errorCustomHeadersJsonObject: 'Benutzerdefinierte headers als JSON müssen ein Objekt sein',
@@ -1355,7 +1324,6 @@ defineLocale('de', {
   settingCliTimeoutDesc: 'Maximale Wartezeit für CLI-Aufrufe (ms). Minimum 1000, Standard 300000.',
   settingApiKeyEnvSummary: 'Stattdessen Umgebungsvariable verwenden',
   settingProviderPresetSummaryEmpty: '(keine base URL)',
-  apiProviderHeader: 'API Provider',
   settingProviderPresetDesc:
     'OpenClaw-artige provider/model-Einrichtung: Presets definieren Protokoll, base URL und Auth-Standardwerte.',
   settingApiFormatDesc:
@@ -1399,7 +1367,6 @@ defineLocale('de', {
 
 defineLocale('es', {
   appTitle: 'Parallel Reader',
-  settingsTitle: 'Configuración de Parallel Reader',
   emptyOpenNote: 'Abre una nota y luego ejecuta:',
   emptyNoCache: 'Esta nota no tiene notas paralelas en caché. Ejecuta:',
   emptyNeedsSetup: 'Todavía no hay ningún proveedor de IA configurado. Añade una clave API para empezar a generar.',
@@ -1515,7 +1482,6 @@ defineLocale('es', {
   settingAuthTypeName: 'Tipo de autenticación',
   settingHeadersName: 'Headers extra',
   settingModelName: 'Model',
-  promptHeader: 'Prompt',
   settingPromptLanguageName: 'Idioma de salida',
   settingPromptLanguageDesc:
     'Controla el idioma de title/gist/bullets. anchor siempre se copia literalmente de la fuente.',
@@ -1526,7 +1492,6 @@ defineLocale('es', {
   settingTestBackendButton: 'Probar',
   settingTestBackendButtonRunning: 'Probando...',
   settingExportFolderName: 'Carpeta de exportación',
-  cacheHeader: 'Caché',
   settingMaxCacheName: 'Máximo de notas en caché',
   cachePruned: 'Se eliminaron {count} entradas antiguas de caché',
   cachedNotesName: 'Notas en caché: {count}',
@@ -1580,8 +1545,6 @@ defineLocale('es', {
   errorApiKeyEnvHint: ' o establece la variable de entorno {envVar}',
   errorLlmNonJson:
     'El LLM devolvió una salida que no es JSON ({length} caracteres). Consulta la console para ver un extracto.',
-  errorClaudeCliBadJson:
-    'Claude CLI devolvió una salida inesperada ({length} caracteres). Consulta la console para ver un extracto.',
   errorClaudeCliNoResult:
     'Claude CLI no devolvió resultado ({length} caracteres). Consulta la console para ver un extracto.',
   errorCustomHeadersJsonParse: 'Error al parsear headers personalizados como JSON: {error}',
@@ -1596,7 +1559,6 @@ defineLocale('es', {
   settingCliTimeoutDesc: 'Tiempo máximo de espera para llamadas CLI (ms). Mínimo 1000, predeterminado 300000.',
   settingApiKeyEnvSummary: 'Usar variable de entorno en su lugar',
   settingProviderPresetSummaryEmpty: '(sin base URL)',
-  apiProviderHeader: 'API Provider',
   settingProviderPresetDesc:
     'Configuración provider/model estilo OpenClaw: los presets definen protocolo, base URL y valores de auth predeterminados.',
   settingApiFormatDesc: 'Wire protocol del provider. Los proxies compatibles con OpenAI suelen usar Chat Completions.',

@@ -152,7 +152,9 @@ class CliDiagnosticsModal extends Modal {
     new Setting(contentEl)
       .addButton((b) =>
         b.setButtonText(translate(this.settings, 'errorModalActionCopy')).onClick(() => {
-          void copyToClipboard(this.fullMessage, translate(this.settings, 'errorModalCopySuccess'));
+          void copyToClipboard(this.fullMessage, translate(this.settings, 'errorModalCopySuccess'), (k, v) =>
+            translate(this.settings, k, v),
+          );
         }),
       )
       .addButton((b) =>
@@ -198,7 +200,7 @@ export function showGenerationError(
       ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyDetails'),
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
       { label: tr('errorActionOpenSettings'), primary: !ctx.onRetry, onClick: ctx.openSettings },
     ]);
@@ -220,7 +222,7 @@ export function showGenerationError(
       ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyDetails'),
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
     ]);
     return;
@@ -231,7 +233,7 @@ export function showGenerationError(
       ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyDetails'),
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
     ]);
     return;
@@ -243,7 +245,7 @@ export function showGenerationError(
       {
         label: tr('errorActionCopyRaw'),
         primary: !ctx.onRetry,
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
       { label: tr('errorActionOpenSettings'), onClick: ctx.openSettings },
     ]);
@@ -271,7 +273,7 @@ export function showGenerationError(
     ...retryAction(ctx, tr),
     {
       label: tr('errorActionCopyDetails'),
-      onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+      onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
     },
   ]);
 }
