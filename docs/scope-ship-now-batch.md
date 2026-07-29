@@ -166,9 +166,13 @@ Fresh contexts cannot infer these:
 5. **Both harnesses must be converted in T12.** Converting only `direct-test-setup.js` leaves
    the branch count near zero, because 18 of the 28 test files go through
    `tests/test-setup.js` via the `src/test-exports.ts` barrel.
-6. **`generation-job-manager.ts:92` uses a parameter property** (`constructor(private
-   maxConcurrent: number = 3)`). Node's type-stripping rejects it. Rewrite as a plain field
-   **before** attempting direct import — it is the first thing that will fail.
+6. **Parameter properties block Node's type-stripping** and must become plain fields before
+   any direct `.ts` import. `generation-job-manager.ts:92`
+   (`constructor(private maxConcurrent: number = 3)`) is the first one that fails.
+   **Correction:** this document originally claimed it was "the only parameter property in the
+   codebase (verified)". That was wrong — the check used a single-line regex and missed
+   `src/cache-manager.ts`, whose multi-line constructor declares four more. Both files were
+   converted in T12. Grep across multiple lines, not just one, if you repeat this check.
 7. **S6/S7 may use `color-mix`** — safe, `minAppVersion` is 1.8.7.
 8. **`errorActionRetry` already exists** as an i18n key (used at `error-ui.ts:212`). T5 needs
    **no new strings** in any of the 7 locales.
