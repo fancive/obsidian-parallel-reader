@@ -36,7 +36,16 @@ export class CacheManager {
   cache: Record<string, CacheEntry> = {};
   private _timer: number | null = null;
   private _dirty = false;
-  private _saving: Promise<void> | null = null;
+  /**
+   * Tail of the cache transaction queue. Every mutation and every write runs through
+   * `runExclusive`, so a "mutate `this.cache` then persist it" pair is atomic with
+   * respect to all other cache work. See `runExclusive` for why that matters.
+   *
+   * Invariant: the tail NEVER rejects — `runExclusive` re-publishes it with the error
+   * swallowed, so one failed transaction cannot poison every transaction behind it.
+   * Each caller still receives its own rejection through the promise it awaits.
+   */
+  private _txTail: Promise<void> = Promise.resolve();
 
   // Declared as plain fields rather than `constructor(private readonly adapter…)`
   // parameter properties: parameter properties are not erasable syntax, so Node's
@@ -95,10 +104,42 @@ export class CacheManager {
     await this.adapter.write(this.filePath(), serializeCacheFile(this.cache));
   }
 
+  /**
+   * Run `body` as an exclusive cache transaction: it starts only once every transaction
+   * queued before it has settled, and nothing else touches the cache while it runs.
+   *
+   * This is what makes a mutation and the write that commits it atomic. Without it,
+   * `put(A)` and `put(B)` — which batch generation really does issue concurrently, the
+   * job manager runs 3 at a time — interleave: B's write can land while A's is still in
+   * flight, and A's failure handler then has to undo a cache that no longer reflects
+   * only A's edit. (The previous whole-object snapshot restore got exactly that wrong:
+   * rolling A back erased B's committed entry too.) Serializing also stops one
+   * transaction's payload from carrying another's uncommitted mutation to disk.
+   *
+   * Deadlock safety: transaction bodies may only call the lock-free internals
+   * (`writeNow`/`commit`/`writeFile`/`prune`/`readFile`) — never the public `save`,
+   * `flush`, or any mutator, all of which take the lock themselves. Re-entering the
+   * queue from inside a transaction would wait on a link that cannot start until the
+   * caller returns.
+   *
+   * Queue growth is bounded by the number of in-flight callers: each link is dropped as
+   * soon as it settles, since the tail is reassigned rather than accumulated.
+   */
+  private runExclusive<T>(body: () => Promise<T>): Promise<T> {
+    const run = this._txTail.then(body);
+    this._txTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   async load(): Promise<void> {
-    this.cache = await this.readFile();
-    const pruned = this.prune();
-    if (pruned.length > 0) await this.writeFile();
+    await this.runExclusive(async () => {
+      this.cache = await this.readFile();
+      const pruned = this.prune();
+      if (pruned.length > 0) await this.writeFile();
+    });
   }
 
   prune(): string[] {
@@ -107,36 +148,49 @@ export class CacheManager {
   }
 
   async pruneIfNeeded(): Promise<string[]> {
-    const removed = this.prune();
-    if (removed.length > 0) await this.save();
-    return removed;
+    return this.runExclusive(async () => {
+      const removed = this.prune();
+      if (removed.length > 0) await this.writeNow();
+      return removed;
+    });
   }
 
-  async save(): Promise<void> {
+  private clearTimer(): void {
     if (this._timer) {
       activeWindow.clearTimeout(this._timer);
       this._timer = null;
     }
+  }
+
+  async save(): Promise<void> {
+    // Cancel the debounce up front (not inside the transaction) so a save requested now
+    // cannot be followed by a stale timer firing while it waits its turn in the queue.
+    this.clearTimer();
+    await this.runExclusive(() => this.writeNow());
+  }
+
+  /**
+   * The actual write. Lock-free: callable only from inside a transaction.
+   */
+  private async writeNow(): Promise<void> {
+    this.clearTimer();
     this.prune();
     // Clear the dirty flag BEFORE awaiting, not after: writeFile() serializes the cache
     // synchronously, so a mutation arriving while the write is in flight is not in that
     // payload and must leave the cache dirty. Clearing afterwards swallowed it — the
     // already-scheduled debounce timer would then see `_dirty === false` and skip.
     this._dirty = false;
-    const pending = this.writeFile();
-    this._saving = pending;
     try {
-      await pending;
+      await this.writeFile();
     } catch (e: unknown) {
       this._dirty = true;
       throw e;
-    } finally {
-      if (this._saving === pending) this._saving = null;
     }
   }
 
   /**
-   * Persist a mutation, restoring `previous` if the adapter write rejects.
+   * Persist the mutation the calling transaction just made, undoing it via `rollback` if
+   * the adapter write rejects.
    *
    * Every mutator below edits `this.cache` and then awaits the write. Without this
    * rollback a rejected write left the edit in memory while the caller (and the UI)
@@ -144,14 +198,19 @@ export class CacheManager {
    * successful write — a debounced touch, say — flushed it to disk. The in-memory cache
    * must never claim more than the disk actually accepted.
    *
-   * A shallow copy is sufficient: entries are always replaced wholesale, never mutated
-   * in place.
+   * `rollback` must restore only the keys ITS OWN transaction touched. Restoring a
+   * snapshot of the whole cache is wrong even under serialization: entries committed by
+   * earlier transactions are not this transaction's to undo. (A rejected write does keep
+   * any `prune()` eviction made by the same transaction — memory then claims *less* than
+   * disk, which is safe: the pruned entries were slated for deletion anyway.)
+   *
+   * Lock-free: callable only from inside a transaction.
    */
-  private async saveOrRestore(previous: Record<string, CacheEntry>): Promise<void> {
+  private async commit(rollback: () => void): Promise<void> {
     try {
-      await this.save();
+      await this.writeNow();
     } catch (e: unknown) {
-      this.cache = previous;
+      rollback();
       throw e;
     }
   }
@@ -167,22 +226,19 @@ export class CacheManager {
   }
 
   async flush(): Promise<void> {
-    if (this._timer) {
-      activeWindow.clearTimeout(this._timer);
-      this._timer = null;
-    }
+    this.clearTimer();
     // A debounce whose timer already fired leaves no timer to find, but its write can
-    // still be in flight — await THAT instead of racing a second concurrent write past
-    // it (cf. flushSettingsSave in main.ts, which had the same blind spot).
-    if (this._saving) {
-      try {
-        await this._saving;
-      } catch {
-        /* the in-flight write failed and restored the dirty flag; the save below retries it */
-      }
-    }
-    if (!this._dirty) return;
-    await this.save();
+    // still be in flight — and other transactions may be queued behind it. Queue behind
+    // the whole tail instead of racing a second concurrent write past it (cf.
+    // flushSettingsSave in main.ts, which had the same blind spot).
+    //
+    // The dirty check runs INSIDE the transaction, i.e. after everything queued ahead
+    // has settled: if those writes persisted the pending state there is nothing left to
+    // do, and if one of them failed it restored `_dirty` and this retries it.
+    await this.runExclusive(async () => {
+      if (!this._dirty) return;
+      await this.writeNow();
+    });
   }
 
   get(filePath: string): CacheEntry | null {
@@ -200,67 +256,90 @@ export class CacheManager {
   async move(oldPath: string, newPath: string): Promise<boolean> {
     if (typeof oldPath !== 'string' || typeof newPath !== 'string') return false;
     if (!oldPath.trim() || !newPath.trim()) return false;
-    if (oldPath === newPath) return Object.hasOwn(this.cache, oldPath);
-    const entry = this.cache[oldPath];
-    if (!entry) return false;
-    if (Object.hasOwn(this.cache, newPath)) return false;
+    // The existence checks belong inside the transaction: read them here and a mutation
+    // queued ahead of us could invalidate them before our own edit lands.
+    return this.runExclusive(async () => {
+      if (oldPath === newPath) return Object.hasOwn(this.cache, oldPath);
+      const entry = this.cache[oldPath];
+      if (!entry) return false;
+      if (Object.hasOwn(this.cache, newPath)) return false;
 
-    const previous = this.cache;
-    const nextCache = {
-      ...this.cache,
-      [newPath]: entry,
-    };
-    delete nextCache[oldPath];
-    this.cache = nextCache;
-    await this.saveOrRestore(previous);
-    return true;
+      this.cache[newPath] = entry;
+      delete this.cache[oldPath];
+      await this.commit(() => {
+        this.cache[oldPath] = entry;
+        delete this.cache[newPath];
+      });
+      return true;
+    });
   }
 
   async put(filePath: string, content: string, cards: RawCard[], settings: PluginSettings): Promise<void> {
-    const previous = { ...this.cache };
-    const now = new Date().toISOString();
-    this.cache[filePath] = {
-      schemaVersion: CACHE_SCHEMA_VERSION,
-      contentHash: hashContent(content),
-      settingsHash: generationFingerprint(settings || this.getSettings()),
-      cards,
-      generatedAt: now,
-      lastAccessedAt: now,
-    };
-    await this.saveOrRestore(previous);
+    await this.runExclusive(async () => {
+      const had = Object.hasOwn(this.cache, filePath);
+      const previous = this.cache[filePath];
+      const now = new Date().toISOString();
+      this.cache[filePath] = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        contentHash: hashContent(content),
+        settingsHash: generationFingerprint(settings || this.getSettings()),
+        cards,
+        generatedAt: now,
+        lastAccessedAt: now,
+      };
+      await this.commit(() => {
+        if (had) this.cache[filePath] = previous;
+        else delete this.cache[filePath];
+      });
+    });
   }
 
   async replaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean> {
-    const entry = this.cache[filePath];
-    if (!entry) return false;
-    const previous = { ...this.cache };
-    const now = new Date().toISOString();
-    this.cache[filePath] = {
-      ...entry,
-      cards: (cards || []).map((card: ResolvedCard) => ({
-        title: card.title,
-        anchor: card.anchor,
-        gist: card.gist,
-        bullets: card.bullets || [],
-      })),
-      updatedAt: now,
-      lastAccessedAt: now,
-    };
-    await this.saveOrRestore(previous);
-    return true;
+    return this.runExclusive(async () => {
+      const entry = this.cache[filePath];
+      if (!entry) return false;
+      const now = new Date().toISOString();
+      this.cache[filePath] = {
+        ...entry,
+        cards: (cards || []).map((card: ResolvedCard) => ({
+          title: card.title,
+          anchor: card.anchor,
+          gist: card.gist,
+          bullets: card.bullets || [],
+        })),
+        updatedAt: now,
+        lastAccessedAt: now,
+      };
+      await this.commit(() => {
+        this.cache[filePath] = entry;
+      });
+      return true;
+    });
   }
 
   async delete(filePath: string): Promise<void> {
-    if (this.cache[filePath]) {
-      const previous = { ...this.cache };
+    await this.runExclusive(async () => {
+      const previous = this.cache[filePath];
+      if (!previous) return;
       delete this.cache[filePath];
-      await this.saveOrRestore(previous);
-    }
+      await this.commit(() => {
+        this.cache[filePath] = previous;
+      });
+    });
   }
 
   async clear(): Promise<void> {
-    const previous = this.cache;
-    this.cache = {};
-    await this.saveOrRestore(previous);
+    await this.runExclusive(async () => {
+      // clear() owns every key, so a whole-cache snapshot IS this transaction's own
+      // state here — and serialization guarantees no other mutation slipped in between
+      // the emptying and the write. Entries are removed in place (rather than swapping
+      // in a fresh object) so `this.cache`'s identity stays stable for the lifetime of
+      // the manager.
+      const previous = { ...this.cache };
+      for (const key of Object.keys(this.cache)) delete this.cache[key];
+      await this.commit(() => {
+        Object.assign(this.cache, previous);
+      });
+    });
   }
 }

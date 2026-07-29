@@ -226,6 +226,115 @@ async function testFlushAwaitsTheWriteAlreadyInFlight() {
   }
 }
 
+/**
+ * Round-2 review P1 (src/cache-manager.ts): rollback used to restore a snapshot of the
+ * WHOLE cache object, which is only correct if nothing else can mutate the cache in
+ * between. Nothing guaranteed that: GenerationJobManager runs up to 3 jobs at once, so
+ * batch generation issues genuinely concurrent put() calls. With put(A) and put(B) in
+ * flight together, B's write landing successfully and A's older write rejecting made A's
+ * rollback restore the pre-A snapshot — erasing B's committed entry as collateral.
+ *
+ * The fix is to serialize cache transactions (mutation + write are one atomic unit) and
+ * to scope every rollback to the keys that transaction touched. A rollback must undo its
+ * own entry, never anyone else's.
+ */
+async function testConcurrentPuts_RollbackOnlyUndoesTheFailedEntry() {
+  const writes = [];
+  let rejectFirstWrite = null;
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: (_filePath, content) => {
+      writes.push(content);
+      // The FIRST write issued (the older mutation's) hangs until the test fails it;
+      // every later write succeeds immediately.
+      if (writes.length === 1) {
+        return new Promise((_resolve, reject) => {
+          rejectFirstWrite = () => reject(new Error('disk full'));
+        });
+      }
+      return Promise.resolve();
+    },
+  };
+
+  const manager = makeManager(adapter);
+  const settings = { maxCards: 5 };
+  const putA = manager.put('a.md', 'content A', [{ title: 'A', anchor: '', gist: '', bullets: [] }], settings);
+  const putB = manager.put('b.md', 'content B', [{ title: 'B', anchor: '', gist: '', bullets: [] }], settings);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  rejectFirstWrite();
+  await assert.rejects(putA, /disk full/, "the failed mutation's own caller must still see the rejection");
+  await putB;
+
+  assert.ok(
+    manager.cache['b.md'],
+    "a concurrent mutation whose write SUCCEEDED must survive another mutation's rollback — the rollback may only undo its own entry",
+  );
+  assert.strictEqual(manager.cache['b.md'].cards[0].title, 'B', 'the surviving entry keeps its own cards');
+  assert.ok(
+    !Object.hasOwn(manager.cache, 'a.md'),
+    'the mutation whose write rejected must still be rolled back out of memory',
+  );
+
+  const lastPayload = JSON.parse(writes[writes.length - 1]).entries;
+  assert.ok(lastPayload['b.md'], 'the last write persisted the successful entry');
+  assert.ok(
+    !lastPayload['a.md'],
+    'no write may carry an entry whose own transaction failed — a later successful write would commit it to disk',
+  );
+}
+
+/**
+ * The mechanism behind the test above: cache writes must be serialized, so a mutation and
+ * the write that commits it are atomic with respect to every other mutation. Two adapter
+ * writes overlapping means some write is serializing a cache state that another
+ * transaction has not committed yet.
+ */
+async function testCacheWritesAreSerialized() {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const payloads = [];
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async (_filePath, content) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      payloads.push(content);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight--;
+    },
+  };
+
+  const manager = makeManager(adapter);
+  const settings = { maxCards: 5 };
+  await Promise.all([
+    manager.put('a.md', 'A', [{ title: 'A', anchor: '', gist: '', bullets: [] }], settings),
+    manager.put('b.md', 'B', [{ title: 'B', anchor: '', gist: '', bullets: [] }], settings),
+    manager.put('c.md', 'C', [{ title: 'C', anchor: '', gist: '', bullets: [] }], settings),
+  ]);
+
+  assert.strictEqual(
+    maxInFlight,
+    1,
+    'cache writes must never overlap — mutation + write is one serialized transaction',
+  );
+  assert.deepStrictEqual(
+    Object.keys(manager.cache).sort(),
+    ['a.md', 'b.md', 'c.md'],
+    'every successful concurrent mutation is retained',
+  );
+  const lastPayload = JSON.parse(payloads[payloads.length - 1]).entries;
+  assert.deepStrictEqual(
+    Object.keys(lastPayload).sort(),
+    ['a.md', 'b.md', 'c.md'],
+    'the final write on disk carries every committed entry',
+  );
+}
+
 async function testSuccessfulWriteKeepsTheMutation() {
   const writes = [];
   const adapter = {
@@ -265,6 +374,8 @@ assert.deepStrictEqual(t.pruneCacheEntries(smallCache, 10), [], 'nothing pruned 
   await testDeleteRestoresEntryWhenWriteRejects();
   await testMoveAndClearRestoreCacheWhenWriteRejects();
   await testFlushAwaitsTheWriteAlreadyInFlight();
+  await testConcurrentPuts_RollbackOnlyUndoesTheFailedEntry();
+  await testCacheWritesAreSerialized();
   await testSuccessfulWriteKeepsTheMutation();
   console.log('cache tests passed');
 })().catch((e) => {

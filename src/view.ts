@@ -94,13 +94,23 @@ export class ParallelReaderView extends ItemView {
    * file actually changed: this keeps scroll-sync position intact across an
    * ordinary refresh/regenerate of the SAME note, while guaranteeing a stale
    * highlight from the PREVIOUS note can never survive a file switch.
+   *
+   * The click-suppression deadline resets on the same condition, and for the same
+   * reason. It belongs to a click on a card of the note that was showing; a note opened
+   * inside that 400ms window would otherwise inherit it, and its first
+   * `syncActiveFromEditor` pass would return early — leaving the new note with no
+   * highlight at all until the user physically scrolled. A same-file refresh must NOT
+   * reset it: surviving the render that follows a click is exactly its job.
    */
   private beginSectionsReplace(file: TFile | null, sections: ResolvedCard[]) {
     const switchedFile = (this.sourceFile?.path ?? null) !== (file?.path ?? null);
     this.sourceFile = file;
     this.sections = sections;
     this.cards = [];
-    if (switchedFile) this.activeIdx = -1;
+    if (switchedFile) {
+      this.activeIdx = -1;
+      this.scrollSyncSuppressedUntil = 0;
+    }
   }
 
   renderEmpty() {

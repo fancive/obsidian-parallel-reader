@@ -32,6 +32,29 @@ Scope is exactly the **(a) Ship now** tier. The (b) Next and (c) Bets tiers are 
 
 ---
 
+## Owned scope deviations
+
+One change in this batch sits outside the (a) tier's stated boundary. It is kept
+deliberately, and recorded here rather than crossed silently.
+
+### Reduced-motion support (`src/view.ts`, `styles.css`)
+
+The cross-model review flagged the `prefers-reduced-motion` media query and the
+`scrollIntoView` behaviour switch as belonging to N8's ARIA slice, and asked for them to
+be deferred. **They are being kept.**
+
+S7 added CSS transitions and a JS `behavior: 'smooth'` scroll. Shipping new motion
+without a reduced-motion escape is an incomplete change, not a separate feature. The
+roadmap happened to list the media query under N8's ARIA slice, but the accessibility
+obligation is created by S7 itself. Reverting working a11y code to satisfy a taxonomy
+boundary would make the product worse. Keeping it; the boundary is documented rather
+than silently crossed.
+
+Nothing else from N8 (the ARIA listbox roles, keyboard semantics, focus management) is
+in this batch — only the motion escape hatch that S7's own change requires.
+
+---
+
 ## Findings that changed during scope exploration
 
 Two roadmap claims were corrected by direct measurement. Downstream executors should trust

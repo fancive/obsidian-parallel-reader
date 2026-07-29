@@ -66,10 +66,23 @@ class ParallelReaderPlugin extends Plugin {
   // (rather than the previous raw addEventListener, which onunload() never disposed).
   _scrollSync: Component | null = null;
   _settingsSaveTimer: number | null = null;
-  // The debounce callback clears `_settingsSaveTimer` BEFORE the async write settles, so
-  // the timer alone cannot tell `flushSettingsSave()` whether a write is still in flight.
-  // Quit landing in that window used to await nothing and lose the setting.
-  _settingsSaveInFlight: Promise<void> | null = null;
+  /**
+   * Tail of the settings-write queue.
+   *
+   * The debounce callback clears `_settingsSaveTimer` BEFORE the async write settles, so
+   * the timer alone cannot tell `flushSettingsSave()` whether a write is still in flight;
+   * quit landing in that window used to await nothing and lose the setting. Tracking the
+   * pending write in a single slot was not enough either: a second save overwrote the
+   * slot, so two writes could be in flight at once, land in either order, and leave an
+   * OLDER payload as the final state on disk — while flush, awaiting only the newest
+   * slot, reported success. Writes are therefore chained: each starts after the previous
+   * one settles, and flush awaits this tail.
+   *
+   * Invariant: the tail never rejects (errors are swallowed when it is republished), so
+   * one failed write cannot wedge every later write. Each caller still sees its own
+   * rejection through the promise `saveSettings()` returns.
+   */
+  _settingsSaveQueue: Promise<void> = Promise.resolve();
 
   get cache(): Record<string, CacheEntry> {
     return this.cacheManager.cache;
@@ -232,15 +245,16 @@ class ParallelReaderPlugin extends Plugin {
       activeWindow.clearTimeout(this._settingsSaveTimer);
       this._settingsSaveTimer = null;
     }
-    // Publish the pending write so flushSettingsSave() (and therefore the 'quit' Tasks
-    // hook) can await THIS write rather than starting a second one or awaiting nothing.
-    const pending = Promise.resolve(this.saveData({ settings: this.settings }));
-    this._settingsSaveInFlight = pending;
-    try {
-      await pending;
-    } finally {
-      if (this._settingsSaveInFlight === pending) this._settingsSaveInFlight = null;
-    }
+    // Queue behind any write already running or queued, so writes reach disk in the
+    // order they were requested and the last one requested is the last one committed.
+    // `this.settings` is read when this link runs, not now, so a queued write always
+    // persists the current settings rather than a snapshot that is already stale.
+    const run = this._settingsSaveQueue.then(() => Promise.resolve(this.saveData({ settings: this.settings })));
+    this._settingsSaveQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    await run;
   }
 
   saveSettingsDebounced(delayMs = 400) {
@@ -255,12 +269,17 @@ class ParallelReaderPlugin extends Plugin {
     if (this._settingsSaveTimer) {
       activeWindow.clearTimeout(this._settingsSaveTimer);
       this._settingsSaveTimer = null;
+      // saveSettings() enqueues behind everything already pending and awaits its own
+      // link, so awaiting it also awaits every write queued before it.
       await this.saveSettings();
+      return;
     }
     // A debounce that already fired has no timer left, but its write can still be in
-    // flight — awaiting it is the whole point of the quit hook.
-    const inFlight = this._settingsSaveInFlight;
-    if (inFlight) await inFlight;
+    // flight — and older writes can still be queued behind a newer one that already
+    // resolved. Await the TAIL, so the quit hook holds until the queue is fully drained;
+    // resolving early would let the process exit mid-queue and leave a stale payload as
+    // the last thing written.
+    await this._settingsSaveQueue;
   }
 
   /* ---------- Cache delegation ---------- */

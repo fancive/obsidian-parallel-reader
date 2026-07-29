@@ -27,7 +27,7 @@ changelog-guard step.
 - ci(coverage): stop reporting a fabricated 100% branch-coverage gate (S1a)
 - test(coverage): load `main.ts` / `src/*.ts` directly via Node type stripping
   instead of an esbuild bundle, so branch and function coverage are real
-  (32 -> 1180 measured branches, 12 -> 316 functions); set thresholds to the
+  (32 -> ~1200 measured branches, 12 -> ~320 functions); set thresholds to the
   measured floor and add a CI assertion on the absolute totals (S1b)
 - fix: the summary card highlight no longer stays on the previous note's card
   after switching files, and no longer jumps to the card above the one you
@@ -59,8 +59,14 @@ changelog-guard step.
   repaints the newly opened note with the previous note's cards
 - fix: a rejected cache write is rolled back in memory, so an edit the UI
   reported as failed can no longer reappear when the note is reopened
+- fix: cache writes are serialized, so a failed write during batch generation
+  can no longer discard summaries that were saved successfully alongside it
 - fix: quitting Obsidian now waits for a debounced settings or cache write that
   is already in flight, not just for one that has yet to start
+- fix: settings writes are queued, so two changes made in quick succession
+  cannot land out of order and revert the newer one
+- fix: opening a note within a moment of clicking a card in another note no
+  longer leaves the new note without a highlighted card until you scroll
 - a11y: the active card's title carries an underline, so "you are here" is no
   longer signalled by colour alone
 - build: `scripts/bump-version.mjs --tag` refuses to tag when the tag already

@@ -194,6 +194,94 @@ async function testFlushSettingsSave_AwaitsWriteAlreadyInFlight() {
   assert.strictEqual(saveDataCalls, 1, 'flushing an in-flight save must await it, not start a second write');
 }
 
+/**
+ * Round-2 review P1 (main.ts): tracking the pending write in a SINGLE slot does not make
+ * settings writes ordered. A second save overwrote the slot, so two writes could be in
+ * flight at once and land in either order — and `flushSettingsSave()` awaited only the
+ * newest one, so quit could resolve while an OLDER write was still pending and then
+ * overwrite the newer settings on disk.
+ *
+ * The fix is to serialize settings writes on a queue and make flush await the queue TAIL.
+ *
+ * The harness below models a disk that commits the payload at COMPLETION time (not at
+ * call time) and lets the test settle writes newest-first — the pathological ordering a
+ * real filesystem is free to produce.
+ */
+function makeOrderedSettingsPlugin() {
+  const plugin = new t.ParallelReaderPlugin();
+  plugin.settings = { uiLanguage: 'en' };
+  const state = { calls: [], pending: [], disk: null };
+  plugin.saveData = (data) => {
+    const payload = data.settings.uiLanguage;
+    state.calls.push(payload);
+    return new Promise((resolve) => {
+      state.pending.push(() => {
+        state.disk = payload;
+        resolve();
+      });
+    });
+  };
+  return { plugin, state };
+}
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+async function testOverlappingSettingsSaves_NewestSettingsWinOnDisk() {
+  const { plugin, state } = makeOrderedSettingsPlugin();
+
+  const older = plugin.saveSettings(); // writes uiLanguage: 'en'
+  plugin.settings = { uiLanguage: 'fr' };
+  const newer = plugin.saveSettings(); // writes uiLanguage: 'fr'
+  await tick();
+
+  // Settle newest-first, so an unordered implementation lands the stale payload last.
+  while (state.pending.length) {
+    state.pending.pop()();
+    await tick();
+  }
+  await Promise.all([older, newer]);
+
+  assert.strictEqual(
+    state.disk,
+    'fr',
+    'the newest settings must be the last thing written to disk — an older write completing after a newer one silently reverts the user’s change',
+  );
+}
+
+async function testFlushSettingsSave_AwaitsEveryQueuedWrite_NotJustTheNewest() {
+  const { plugin, state } = makeOrderedSettingsPlugin();
+
+  const older = plugin.saveSettings();
+  plugin.settings = { uiLanguage: 'fr' };
+  const newer = plugin.saveSettings();
+  await tick();
+
+  let flushResolved = false;
+  const flush = plugin.flushSettingsSave().then(() => {
+    flushResolved = true;
+  });
+  await tick();
+  assert.strictEqual(flushResolved, false, 'sanity: flush cannot resolve before any write has landed');
+
+  // Settle the most recent write, leaving an older one outstanding.
+  state.pending.pop()();
+  await tick();
+  assert.strictEqual(
+    flushResolved,
+    false,
+    'flushSettingsSave() must not resolve while any settings write is still pending — quit would exit and let that older write overwrite the newer settings',
+  );
+
+  while (state.pending.length) {
+    state.pending.pop()();
+    await tick();
+  }
+  await Promise.all([older, newer, flush]);
+
+  assert.strictEqual(flushResolved, true, 'the flush resolves once every queued settings write has landed');
+  assert.strictEqual(state.disk, 'fr', 'and the newest settings are what remain on disk');
+}
+
 async function testFlushSettingsSave_NoPendingWork_IsANoop() {
   const plugin = new t.ParallelReaderPlugin();
   plugin.settings = { uiLanguage: 'en' };
@@ -232,6 +320,8 @@ function testSettingsTabHide_CallsBaseCleanup() {
   testSettingsTabHide_FlushesPendingSettingsWrite();
   await testSettingsTabHide_FlushRejection_DoesNotThrow();
   await testFlushSettingsSave_AwaitsWriteAlreadyInFlight();
+  await testOverlappingSettingsSaves_NewestSettingsWinOnDisk();
+  await testFlushSettingsSave_AwaitsEveryQueuedWrite_NotJustTheNewest();
   await testFlushSettingsSave_NoPendingWork_IsANoop();
   testSettingsTabHide_CallsBaseCleanup();
   console.log('plugin-lifecycle tests passed');

@@ -99,8 +99,12 @@ function testCoverageShape_FunctionFloorIsEnforcedIndependently() {
   assert.strictEqual(lowFunctions.status, 1, 'plenty of branches must not excuse a collapsed function count');
   assert.match(lowFunctions.stderr, /functions/, 'the failure must name the function floor it tripped');
 
-  const healthy = runCoverageShape({ branches: 1180, functions: 316 });
-  assert.strictEqual(healthy.status, 0, "today's measured shape (1180 branches / 316 functions) must pass");
+  // A shape in the range the direct-import harness actually produces (~1200+ branches,
+  // ~300+ functions) must pass. Deliberately not pinned to the exact current reading:
+  // that number moves with every test added, and a test asserting it would rot on the
+  // next commit rather than guard anything.
+  const healthy = runCoverageShape({ branches: 1200, functions: 300 });
+  assert.strictEqual(healthy.status, 0, 'a healthy real-harness shape must pass both floors');
 }
 
 /* ============================================================

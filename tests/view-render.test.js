@@ -1017,6 +1017,67 @@ async function testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard() {
 }
 
 /* ============================================================
+ * Round-2 review P2 (src/view.ts): the click-suppression deadline is a property of ONE
+ * note's click, but it used to survive a file switch. Opening note B within 400ms of
+ * clicking a card in note A left B inheriting A's suppression window, so the first
+ * syncActiveFromEditor pass for B returned early and B stayed unhighlighted until the
+ * user physically scrolled — precisely the bug the S3 fix exists to prevent, arriving
+ * through a different door.
+ * ============================================================ */
+async function testClickSuppression_DoesNotLeakAcrossAFileSwitch() {
+  const plugin = makeBasePlugin(makeSettings());
+  plugin.scrollEditorToLine = async () => {};
+
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  view.containerEl = { children: [{}, new FakeEl('div')] };
+  plugin.getParallelView = () => view;
+
+  const fileA = makeFakeFile('A.md');
+  const sectionsA = [
+    { title: 'a0', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
+    { title: 'a1', anchor: '', gist: '', bullets: [], startLine: 10, level: 0 },
+  ];
+  view.loadFor(fileA, sectionsA, false);
+  view.cards[1].dispatch('click');
+  assert.ok(view.isScrollSyncSuppressed(), 'sanity: clicking a card arms the suppression window');
+
+  // A refresh of the SAME note (a regenerate landing mid-window, say) must keep the
+  // suppression — it exists to survive exactly the renders that follow a click.
+  view.loadFor(fileA, sectionsA, false);
+  assert.ok(view.isScrollSyncSuppressed(), 'a same-file refresh must not disarm the click suppression');
+
+  // Switching notes inside the 400ms window: B must start with a clean slate.
+  const fileB = makeFakeFile('B.md');
+  const sectionsB = [
+    { title: 'b0', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
+    { title: 'b1', anchor: '', gist: '', bullets: [], startLine: 10, level: 0 },
+  ];
+  view.loadFor(fileB, sectionsB, false);
+  assert.ok(
+    !view.isScrollSyncSuppressed(),
+    "opening a different note must clear the suppression armed by a click in the PREVIOUS note — the deadline belongs to that note's click, not to the panel",
+  );
+
+  // The consequence that actually reaches the user: the first sync for B must land.
+  const mdViewB = {
+    file: fileB,
+    editor: {
+      cm: {
+        scrollDOM: { getBoundingClientRect: () => ({ top: 0, height: 400, left: 0 }) },
+        posAtCoords: () => 1,
+        state: { doc: { lineAt: () => ({ number: 11 }) } }, // -> topLine 10 -> card index 1
+      },
+    },
+  };
+  plugin.syncActiveFromEditor(mdViewB);
+  assert.strictEqual(
+    view.activeIdx,
+    1,
+    'the newly opened note must be highlighted immediately, not left blank until the user scrolls',
+  );
+}
+
+/* ============================================================
  * S6: stale banner — no longer relies on colour alone (icon cue), and its
  * regenerate action must survive the contrast/markup rework untouched.
  * ============================================================ */
@@ -1172,6 +1233,7 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent();
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
+  await testClickSuppression_DoesNotLeakAcrossAFileSwitch();
   await testRenderStaleBanner_HasIconCueAndRegenerateAction();
   testAddIconButton_UsesObsidianTooltip_NotNativeTitle();
   testSetActiveSection_ScrollBehavior_RespectsReducedMotion();

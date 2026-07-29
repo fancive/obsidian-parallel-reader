@@ -21,10 +21,13 @@ import { join } from 'node:path';
 const repoRoot = join(import.meta.dirname, '..');
 const summaryPath = join(repoRoot, 'coverage', 'coverage-summary.json');
 
-// Measured on the direct-import harness at the time of writing: 1180 branches and
-// 316 functions across 30 files. The floors sit below that so ordinary code churn
-// cannot trip them, and far above the pre-migration readings (32 branches, 12
-// functions) so a harness regression cannot slip through.
+// The direct-import harness measures roughly 1200+ branches and 300+ functions across
+// ~30 files (1247/322 when this floor was last reviewed; the exact figure moves with
+// every test or source change, so treat it as an order of magnitude, not a live
+// number — run `npm run coverage:assert`, which prints the current shape). The floors
+// sit well below that so ordinary churn cannot trip them, and far above the
+// pre-migration readings (32 branches, 12 functions) so a harness regression cannot
+// slip through.
 //
 // The branch floor is 1001, not a round 1000, because the documented contract is
 // `total.branches.total > 1000`: a report with exactly 1000 branches must FAIL.
