@@ -45,12 +45,24 @@
 
 ### 第一步：安装插件
 
-1. 打开 [Release 页面](https://github.com/fancive/obsidian-parallel-reader/releases)，下载最新版的三个文件：**main.js**、**manifest.json**、**styles.css**
+Parallel Reader 已经上架 Obsidian 官方社区插件市场：
+
+1. 打开 Obsidian → **设置** → **第三方插件** → **浏览**
+2. 搜索 **「Parallel Reader」**，点击 **安装**，再点击 **启用**
+
+<details>
+<summary><b>手动安装（BRAT / 测试版 / 预发布体验）</b></summary>
+
+只有在你需要试用预发布版本，或者想绕开社区市场手动安装时才需要这样做。手动安装的插件不会自动更新，等正式版发布后请改用上面的市场安装方式。
+
+1. 打开 [Release 页面](https://github.com/fancive/obsidian-parallel-reader/releases)，下载你需要的版本的三个文件：**main.js**、**manifest.json**、**styles.css**
 2. 打开你的 Vault 文件夹，进入 `.obsidian/plugins/`（没有就新建），再创建一个叫 `parallel-reader` 的文件夹
 3. 把下载的三个文件放进去
 4. 打开 Obsidian → **设置** → **第三方插件** → 找到 **Parallel Reader** → 打开开关
 
 > **找不到 `.obsidian` 文件夹？** macOS 在 Finder 里按 `Cmd+Shift+.` 显示隐藏文件；Windows 在文件资源管理器里勾选「显示隐藏的项目」。
+
+</details>
 
 ### 第二步：配置 AI 服务
 

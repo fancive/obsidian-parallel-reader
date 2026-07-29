@@ -45,12 +45,24 @@ Inspired by [this reading workflow demo](https://www.bilibili.com/video/BV1FxoGB
 
 ### Step 1: Install the Plugin
 
-1. Go to the [Releases page](https://github.com/fancive/obsidian-parallel-reader/releases) and download three files from the latest release: **main.js**, **manifest.json**, **styles.css**
+Parallel Reader is in Obsidian's official community plugin registry:
+
+1. Open Obsidian → **Settings** → **Community plugins** → **Browse**
+2. Search for **"Parallel Reader"**, then click **Install** and **Enable**
+
+<details>
+<summary><b>Manual install (BRAT / beta / pre-release testing)</b></summary>
+
+Use this only if you need a pre-release build, or want to sideload without the community registry. Sideloaded installs don't auto-update, so switch to the registry install above once your build is out.
+
+1. Go to the [Releases page](https://github.com/fancive/obsidian-parallel-reader/releases) and download three files from the release you want: **main.js**, **manifest.json**, **styles.css**
 2. Open your vault folder, navigate to `.obsidian/plugins/` (create it if it doesn't exist), and create a new folder called `parallel-reader`
 3. Put the three downloaded files into that folder
 4. Open Obsidian → **Settings** → **Community plugins** → find **Parallel Reader** → toggle it **on**
 
 > **Tip**: Can't see the `.obsidian` folder? On macOS press `Cmd+Shift+.` in Finder; on Windows enable "Show hidden files" in File Explorer.
+
+</details>
 
 ### Step 2: Set Up Your AI Provider
 
