@@ -22,6 +22,7 @@ export { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './
 export { CacheManager } from './cache-manager';
 export { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 export { CliProcessError, resolveCliPath, runCli, summarizeViaClaudeCode, summarizeViaCodex } from './cli';
+export { showGenerationError } from './error-ui';
 export { cancellationNoticeKey, summarizeDocument } from './generation';
 export {
   classifyGenerationError,

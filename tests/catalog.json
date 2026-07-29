@@ -29,6 +29,7 @@
       "files": [
         "cache.test.js",
         "direct-cache.test.js",
+        "error-ui.test.js",
         "generation-job-manager.test.js",
         "plugin-batch.test.js",
         "view-render.test.js"
