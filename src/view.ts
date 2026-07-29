@@ -1,6 +1,6 @@
 'use strict';
 
-import { ItemView, MarkdownRenderer, Menu, Notice, TFile, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from 'obsidian';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 import { cardsToMarkdown, cardToMarkdown, cardToPlain } from './markdown';
 import { CardEditModal, confirmExportOverwrite } from './modal';
@@ -244,7 +244,9 @@ export class ParallelReaderView extends ItemView {
 
   private renderStaleBanner(container: Element) {
     const banner = container.createDiv({ cls: 'parallel-reader-stale-banner' });
-    banner.createSpan({ text: this.plugin.t('staleBanner') });
+    const icon = banner.createSpan({ cls: 'parallel-reader-stale-icon' });
+    if (typeof setIcon === 'function') setIcon(icon, 'alert-triangle');
+    banner.createSpan({ text: this.plugin.t('staleBanner'), cls: 'parallel-reader-stale-text' });
     addTextButton(
       banner,
       'refresh-cw',

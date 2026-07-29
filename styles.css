@@ -335,21 +335,27 @@
   gap: 8px;
   margin: 10px 12px 0;
   padding: 8px 12px;
-  background: var(--background-modifier-error, rgba(224, 175, 104, 0.1));
-  color: var(--text-warning, #e0af68);
+  background: color-mix(in srgb, var(--text-warning) 12%, var(--background-primary));
+  color: var(--text-normal);
   border-radius: 4px;
   font-size: 12px;
-  border: 1px solid var(--text-warning, #e0af68);
+  border-left: 3px solid var(--text-warning);
 }
 
-.parallel-reader-stale-banner > span {
+.parallel-reader-stale-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--text-warning);
+}
+
+.parallel-reader-stale-text {
   flex: 1;
   min-width: 160px;
 }
 
 .parallel-reader-stale-button {
   flex-shrink: 0;
-  color: var(--text-warning, #e0af68);
+  color: var(--text-warning);
 }
 
 .parallel-reader-state {

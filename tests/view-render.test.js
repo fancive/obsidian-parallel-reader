@@ -701,6 +701,47 @@ async function testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard() {
   assert.strictEqual(view.activeIdx, 1, 'after suppression expires, scroll-sync resumes reassigning as normal');
 }
 
+/* ============================================================
+ * S6: stale banner — no longer relies on colour alone (icon cue), and its
+ * regenerate action must survive the contrast/markup rework untouched.
+ * ============================================================ */
+async function testRenderStaleBanner_HasIconCueAndRegenerateAction() {
+  const plugin = makeBasePlugin(makeSettings());
+  let regenerateCalls = null;
+  plugin.runForFile = async (file, force) => {
+    regenerateCalls = [file?.path, force];
+    return 'ok';
+  };
+
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  const rootEl = new FakeEl('div');
+  view.containerEl = { children: [{}, rootEl] };
+
+  const file = makeFakeFile('A.md');
+  const sections = [{ title: 'a1', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+  view.loadFor(file, sections, true); // stale=true — must render the banner
+
+  const banner = rootEl.children.find((c) => c.hasClass('parallel-reader-stale-banner'));
+  assert.ok(banner, 'stale banner must render when view.stale is true');
+
+  const icon = banner.children.find((c) => c.hasClass('parallel-reader-stale-icon'));
+  assert.ok(icon, 'banner must carry a non-colour (icon) cue so state is not conveyed by colour alone');
+
+  const text = banner.children.find((c) => c.hasClass('parallel-reader-stale-text'));
+  assert.ok(text?.textContent, 'banner must still show the stale message text');
+
+  const button = banner.children.find((c) => c.hasClass('parallel-reader-stale-button'));
+  assert.ok(button, 'banner must still expose the regenerate action');
+
+  button.dispatch('click');
+  assert.deepStrictEqual(
+    regenerateCalls,
+    ['A.md', true],
+    'clicking the banner action must still trigger a forced regenerate',
+  );
+}
+
 (async () => {
   await testShouldRender_NonSilent_FreshView();
   await testShouldRender_NonSilent_DifferentFile();
@@ -725,6 +766,7 @@ async function testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard() {
   await testViewUpdateCard_PersistFails_ReturnsFalse();
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
+  await testRenderStaleBanner_HasIconCueAndRegenerateAction();
   console.log('view-render tests passed');
 })().catch((e) => {
   console.error(e);
