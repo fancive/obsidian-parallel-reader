@@ -7,8 +7,17 @@
  * By default this only writes manifest.json/versions.json and stages them
  * with `git add` (existing behavior, relied on by anyone invoking this via
  * `npm version`/`npm run version`). Pass --tag to additionally commit the
- * staged files and create a lightweight git tag for the version in the same
+ * release files and create a lightweight git tag for the version in the same
  * step, so bumping and tagging are no longer two separate manual actions.
+ *
+ * --tag preflights BEFORE rewriting anything (a half-applied bump is worse than
+ * no bump) and then commits an explicit file list rather than "whatever is
+ * staged", because all three of these used to be possible:
+ *   - tagging a commit that lacks the `## [version]` CHANGELOG section that
+ *     .github/workflows/release.yml requires (it was only warned about, and the
+ *     section was never staged);
+ *   - sweeping unrelated staged changes into the release commit;
+ *   - discovering an already-existing tag only after the commit was created.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -36,6 +45,56 @@ if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
 
 const manifestPath = path.join(root, 'manifest.json');
 const versionsPath = path.join(root, 'versions.json');
+const changelogPath = path.join(root, 'CHANGELOG.md');
+
+/** The only files the release commit may ever contain. */
+const RELEASE_FILES = ['manifest.json', 'versions.json', 'CHANGELOG.md'];
+
+function gitOutput(args) {
+  return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+/**
+ * Everything that must hold before a release commit is created. Runs before any file is
+ * rewritten so a rejected release leaves the tree exactly as it found it.
+ */
+function preflightTag() {
+  try {
+    execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' });
+  } catch {
+    fail('--tag requires a git repository.');
+  }
+
+  if (gitOutput(['tag', '--list', version])) {
+    fail(`Tag ${version} already exists. Delete it (git tag -d ${version}) or choose another version.`);
+  }
+
+  const hasChangelogEntry =
+    fs.existsSync(changelogPath) && fs.readFileSync(changelogPath, 'utf8').includes(`## [${version}]`);
+  if (!hasChangelogEntry) {
+    fail(
+      `CHANGELOG.md has no "## [${version}]" section. The release workflow reads that section ` +
+        'for the release notes and its changelog guard would fail on the tag this would create. ' +
+        'Add the section first, then re-run with --tag.',
+    );
+  }
+
+  const staged = gitOutput(['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
+  const unrelated = staged.filter((file) => !RELEASE_FILES.includes(file));
+  if (unrelated.length) {
+    fail(
+      `Refusing to tag with unrelated staged changes: ${unrelated.join(', ')}. ` +
+        'Commit or unstage them first so the release commit contains only the release files.',
+    );
+  }
+}
+
+if (shouldTag) preflightTag();
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const versions = JSON.parse(fs.readFileSync(versionsPath, 'utf8'));
@@ -63,19 +122,11 @@ console.log(`Bumped version: ${oldVersion} → ${version}`);
 console.log(`Updated: manifest.json, versions.json`);
 
 if (shouldTag) {
-  const changelogPath = path.join(root, 'CHANGELOG.md');
-  const hasChangelogEntry =
-    fs.existsSync(changelogPath) && fs.readFileSync(changelogPath, 'utf8').includes(`## [${version}]`);
-  if (!hasChangelogEntry) {
-    console.warn(
-      `Warning: CHANGELOG.md has no "## [${version}]" section yet. ` +
-        'The release workflow reads that section for release notes and ' +
-        'will fail its changelog guard until one is added.',
-    );
-  }
-
   try {
-    execFileSync('git', ['commit', '-m', `chore: bump version to ${version}`], {
+    // Pathspec form: commits the working-tree content of exactly these files and ignores
+    // the index for everything else, so nothing unrelated can ride along — and the
+    // CHANGELOG section the release workflow needs is actually IN the tagged commit.
+    execFileSync('git', ['commit', '-m', `chore: bump version to ${version}`, '--', ...RELEASE_FILES], {
       cwd: root,
       stdio: 'inherit',
     });

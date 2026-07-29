@@ -152,7 +152,23 @@ export class ItemView {
   }
 }
 
-export class PluginSettingTab {}
+/**
+ * Obsidian's SettingTab base. `hide()` is a REAL documented method here (it unloads the
+ * tab's registered components and empties containerEl in the product), not an implicit
+ * no-op: an override that forgets `super.hide()` silently skips that cleanup, and an
+ * empty `class PluginSettingTab {}` made that omission undetectable in tests.
+ * `baseHideCalls` records the base call so tests can assert the chain-up happened.
+ */
+export class PluginSettingTab {
+  constructor(app, plugin) {
+    this.app = app;
+    this.plugin = plugin;
+    this.baseHideCalls = 0;
+  }
+  hide() {
+    this.baseHideCalls++;
+  }
+}
 export class Setting {}
 
 export class Notice {

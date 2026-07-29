@@ -45,8 +45,15 @@ function makeFakeMdView(scrollDom) {
   };
 }
 
+/** The real plugin always has `app`; bindScrollSync's initial editor→card sync reads
+ * `app.workspace` through getParallelView(). No panel is open in these tests. */
+function stubApp(plugin) {
+  plugin.app = { workspace: { getLeavesOfType: () => [] } };
+  return plugin;
+}
+
 function testBindScrollSync_RebindDoesNotAccumulateListeners() {
-  const plugin = new t.ParallelReaderPlugin();
+  const plugin = stubApp(new t.ParallelReaderPlugin());
   const scrollDom = makeFakeScrollDom();
   plugin.getActiveView = () => makeFakeMdView(scrollDom);
 
@@ -73,7 +80,7 @@ function testBindScrollSync_RebindDoesNotAccumulateListeners() {
 }
 
 function testBindScrollSync_PluginUnload_DetachesListener() {
-  const plugin = new t.ParallelReaderPlugin();
+  const plugin = stubApp(new t.ParallelReaderPlugin());
   const scrollDom = makeFakeScrollDom();
   plugin.getActiveView = () => makeFakeMdView(scrollDom);
   // onunload() also flushes the cache; keep it a harmless no-op for this test so we're
@@ -136,11 +143,97 @@ async function testSettingsTabHide_FlushRejection_DoesNotThrow() {
   }
 }
 
+/**
+ * Review P1 (main.ts): the debounce callback clears `_settingsSaveTimer` BEFORE the
+ * async `saveSettings()` settles. `flushSettingsSave()` only looked at that timer, so a
+ * quit landing inside the window between "timer fired" and "saveData() resolved" awaited
+ * nothing at all: `workspace.on('quit')`'s Tasks promise resolved immediately and the
+ * process could exit with the setting still unwritten. The flush must await the write
+ * that is actually in flight, not just a pending timer.
+ */
+async function testFlushSettingsSave_AwaitsWriteAlreadyInFlight() {
+  const plugin = new t.ParallelReaderPlugin();
+  plugin.settings = { uiLanguage: 'en' };
+  let saveDataCalls = 0;
+  let saveDataSettled = false;
+  let resolveSaveData = null;
+  plugin.saveData = () => {
+    saveDataCalls++;
+    return new Promise((resolve) => {
+      resolveSaveData = () => {
+        saveDataSettled = true;
+        resolve();
+      };
+    });
+  };
+
+  plugin.saveSettingsDebounced(1);
+  await new Promise((resolve) => setTimeout(resolve, 10)); // let the debounce timer fire
+
+  assert.strictEqual(saveDataCalls, 1, 'sanity: the debounce timer fired and started the write');
+  assert.strictEqual(plugin._settingsSaveTimer, null, 'sanity: the timer is cleared before the write settles');
+  assert.strictEqual(saveDataSettled, false, 'sanity: the write is still in flight');
+
+  let flushResolved = false;
+  const flush = plugin.flushSettingsSave().then(() => {
+    flushResolved = true;
+  });
+  // Give the flush every chance to resolve on its own (microtasks + a macrotask turn).
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  assert.strictEqual(
+    flushResolved,
+    false,
+    'flushSettingsSave() must not resolve while the debounced saveData() it exists to guarantee is still pending — quit would exit with the setting lost',
+  );
+
+  resolveSaveData();
+  await flush;
+  assert.strictEqual(flushResolved, true, 'the flush resolves once the in-flight write lands');
+  assert.strictEqual(saveDataSettled, true, 'the awaited write actually completed');
+  assert.strictEqual(saveDataCalls, 1, 'flushing an in-flight save must await it, not start a second write');
+}
+
+async function testFlushSettingsSave_NoPendingWork_IsANoop() {
+  const plugin = new t.ParallelReaderPlugin();
+  plugin.settings = { uiLanguage: 'en' };
+  let saveDataCalls = 0;
+  plugin.saveData = async () => {
+    saveDataCalls++;
+  };
+
+  await plugin.flushSettingsSave();
+
+  assert.strictEqual(saveDataCalls, 0, 'flushing with no pending timer and no in-flight write must not write');
+}
+
+/**
+ * Review P2 (src/settings-tab.ts): the `hide()` override skipped `super.hide()`, so
+ * SettingTab's documented component cleanup never ran. The lifecycle mock used to declare
+ * `class PluginSettingTab {}` with no members, which made the omission undetectable — the
+ * mock now implements the documented base `hide()` so this test can see it.
+ */
+function testSettingsTabHide_CallsBaseCleanup() {
+  const fakePlugin = { flushSettingsSave: async () => {} };
+  const tab = new t.ParallelReaderSettingTab({}, fakePlugin);
+
+  tab.hide();
+
+  assert.strictEqual(
+    tab.baseHideCalls,
+    1,
+    "hide() must call super.hide() so SettingTab's documented component cleanup still runs",
+  );
+}
+
 (async () => {
   testBindScrollSync_RebindDoesNotAccumulateListeners();
   testBindScrollSync_PluginUnload_DetachesListener();
   testSettingsTabHide_FlushesPendingSettingsWrite();
   await testSettingsTabHide_FlushRejection_DoesNotThrow();
+  await testFlushSettingsSave_AwaitsWriteAlreadyInFlight();
+  await testFlushSettingsSave_NoPendingWork_IsANoop();
+  testSettingsTabHide_CallsBaseCleanup();
   console.log('plugin-lifecycle tests passed');
 })().catch((e) => {
   console.error(e);

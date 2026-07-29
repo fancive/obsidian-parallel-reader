@@ -102,5 +102,21 @@ assert.ok(
   /hide\(\)[\s\S]{0,200}flushSettingsSave/.test(settingsTabSource),
   'settings tab should override hide() to flush pending debounced settings writes',
 );
+assert.ok(
+  /hide\(\)[\s\S]{0,300}super\.hide\(\)/.test(settingsTabSource),
+  "settings tab hide() should chain up to super.hide() so SettingTab's component cleanup still runs",
+);
+
+// Non-colour state cue (S7 / review P2): the active card's title must carry a structural
+// cue, not just a different hue -- colour alone is invisible in monochrome/high-contrast
+// themes and to users who cannot distinguish the accent from --text-normal.
+const activeTitleRule = /\.parallel-reader-card\.is-active\s+\.parallel-reader-card-title\s*\{([^}]*)\}/.exec(
+  fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8'),
+);
+assert.ok(activeTitleRule, 'styles.css should style the active card title');
+assert.ok(
+  /text-decoration|font-weight|border-|text-underline|::before/.test(activeTitleRule[1]),
+  'the active card title must carry a non-colour cue (underline/weight/marker), not colour alone',
+);
 
 console.log('architecture tests passed');

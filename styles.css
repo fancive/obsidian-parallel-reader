@@ -249,9 +249,18 @@
 
 /* --text-accent is reserved for the active card's title only -- it used to be
    spent on every card title plus the active border plus bullet markers plus
-   links, leaving it unable to signal "you are here". */
+   links, leaving it unable to signal "you are here".
+   Colour alone is not a state cue, though (WCAG 1.4.1, and every user reading
+   in a monochrome or high-contrast theme), so the underline carries the same
+   signal structurally. It is an underline rather than a heavier weight because
+   the title is already 700 -- there is no headroom left in weight. Sized in em
+   so it scales with the theme's font size, and the decoration colour is
+   inherited from the title, so no hue is hardcoded. */
 .parallel-reader-card.is-active .parallel-reader-card-title {
   color: var(--text-accent, var(--interactive-accent));
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.22em;
 }
 
 .parallel-reader-gist {

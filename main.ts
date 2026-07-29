@@ -66,6 +66,10 @@ class ParallelReaderPlugin extends Plugin {
   // (rather than the previous raw addEventListener, which onunload() never disposed).
   _scrollSync: Component | null = null;
   _settingsSaveTimer: number | null = null;
+  // The debounce callback clears `_settingsSaveTimer` BEFORE the async write settles, so
+  // the timer alone cannot tell `flushSettingsSave()` whether a write is still in flight.
+  // Quit landing in that window used to await nothing and lose the setting.
+  _settingsSaveInFlight: Promise<void> | null = null;
 
   get cache(): Record<string, CacheEntry> {
     return this.cacheManager.cache;
@@ -228,7 +232,15 @@ class ParallelReaderPlugin extends Plugin {
       activeWindow.clearTimeout(this._settingsSaveTimer);
       this._settingsSaveTimer = null;
     }
-    await this.saveData({ settings: this.settings });
+    // Publish the pending write so flushSettingsSave() (and therefore the 'quit' Tasks
+    // hook) can await THIS write rather than starting a second one or awaiting nothing.
+    const pending = Promise.resolve(this.saveData({ settings: this.settings }));
+    this._settingsSaveInFlight = pending;
+    try {
+      await pending;
+    } finally {
+      if (this._settingsSaveInFlight === pending) this._settingsSaveInFlight = null;
+    }
   }
 
   saveSettingsDebounced(delayMs = 400) {
@@ -240,10 +252,15 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   async flushSettingsSave() {
-    if (!this._settingsSaveTimer) return;
-    activeWindow.clearTimeout(this._settingsSaveTimer);
-    this._settingsSaveTimer = null;
-    await this.saveSettings();
+    if (this._settingsSaveTimer) {
+      activeWindow.clearTimeout(this._settingsSaveTimer);
+      this._settingsSaveTimer = null;
+      await this.saveSettings();
+    }
+    // A debounce that already fired has no timer left, but its write can still be in
+    // flight — awaiting it is the whole point of the quit hook.
+    const inFlight = this._settingsSaveInFlight;
+    if (inFlight) await inFlight;
   }
 
   /* ---------- Cache delegation ---------- */
@@ -565,6 +582,7 @@ class ParallelReaderPlugin extends Plugin {
             this.cacheTouch(file.path);
             if (view && shouldRender && this.activeFileStillMatches(file)) {
               view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
+              this.syncActiveFromEditor(this.getActiveView());
             }
             outcome = 'cached';
             return;
@@ -592,7 +610,10 @@ class ParallelReaderPlugin extends Plugin {
         job.throwIfCancelled();
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
-        if (view && shouldRender) view.loadFor(file, sections, false);
+        if (view && shouldRender) {
+          view.loadFor(file, sections, false);
+          this.syncActiveFromEditor(this.getActiveView());
+        }
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
           this.t('generationDone', {
@@ -776,6 +797,9 @@ class ParallelReaderPlugin extends Plugin {
     const stale = !cacheEntryMatches(entry, content, this.settings);
     this.cacheTouch(file.path);
     view.loadFor(file, resolveCardAnchors(content, entry.cards), stale);
+    // loadFor() cleared the highlight (the file changed); point it at wherever the
+    // editor is already scrolled to instead of waiting for the user to scroll.
+    this.syncActiveFromEditor(this.getActiveView());
   }
 
   bindScrollSync() {
@@ -808,9 +832,28 @@ class ParallelReaderPlugin extends Plugin {
     scrollSync.register(() => handler.cancel());
     this._scrollSync = scrollSync;
     this.addChild(scrollSync);
+    // Installing the listener is not enough: until a scroll event actually fires, the
+    // panel would show no active card at all (loadFor resets activeIdx on a file
+    // change). Synchronize once, immediately, so switching panes highlights the card
+    // the editor is already sitting on.
+    this.syncActiveFromEditor(mdView);
   }
 
   handleEditorScroll(mdView: MarkdownView) {
+    this.syncActiveFromEditor(mdView);
+  }
+
+  /**
+   * Point the active-card highlight at whatever the editor's viewport currently shows.
+   *
+   * Extracted from the scroll handler because a scroll EVENT is not the only moment the
+   * highlight can be wrong: `loadFor()` resets `activeIdx` to -1 whenever the file
+   * changes, so opening or switching to a note with cached cards used to leave every
+   * card unhighlighted until the user physically scrolled. Both `bindScrollSync()` and
+   * `syncViewToFile()` call this directly for that first synchronization.
+   */
+  syncActiveFromEditor(mdView: MarkdownView | null) {
+    if (!mdView) return;
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
     // A card click just drove this scroll; let the click's own highlight stand

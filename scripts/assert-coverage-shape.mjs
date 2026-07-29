@@ -22,10 +22,15 @@ const repoRoot = join(import.meta.dirname, '..');
 const summaryPath = join(repoRoot, 'coverage', 'coverage-summary.json');
 
 // Measured on the direct-import harness at the time of writing: 1180 branches and
-// 316 functions across 30 files. The floors sit well below that so ordinary code
-// churn cannot trip them, and far above the pre-migration readings (32 branches,
-// 12 functions) so a harness regression cannot slip through.
-const MIN_BRANCHES = 900;
+// 316 functions across 30 files. The floors sit below that so ordinary code churn
+// cannot trip them, and far above the pre-migration readings (32 branches, 12
+// functions) so a harness regression cannot slip through.
+//
+// The branch floor is 1001, not a round 1000, because the documented contract is
+// `total.branches.total > 1000`: a report with exactly 1000 branches must FAIL.
+// (`MIN_BRANCHES = 900` used to let 900–1000 through — pinned by
+// tests/release-tooling.test.js so the boundary cannot drift again.)
+const MIN_BRANCHES = 1001;
 const MIN_FUNCTIONS = 250;
 
 let summary;

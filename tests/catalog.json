@@ -44,6 +44,7 @@
         "cli.test.js",
         "direct-providers.test.js",
         "providers.test.js",
+        "release-tooling.test.js",
         "test-exports.test.js"
       ]
     }

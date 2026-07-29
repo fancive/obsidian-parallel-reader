@@ -51,6 +51,9 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     this.plugin
       .flushSettingsSave()
       .catch((e: unknown) => console.error('[parallel-reader] flush settings on settings-tab hide', e));
+    // Chain up: SettingTab.hide() unloads the components registered by display().
+    // Overriding without calling it leaks them for the lifetime of the app.
+    super.hide();
   }
 
   private tr(key: string, vars?: Record<string, string | number>) {

@@ -500,8 +500,21 @@ export class ParallelReaderView extends ItemView {
     }
   }
 
+  /**
+   * True when the panel still shows the note a pending write was started on.
+   *
+   * `cacheReplaceCards` is awaited, and the user can open another note during that
+   * await. The cache write is still correct — it targets the captured path — but
+   * committing the resulting VIEW state unconditionally used to repaint the newly
+   * opened note with the previous note's cards.
+   */
+  private stillShowing(sourcePath: string): boolean {
+    return this.sourceFile?.path === sourcePath;
+  }
+
   async deleteCard(index: number) {
     if (!this.sourceFile) return false;
+    const sourcePath = this.sourceFile.path;
     const nextSections = removeCardAt(this.sections, index);
     if (nextSections.length === this.sections.length) return false;
     const previousLength = this.sections.length;
@@ -514,7 +527,7 @@ export class ParallelReaderView extends ItemView {
     // because nothing was changed yet (S8, hole 2).
     let ok = false;
     try {
-      ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+      ok = await this.plugin.cacheReplaceCards(sourcePath, nextSections);
     } catch (e: unknown) {
       console.error('[parallel-reader] failed to persist card delete', e);
       ok = false;
@@ -524,10 +537,12 @@ export class ParallelReaderView extends ItemView {
       return false;
     }
 
+    new Notice(this.plugin.t('cardDeleted'));
+    // The write above is committed either way; only the visible state is conditional.
+    if (!this.stillShowing(sourcePath)) return true;
     this.sections = nextSections;
     this.activeIdx = nextActiveIdx;
     this.render();
-    new Notice(this.plugin.t('cardDeleted'));
     return true;
   }
 
@@ -541,13 +556,14 @@ export class ParallelReaderView extends ItemView {
 
   async updateCard(index: number, patch: CardPatch) {
     if (!this.sourceFile) return false;
+    const sourcePath = this.sourceFile.path;
     const nextSections = updateCardAt(this.sections, index, patch);
     if (nextSections.length !== this.sections.length) return false;
 
     // Same await-before-mutate ordering as deleteCard (see comment there).
     let ok = false;
     try {
-      ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+      ok = await this.plugin.cacheReplaceCards(sourcePath, nextSections);
     } catch (e: unknown) {
       console.error('[parallel-reader] failed to persist card update', e);
       ok = false;
@@ -557,9 +573,11 @@ export class ParallelReaderView extends ItemView {
       return false;
     }
 
+    new Notice(this.plugin.t('cardSaved'));
+    // See deleteCard: the note may have changed under the await.
+    if (!this.stillShowing(sourcePath)) return true;
     this.sections = nextSections;
     this.render();
-    new Notice(this.plugin.t('cardSaved'));
     return true;
   }
 

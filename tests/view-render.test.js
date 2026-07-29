@@ -711,6 +711,193 @@ async function testViewUpdateCard_PersistThrows_RollsBack() {
   assert.strictEqual(view.sections[0].title, 'a', 'edited title must NOT apply when the write throws');
 }
 
+/* ============================================================
+ * Review P1 (src/view.ts): a card write that COMPLETES after the user switched
+ * notes must not repaint the newly opened note with the previous note's cards.
+ * `cacheReplaceCards` is awaited, and the view can change file underneath that
+ * await; the cache write must still be honored, but the VISIBLE state may only
+ * be committed while the view still represents the note the edit started on.
+ * ============================================================ */
+function makeSection(title, startLine) {
+  return { title, anchor: '', gist: '', bullets: [], startLine, level: 0 };
+}
+
+async function testViewDeleteCard_FileSwitchedMidWrite_DoesNotRepaintNewNote() {
+  const plugin = makeBasePlugin(makeSettings());
+  const writeCalls = [];
+  let resolveWrite = null;
+  plugin.cacheReplaceCards = (path, sections) => {
+    writeCalls.push([path, sections.length]);
+    return new Promise((resolve) => {
+      resolveWrite = resolve;
+    });
+  };
+
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  let renderCalls = 0;
+  view.render = () => {
+    renderCalls++;
+  };
+  view.sourceFile = makeFakeFile('A.md');
+  view.sections = [makeSection('a1', 0), makeSection('a2', 5)];
+  view.activeIdx = 1;
+
+  const pending = view.deleteCard(0);
+
+  // The user opens B.md while the delete's cache write is still in flight.
+  const fileB = makeFakeFile('B.md');
+  const sectionsB = [makeSection('b1', 0)];
+  view.sourceFile = fileB;
+  view.sections = sectionsB;
+  view.activeIdx = -1;
+  const rendersBeforeWriteLands = renderCalls;
+
+  resolveWrite(true);
+  const ok = await pending;
+
+  assert.deepStrictEqual(writeCalls, [['A.md', 1]], 'the delete must still be persisted for the note it started on');
+  assert.strictEqual(ok, true, 'the delete itself succeeded — it was persisted');
+  assert.strictEqual(
+    view.sections,
+    sectionsB,
+    "a write that lands after a file switch must not paint A.md's remaining cards into B.md",
+  );
+  assert.strictEqual(
+    view.activeIdx,
+    -1,
+    "B.md's active-card state must not be overwritten by A.md's post-delete index",
+  );
+  assert.strictEqual(renderCalls, rendersBeforeWriteLands, 'a write that lands after a file switch must not repaint');
+}
+
+async function testViewUpdateCard_FileSwitchedMidWrite_DoesNotRepaintNewNote() {
+  const plugin = makeBasePlugin(makeSettings());
+  let resolveWrite = null;
+  plugin.cacheReplaceCards = () =>
+    new Promise((resolve) => {
+      resolveWrite = resolve;
+    });
+
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  let renderCalls = 0;
+  view.render = () => {
+    renderCalls++;
+  };
+  view.sourceFile = makeFakeFile('A.md');
+  view.sections = [makeSection('a1', 0)];
+
+  const pending = view.updateCard(0, { title: 'a1-edited' });
+
+  const sectionsB = [makeSection('b1', 0)];
+  view.sourceFile = makeFakeFile('B.md');
+  view.sections = sectionsB;
+  const rendersBeforeWriteLands = renderCalls;
+
+  resolveWrite(true);
+  await pending;
+
+  assert.strictEqual(view.sections, sectionsB, "B.md must keep its own cards after A.md's edit lands");
+  assert.strictEqual(view.sections[0].title, 'b1', "A.md's edited title must not leak into B.md");
+  assert.strictEqual(renderCalls, rendersBeforeWriteLands, 'a write that lands after a file switch must not repaint');
+}
+
+/* ============================================================
+ * Review P1 (main.ts): initial editor→card synchronization.
+ * bindScrollSync() only INSTALLS the scroll listener. Because loadFor() resets
+ * activeIdx to -1 whenever the file changes, opening or switching to a note with
+ * cached cards left every card unhighlighted until the user physically scrolled.
+ * Both entry points (binding the listener, and loading a file into the panel)
+ * must run the synchronization themselves — with no scroll event in sight.
+ * ============================================================ */
+function makeFakeEditorScrollDom() {
+  const listeners = [];
+  return {
+    listeners,
+    addEventListener(type, cb, options) {
+      listeners.push({ type, cb, options });
+    },
+    removeEventListener(type, cb) {
+      const i = listeners.findIndex((l) => l.type === type && l.cb === cb);
+      if (i >= 0) listeners.splice(i, 1);
+    },
+    getBoundingClientRect: () => ({ top: 0, height: 400, left: 0 }),
+  };
+}
+
+/** Fake MarkdownView whose viewport top resolves to `topLineNumber` (1-based, as CodeMirror reports). */
+function makeFakeEditorMdView(file, scrollDom, topLineNumber) {
+  return {
+    file,
+    editor: {
+      cm: {
+        scrollDOM: scrollDom,
+        posAtCoords: () => 1,
+        state: { doc: { lineAt: () => ({ number: topLineNumber }) } },
+      },
+    },
+    contentEl: { querySelector: () => null },
+  };
+}
+
+function testBindScrollSync_SyncsActiveCardWithoutAnyScrollEvent() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  view.containerEl = { children: [{}, new FakeEl('div')] };
+  plugin.getParallelView = () => view;
+
+  const file = makeFakeFile('A.md');
+  view.loadFor(file, [makeSection('c0', 0), makeSection('c1', 10), makeSection('c2', 20)], false);
+  assert.strictEqual(view.activeIdx, -1, 'sanity: a note that was just loaded starts with no active card');
+
+  const scrollDom = makeFakeEditorScrollDom();
+  plugin.getActiveView = () => makeFakeEditorMdView(file, scrollDom, 11); // viewport top = line index 10
+
+  plugin.bindScrollSync();
+
+  assert.strictEqual(scrollDom.listeners.length, 1, 'sanity: binding attaches exactly one scroll listener');
+  assert.strictEqual(
+    view.activeIdx,
+    1,
+    'binding scroll-sync must synchronize the active card immediately — the user should not have to scroll to get a highlight',
+  );
+  assert.ok(view.cards[1].hasClass('is-active'), 'the synchronized card must carry is-active');
+}
+
+async function testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent() {
+  const settings = makeSettings();
+  const content = Array.from({ length: 30 }, (_, i) => (i === 2 ? 'Alpha' : i === 12 ? 'Beta' : `filler ${i}`)).join(
+    '\n',
+  );
+  const plugin = makeBasePlugin(settings);
+  const view = new t.ParallelReaderView({ view: {} }, plugin);
+  view.containerEl = { children: [{}, new FakeEl('div')] };
+  plugin.app.workspace.getLeavesOfType = () => [{ view }];
+  plugin.getParallelView = () => view;
+  plugin.app.vault.read = async () => content;
+  plugin.cacheManager.get = () => ({
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    contentHash: hashContent(content),
+    settingsHash: generationFingerprint(settings),
+    cards: [
+      { title: 'Alpha', anchor: 'Alpha', gist: '', bullets: [] },
+      { title: 'Beta', anchor: 'Beta', gist: '', bullets: [] },
+    ],
+    generatedAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  const file = makeFakeFile('B.md');
+  plugin.getActiveView = () => makeFakeEditorMdView(file, makeFakeEditorScrollDom(), 13); // viewport top = line index 12
+
+  await plugin.syncViewToFile(file);
+
+  assert.strictEqual(view.sections.length, 2, 'sanity: cached cards were loaded into the panel');
+  assert.strictEqual(
+    view.activeIdx,
+    1,
+    'opening a note with cached cards must highlight the card at the editor viewport top, with no scroll event',
+  );
+}
+
 async function testRefreshViewAfterCacheClear_NoView() {
   const settings = makeSettings();
   const plugin = makeBasePlugin(settings, { view: undefined });
@@ -979,6 +1166,10 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testViewDeleteCard_PersistOk_ReturnsTrue();
   await testViewUpdateCard_PersistFails_ReturnsFalse();
   await testViewUpdateCard_PersistThrows_RollsBack();
+  await testViewDeleteCard_FileSwitchedMidWrite_DoesNotRepaintNewNote();
+  await testViewUpdateCard_FileSwitchedMidWrite_DoesNotRepaintNewNote();
+  testBindScrollSync_SyncsActiveCardWithoutAnyScrollEvent();
+  await testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent();
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
   await testRenderStaleBanner_HasIconCueAndRegenerateAction();

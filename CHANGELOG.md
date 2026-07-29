@@ -53,6 +53,19 @@ changelog-guard step.
   cache-debounce test (S11)
 - a11y: honour `prefers-reduced-motion` for the loading spinner and card
   scroll-sync animation
+- fix: opening or switching to a note with cached cards highlights the card the
+  editor is already on, instead of showing no highlight until you scroll
+- fix: a card edit or delete that finishes after you switched notes no longer
+  repaints the newly opened note with the previous note's cards
+- fix: a rejected cache write is rolled back in memory, so an edit the UI
+  reported as failed can no longer reappear when the note is reopened
+- fix: quitting Obsidian now waits for a debounced settings or cache write that
+  is already in flight, not just for one that has yet to start
+- a11y: the active card's title carries an underline, so "you are here" is no
+  longer signalled by colour alone
+- build: `scripts/bump-version.mjs --tag` refuses to tag when the tag already
+  exists, when the CHANGELOG section is missing, or when unrelated changes are
+  staged, and commits only the release files
 
 ## [1.0.24] - 2026-06-16
 
