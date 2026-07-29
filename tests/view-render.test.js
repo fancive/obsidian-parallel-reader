@@ -419,6 +419,44 @@ async function testRefreshViewAfterCacheClear_AlwaysClears() {
 }
 
 /* ============================================================
+ * S8 (hole 1): plugin.cacheClear() — the method the Settings tab's "Clear all
+ * cache" button calls — used to be a bare `return this.cacheManager.clear()`
+ * delegation with no view refresh, while the functionally identical
+ * `clear-all` COMMAND always called refreshViewAfterCacheClear(). That split
+ * left dead cards on screen when the cache was cleared from Settings. Both
+ * entry points must now behave identically.
+ * ============================================================ */
+async function testCacheClear_RefreshesView_LikeClearAllCommand() {
+  const settings = makeSettings();
+  const { view, calls } = makeFakeView();
+  view.sourceFile = makeFakeFile('A.md');
+  const plugin = makeBasePlugin(settings, { view });
+  let cacheManagerClearCalls = 0;
+  plugin.cacheManager.clear = async () => {
+    cacheManagerClearCalls++;
+  };
+
+  await plugin.cacheClear();
+
+  assert.strictEqual(cacheManagerClearCalls, 1, 'cacheClear must clear the underlying cache');
+  assert.strictEqual(
+    calls.renderEmpty,
+    1,
+    'cacheClear must refresh the view -- the Settings tab button used to skip this and leave dead cards on screen',
+  );
+}
+
+async function testCacheClear_NoView_DoesNotThrow() {
+  const settings = makeSettings();
+  const plugin = makeBasePlugin(settings, { view: undefined });
+  plugin.getParallelView = () => undefined;
+  plugin.cacheManager.clear = async () => {};
+
+  // Must not throw when no panel is open.
+  await plugin.cacheClear();
+}
+
+/* ============================================================
  * runForFile outcome enum mapping — drives batch statistics.
  * Covers the catch-block branches that were untested before.
  * ============================================================ */
@@ -525,8 +563,11 @@ async function testRunForFile_SkipEditConfirm_BypassesPrompt() {
 
 /* ============================================================
  * view.deleteCard / view.updateCard — cardPersistFailed path
- * Covers the case where cacheReplaceCards returns false (cache missing)
- * and verifies that user is notified of the failure.
+ * S8 (hole 2): the cache write must be awaited BEFORE any visible state is
+ * mutated. A failed (returns false) or throwing write must leave
+ * `sections`/`activeIdx` byte-for-byte as they were, and must NOT call
+ * render() -- otherwise the user sees the card vanish, a failure toast, and
+ * then a silent resurrection the next time the file is opened (S8, hole 2).
  * ============================================================ */
 async function testViewDeleteCard_PersistFails_ReturnsFalse() {
   const plugin = makeBasePlugin(makeSettings());
@@ -538,19 +579,66 @@ async function testViewDeleteCard_PersistFails_ReturnsFalse() {
 
   const fakeLeaf = { view: {} };
   const view = new t.ParallelReaderView(fakeLeaf, plugin);
-  view.render = () => {}; // skip DOM
+  let renderCalls = 0;
+  view.render = () => {
+    renderCalls++;
+  };
   view.sourceFile = makeFakeFile('A.md');
-  view.sections = [
+  const originalSections = [
     { title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
     { title: 'b', anchor: '', gist: '', bullets: [], startLine: 1, level: 0 },
   ];
-  view.activeIdx = 0;
+  view.sections = originalSections;
+  view.activeIdx = 1;
 
   const ok = await view.deleteCard(0);
 
   assert.strictEqual(ok, false, 'deleteCard returns false when cache persist fails');
-  assert.deepStrictEqual(cacheReplaceCalled, { path: 'A.md', count: 1 }, 'cacheReplaceCards called with new sections');
-  assert.strictEqual(view.sections.length, 1, 'view.sections is updated locally even on persist failure');
+  assert.deepStrictEqual(
+    cacheReplaceCalled,
+    { path: 'A.md', count: 1 },
+    'cacheReplaceCards is still called with the WOULD-BE next sections, before any commit',
+  );
+  assert.strictEqual(
+    view.sections,
+    originalSections,
+    'view.sections must be the exact same reference (untouched) when persist fails -- no removed-card flash',
+  );
+  assert.strictEqual(view.sections.length, 2, 'card must NOT disappear from view state when persist fails');
+  assert.strictEqual(view.activeIdx, 1, 'activeIdx must be untouched when persist fails');
+  assert.strictEqual(renderCalls, 0, 'render() must not run on a failed write');
+}
+
+async function testViewDeleteCard_PersistThrows_RollsBack() {
+  const plugin = makeBasePlugin(makeSettings());
+  plugin.cacheReplaceCards = async () => {
+    throw new Error('disk write failed');
+  };
+
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  let renderCalls = 0;
+  view.render = () => {
+    renderCalls++;
+  };
+  view.sourceFile = makeFakeFile('A.md');
+  const originalSections = [{ title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+  view.sections = originalSections;
+  view.activeIdx = 0;
+
+  const origError = console.error;
+  console.error = () => {};
+  let ok;
+  try {
+    ok = await view.deleteCard(0);
+  } finally {
+    console.error = origError;
+  }
+
+  assert.strictEqual(ok, false, 'deleteCard swallows a throwing cacheReplaceCards and returns false');
+  assert.strictEqual(view.sections, originalSections, 'sections must be untouched when cacheReplaceCards throws');
+  assert.strictEqual(view.activeIdx, 0, 'activeIdx must be untouched when cacheReplaceCards throws');
+  assert.strictEqual(renderCalls, 0, 'render() must not run when the write throws');
 }
 
 async function testViewDeleteCard_PersistOk_ReturnsTrue() {
@@ -569,6 +657,7 @@ async function testViewDeleteCard_PersistOk_ReturnsTrue() {
 
   const ok = await view.deleteCard(0);
   assert.strictEqual(ok, true, 'deleteCard returns true on successful persist');
+  assert.strictEqual(view.sections.length, 1, 'sections commit to the deleted state once persist succeeds');
 }
 
 async function testViewUpdateCard_PersistFails_ReturnsFalse() {
@@ -577,13 +666,49 @@ async function testViewUpdateCard_PersistFails_ReturnsFalse() {
 
   const fakeLeaf = { view: {} };
   const view = new t.ParallelReaderView(fakeLeaf, plugin);
-  view.render = () => {};
+  let renderCalls = 0;
+  view.render = () => {
+    renderCalls++;
+  };
   view.sourceFile = makeFakeFile('A.md');
-  view.sections = [{ title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+  const originalSections = [{ title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+  view.sections = originalSections;
   view.activeIdx = 0;
 
   const ok = await view.updateCard(0, { title: 'a-edited' });
+
   assert.strictEqual(ok, false, 'updateCard returns false on persist failure');
+  assert.strictEqual(view.sections, originalSections, 'sections must be untouched when persist fails');
+  assert.strictEqual(view.sections[0].title, 'a', 'edited title must NOT apply when persist fails');
+  assert.strictEqual(renderCalls, 0, 'render() must not run on a failed write');
+}
+
+async function testViewUpdateCard_PersistThrows_RollsBack() {
+  const plugin = makeBasePlugin(makeSettings());
+  plugin.cacheReplaceCards = async () => {
+    throw new Error('disk write failed');
+  };
+
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  view.render = () => {};
+  view.sourceFile = makeFakeFile('A.md');
+  const originalSections = [{ title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 }];
+  view.sections = originalSections;
+  view.activeIdx = 0;
+
+  const origError = console.error;
+  console.error = () => {};
+  let ok;
+  try {
+    ok = await view.updateCard(0, { title: 'a-edited' });
+  } finally {
+    console.error = origError;
+  }
+
+  assert.strictEqual(ok, false, 'updateCard swallows a throwing cacheReplaceCards and returns false');
+  assert.strictEqual(view.sections, originalSections, 'sections untouched when cacheReplaceCards throws');
+  assert.strictEqual(view.sections[0].title, 'a', 'edited title must NOT apply when the write throws');
 }
 
 async function testRefreshViewAfterCacheClear_NoView() {
@@ -834,6 +959,8 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testRefreshViewAfterCacheDelete_MatchingFile();
   await testRefreshViewAfterCacheDelete_DifferentFile();
   await testRefreshViewAfterCacheClear_AlwaysClears();
+  await testCacheClear_RefreshesView_LikeClearAllCommand();
+  await testCacheClear_NoView_DoesNotThrow();
   await testRefreshViewAfterCacheClear_NoView();
   await testRunForFile_AlreadyRunning_EarlyReturn();
   await testRunForFile_AlreadyRunning_FromCatch();
@@ -842,8 +969,10 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testRunForFile_RegenerateConfirm_Cancels();
   await testRunForFile_SkipEditConfirm_BypassesPrompt();
   await testViewDeleteCard_PersistFails_ReturnsFalse();
+  await testViewDeleteCard_PersistThrows_RollsBack();
   await testViewDeleteCard_PersistOk_ReturnsTrue();
   await testViewUpdateCard_PersistFails_ReturnsFalse();
+  await testViewUpdateCard_PersistThrows_RollsBack();
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
   await testRenderStaleBanner_HasIconCueAndRegenerateAction();

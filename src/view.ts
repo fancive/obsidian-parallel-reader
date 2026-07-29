@@ -469,14 +469,28 @@ export class ParallelReaderView extends ItemView {
     const nextSections = removeCardAt(this.sections, index);
     if (nextSections.length === this.sections.length) return false;
     const previousLength = this.sections.length;
-    this.sections = nextSections;
-    this.activeIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
-    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
-    this.render();
+    const nextActiveIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
+
+    // Await the cache write BEFORE touching any visible state. `sections` and
+    // `removeCardAt`/`updateCardAt`'s outputs are always fresh arrays (never
+    // mutated in place), so `this.sections` still holds the untouched
+    // previous value at this point — nothing to "restore" if the write fails,
+    // because nothing was changed yet (S8, hole 2).
+    let ok = false;
+    try {
+      ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    } catch (e: unknown) {
+      console.error('[parallel-reader] failed to persist card delete', e);
+      ok = false;
+    }
     if (!ok) {
       new Notice(this.plugin.t('cardPersistFailed'));
       return false;
     }
+
+    this.sections = nextSections;
+    this.activeIdx = nextActiveIdx;
+    this.render();
     new Notice(this.plugin.t('cardDeleted'));
     return true;
   }
@@ -493,13 +507,22 @@ export class ParallelReaderView extends ItemView {
     if (!this.sourceFile) return false;
     const nextSections = updateCardAt(this.sections, index, patch);
     if (nextSections.length !== this.sections.length) return false;
-    this.sections = nextSections;
-    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
-    this.render();
+
+    // Same await-before-mutate ordering as deleteCard (see comment there).
+    let ok = false;
+    try {
+      ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
+    } catch (e: unknown) {
+      console.error('[parallel-reader] failed to persist card update', e);
+      ok = false;
+    }
     if (!ok) {
       new Notice(this.plugin.t('cardPersistFailed'));
       return false;
     }
+
+    this.sections = nextSections;
+    this.render();
     new Notice(this.plugin.t('cardSaved'));
     return true;
   }

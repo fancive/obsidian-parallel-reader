@@ -133,8 +133,7 @@ class ParallelReaderPlugin extends Plugin {
       name: this.t('cmdClearAll'),
       callback: async () => {
         const n = Object.keys(this.cacheManager.cache).length;
-        await this.cacheManager.clear();
-        this.refreshViewAfterCacheClear();
+        await this.cacheClear();
         new Notice(this.t('cacheClearedAll', { count: n }));
       },
     });
@@ -242,7 +241,12 @@ class ParallelReaderPlugin extends Plugin {
     return this.cacheManager.replaceCards(filePath, cards);
   }
   async cacheClear() {
-    return this.cacheManager.clear();
+    await this.cacheManager.clear();
+    // Keep this delegation in sync with the `clear-all` command below, which
+    // has always refreshed the view after clearing — the Settings tab's
+    // "Clear all cache" button used to skip this and leave dead cards on
+    // screen (S8, hole 1).
+    this.refreshViewAfterCacheClear();
   }
   async pruneCacheIfNeeded() {
     return this.cacheManager.pruneIfNeeded();
