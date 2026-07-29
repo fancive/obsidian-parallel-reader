@@ -1,10 +1,10 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const settings = await requireBundledModule('src/settings.ts');
-    const cards = await requireBundledModule('src/cards.ts');
-    const vault = await requireBundledModule('src/vault.ts');
+    const settings = await requireSourceModule('src/settings.ts');
+    const cards = await requireSourceModule('src/cards.ts');
+    const vault = await requireSourceModule('src/vault.ts');
 
     // ── settings.ts ──
     assert.notStrictEqual(

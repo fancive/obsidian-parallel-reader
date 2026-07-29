@@ -1,4 +1,4 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 function createFakeAdapter() {
   const files = new Map();
@@ -24,9 +24,9 @@ function createFakeAdapter() {
 
 (async () => {
   try {
-    const cache = await requireBundledModule('src/cache.ts');
-    const cacheManagerModule = await requireBundledModule('src/cache-manager.ts');
-    const settings = await requireBundledModule('src/settings.ts');
+    const cache = await requireSourceModule('src/cache.ts');
+    const cacheManagerModule = await requireSourceModule('src/cache-manager.ts');
+    const settings = await requireSourceModule('src/settings.ts');
 
     // ── cache.ts ──
     const cacheEntry = { generatedAt: '2024-01-01T00:00:00.000Z' };

@@ -5,7 +5,7 @@
  * (silentView) interact in specific combinations.
  */
 const { assert, t } = require('./test-setup');
-const { takeTooltips } = require('./obsidian-mock');
+const { takeTooltips } = require('./obsidian-mock.mjs');
 
 const { CACHE_SCHEMA_VERSION, generationFingerprint } = t;
 const crypto = require('crypto');
@@ -22,7 +22,7 @@ if (typeof globalThis.window === 'undefined') {
  * Minimal fake DOM element supporting the subset of Obsidian's HTMLElement
  * extensions (createDiv/createEl/createSpan/addClass/removeClass/dataset/
  * addEventListener) that ParallelReaderView's render path uses. Obsidian's real
- * mock in obsidian-mock.js only stubs `containerEl.children` as plain `{}`
+ * mock in obsidian-mock.mjs only stubs `containerEl.children` as plain `{}`
  * objects, which is enough for tests that stub `view.render`, but the S3
  * card-highlight regressions only manifest through a REAL render (is-active
  * classes, real card element identity), so this fixture drives that render.

@@ -25,6 +25,10 @@ changelog-guard step.
 - docs: point install instructions at the official community plugin registry;
   fix `manifest.json` identity fields (author, drop stale `fundingUrl`) (S2)
 - ci(coverage): stop reporting a fabricated 100% branch-coverage gate (S1a)
+- test(coverage): load `main.ts` / `src/*.ts` directly via Node type stripping
+  instead of an esbuild bundle, so branch and function coverage are real
+  (32 -> 1180 measured branches, 12 -> 316 functions); set thresholds to the
+  measured floor and add a CI assertion on the absolute totals (S1b)
 
 ## [1.0.24] - 2026-06-16
 

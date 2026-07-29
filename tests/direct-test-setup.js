@@ -1,57 +1,43 @@
 const assert = require('assert');
-const esbuild = require('esbuild');
-const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
-// Polyfill Obsidian's `activeWindow` global for Node test runtime.
-if (typeof globalThis.activeWindow === 'undefined') {
-  globalThis.activeWindow = globalThis;
-}
+// Installs the resolve hooks (bare `obsidian` -> tests/obsidian-mock.mjs, and `.ts`
+// on extensionless relative specifiers) and polyfills `activeWindow`. Must come
+// before any `.ts` module is loaded.
+require('./ts-loader');
+
+const { setRequestUrlMock } = require('./obsidian-mock.mjs');
 
 const repoRoot = path.join(__dirname, '..');
-// Under c8, bundles must live inside the repo so c8 processes their coverage
-// (it ignores scripts outside cwd before source-map remap). Otherwise /tmp.
-const bundleParent = process.env.NODE_V8_COVERAGE
-  ? fs.mkdirSync(path.join(repoRoot, '.test-bundles'), { recursive: true }) || path.join(repoRoot, '.test-bundles')
-  : os.tmpdir();
-const tempDir = fs.mkdtempSync(path.join(bundleParent, 'parallel-reader-tests-'));
 
-async function requireBundledModule(relativePath) {
-  const entry = path.join(repoRoot, relativePath);
-  const outfile = path.join(tempDir, relativePath.replace(/[/.]/g, '_') + '.cjs');
-  await esbuild.build({
-    entryPoints: [entry],
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    outfile,
-    sourcemap: 'inline',
-    sourcesContent: true,
-    sourceRoot: repoRoot,
-    plugins: [
-      {
-        name: 'obsidian-stub',
-        setup(build) {
-          build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian-stub', namespace: 'stub' }));
-          build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-            contents:
-              'module.exports = { requestUrl: async () => { throw new Error("requestUrl not available in direct module tests"); } };',
-            loader: 'js',
-          }));
-        },
-      },
-    ],
-  });
-  require('./coverage-sourcemap').fixInlineSourceMap(outfile, repoRoot);
-  return require(outfile);
+// Direct-module tests must not reach the HTTP boundary implicitly — the modules under
+// test all take a `RequestUrlFunction` explicitly. The previous harness enforced that by
+// bundling these modules against an `obsidian` stub whose requestUrl threw; now that
+// every test shares one mock, re-arm the same guarantee here.
+setRequestUrlMock(async () => {
+  throw new Error('requestUrl not available in direct module tests');
+});
+
+/**
+ * Loads a single source module by repo-relative path (e.g. `src/cache.ts`).
+ *
+ * Unlike the shared `test-setup` harness this does NOT pull in the whole
+ * `src/test-exports.ts` barrel, so a "direct" test still only drags in its own
+ * module's import graph. It used to esbuild-bundle that graph into a temp file;
+ * it now hands the path straight to Node, which strips the types itself.
+ *
+ * Stays async so the existing `await requireSourceModule(...)` call sites keep
+ * working unchanged.
+ */
+async function requireSourceModule(relativePath) {
+  return require(path.join(repoRoot, relativePath));
 }
 
-function cleanup() {
-  // Skipped under c8 coverage: c8 reads V8 coverage at exit and needs the
-  // bundled file (with its inline source map) still on disk to remap to src/.
-  if (process.env.NODE_V8_COVERAGE) return;
-  fs.rmSync(tempDir, { recursive: true, force: true });
-}
+/**
+ * No-op retained so the `try { … } finally { cleanup(); }` blocks in the
+ * direct-*.test.js files keep working: there is no longer a temp bundle
+ * directory to remove.
+ */
+function cleanup() {}
 
-module.exports = { assert, requireBundledModule, cleanup, repoRoot, tempDir };
+module.exports = { assert, requireSourceModule, cleanup };

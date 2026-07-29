@@ -88,8 +88,16 @@ export class GenerationJobManager {
    * during which a fresh `start()` could see a free slot and double-book.
    */
   private reserved = 0;
+  /**
+   * Declared as a plain field rather than a `constructor(private maxConcurrent…)`
+   * parameter property: parameter properties are *not* erasable syntax, so Node's
+   * native type stripping rejects them, and the coverage harness loads these
+   * sources directly as `.ts` (see tests/ts-loader.js).
+   */
+  private maxConcurrent: number;
 
-  constructor(private maxConcurrent: number = 3) {
+  constructor(maxConcurrent = 3) {
+    this.maxConcurrent = maxConcurrent;
     this.jobs = new Map();
   }
 

@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const i18n = await requireBundledModule('src/i18n.ts');
+    const i18n = await requireSourceModule('src/i18n.ts');
 
     assert.strictEqual(i18n.translate({ uiLanguage: 'en' }, 'displayName'), 'Parallel Reader');
     assert.strictEqual(i18n.translate({ uiLanguage: 'zh' }, 'displayName'), '对照阅读笔记');

@@ -1,9 +1,12 @@
 {
-  "all": false,
+  "_comment_harness": "Coverage is measured against the real TypeScript sources: tests/ts-loader.js installs a module.registerHooks() resolve hook so tests/test-setup.js and tests/direct-test-setup.js load main.ts and src/*.ts directly through Node's type stripping. Before that migration the sources were esbuild-bundled and the bundle's inline source map was hand-patched (tests/coverage-sourcemap.js, now deleted); statement ranges survived that remap but branch ranges did NOT — they were discarded instead of reported uncovered, so 27 of 30 files showed branches.total === 0 and only ~32 branches were measured repo-wide. `branches: 100` therefore looked like a perfect gate while verifying essentially nothing. The thresholds below are the measured floor of the direct-import harness, rounded down so the gate is not flaky. CI additionally asserts total.branches.total (see .github/workflows/ci.yml) so a harness regression that silently stops measuring branches fails the build instead of printing another false pass.",
+  "all": true,
   "src": ["src"],
   "include": ["src/**/*.ts", "main.ts"],
+  "_comment_exclude": "src/types.ts holds nothing but interfaces and type aliases; it erases to an empty module and is never loaded at runtime (every importer uses `import type`). Under `all: true` it would otherwise be reported as 183 permanently-uncovered lines. src/test-exports.ts is the test barrel, not product code.",
   "exclude": [
     "src/test-exports.ts",
+    "src/types.ts",
     "tests/**",
     "scripts/**",
     ".e2e/**",
@@ -14,9 +17,8 @@
   "reportsDirectory": "coverage",
   "tempDirectory": "coverage/.tmp",
   "check-coverage": true,
-  "_comment_branches": "This file is parsed with JSON.parse (see node_modules/c8/lib/parse-args.js), so JS-style // comments are not tolerated here — hence this _comment_* key instead. `branches: 100` used to look like a real 100% branch-coverage gate, but c8's source-map remap discards branch data for 27 of the 30 files under src/, so only ~32 branches (from src/cache.ts, src/markdown.ts, src/vault.ts) are ever measured; every other file reports 0/0 branches, which trivially satisfies any percentage threshold. The 100 was therefore a fabricated pass, not an earned one. Lowered to 0 so this gate stops asserting a coverage level it cannot actually verify. See the follow-up harness migration task (T12 / S1b in docs/scope-ship-now-batch.md) which converts both test harnesses to import src/*.ts directly, makes real branch counts observable, and is the task that should raise this threshold again alongside a CI assertion on total.branches.total.",
-  "branches": 0,
-  "statements": 0,
-  "lines": 0,
-  "functions": 0
+  "branches": 80,
+  "statements": 72,
+  "lines": 72,
+  "functions": 65
 }

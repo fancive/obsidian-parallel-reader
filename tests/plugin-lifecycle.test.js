@@ -5,7 +5,7 @@
  * bindScrollSync() now owns the scroll listener through a dedicated child `Component`
  * (registered via `addChild`/`registerDomEvent`) instead of a raw `addEventListener` +
  * hand-rolled dispose closure. These tests exercise the REAL Component semantics from
- * tests/obsidian-mock.js (addChild/removeChild/registerDomEvent, and the unload cascade)
+ * tests/obsidian-mock.mjs (addChild/removeChild/registerDomEvent, and the unload cascade)
  * rather than stubbing them away, since the whole point of the fix is that a rebind or a
  * plugin unload must not leave a listener (and the plugin instance it closes over)
  * attached to the CodeMirror scroller.

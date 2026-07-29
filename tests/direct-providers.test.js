@@ -1,10 +1,10 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const generation = await requireBundledModule('src/generation.ts');
-    const providerParsers = await requireBundledModule('src/provider-parsers.ts');
-    const providerRequest = await requireBundledModule('src/provider-request.ts');
+    const generation = await requireSourceModule('src/generation.ts');
+    const providerParsers = await requireSourceModule('src/provider-parsers.ts');
+    const providerRequest = await requireSourceModule('src/provider-request.ts');
 
     // ── generation.ts ──
     assert.strictEqual(

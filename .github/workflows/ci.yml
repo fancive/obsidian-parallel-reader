@@ -30,8 +30,14 @@ jobs:
       - name: Lint (Obsidian strict review)
         run: npm run lint:obsidian:review:all
 
-      - name: Coverage (branch threshold)
+      - name: Coverage (thresholds)
         run: npm run coverage
+
+      # Percentage thresholds cannot catch a harness that stops measuring: the old
+      # bundled harness reported 100% of only 32 branches. This asserts the absolute
+      # branch/function totals so that regression fails the build.
+      - name: Coverage (shape assertion)
+        run: npm run coverage:assert
 
       - name: E2E gate
         run: timeout 600 npm run e2e

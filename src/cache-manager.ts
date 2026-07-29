@@ -37,12 +37,21 @@ export class CacheManager {
   private _timer: number | null = null;
   private _dirty = false;
 
-  constructor(
-    private readonly adapter: DataAdapter,
-    private readonly configDir: string,
-    private readonly pluginId: string,
-    private readonly getSettings: () => PluginSettings,
-  ) {}
+  // Declared as plain fields rather than `constructor(private readonly adapter…)`
+  // parameter properties: parameter properties are not erasable syntax, so Node's
+  // native type stripping rejects them, and the coverage harness loads these
+  // sources directly as `.ts` (see tests/ts-loader.js).
+  private readonly adapter: DataAdapter;
+  private readonly configDir: string;
+  private readonly pluginId: string;
+  private readonly getSettings: () => PluginSettings;
+
+  constructor(adapter: DataAdapter, configDir: string, pluginId: string, getSettings: () => PluginSettings) {
+    this.adapter = adapter;
+    this.configDir = configDir;
+    this.pluginId = pluginId;
+    this.getSettings = getSettings;
+  }
 
   filePath(): string {
     return `${this.configDir}/plugins/${this.pluginId}/cache.json`;

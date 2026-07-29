@@ -8,7 +8,7 @@
  * `retryAction` helper can't silently regress them.
  */
 const { assert, t } = require('./test-setup');
-const { takeNotices } = require('./obsidian-mock');
+const { takeNotices } = require('./obsidian-mock.mjs');
 
 const { showGenerationError } = t;
 

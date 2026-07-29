@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const streaming = await requireBundledModule('src/streaming.ts');
+    const streaming = await requireSourceModule('src/streaming.ts');
 
     const openAiExtractor = streaming.deltaExtractorForFormat('openai-chat');
     const anthropicExtractor = streaming.deltaExtractorForFormat('anthropic-messages');
