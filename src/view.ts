@@ -547,18 +547,45 @@ export class ParallelReaderView extends ItemView {
   private cardMutationQueue: Promise<void> = Promise.resolve();
 
   /**
-   * The card array this queue last treated as authoritative, and for which note.
+   * The card array this queue last treated as authoritative, PER NOTE.
    *
    * Consulted ONLY when the panel moved to a different note while a mutation was still
    * queued: the view no longer holds that note's cards, but the link that ran before
    * this one does. On a successful write this is the array that was persisted; on a
    * failed one it is the array the write was computed from, which is what disk still
    * holds.
+   *
+   * Keyed by path rather than kept in one global slot because the queue interleaves
+   * notes. With a single slot, a mutation queued for B between two mutations for A
+   * evicted A's state, and the second A mutation fell back to the snapshot the user
+   * was looking at — a payload computed from A's PRE-mutation list, which silently
+   * resurrected the card the first A mutation had already deleted. Both still reported
+   * success. One slot cannot represent an A → B → A queue; a map can.
+   *
+   * Bounded: `queued` counts the mutations for that path that are enqueued but not yet
+   * settled, and the key is deleted the moment it reaches zero (see
+   * `enqueueCardMutation`). A path is therefore present only while it has outstanding
+   * work, and the map is empty whenever the queue is idle — it cannot grow into a
+   * per-note leak over a long session. Serialization keeps this honest: increments
+   * happen synchronously at enqueue time, so a later mutation for the same path has
+   * already registered before an earlier one can settle and drop the key.
    */
-  private lastMutationState: { path: string; sections: ResolvedCard[] } | null = null;
+  private mutationStateByPath = new Map<string, { queued: number; sections: ResolvedCard[] | null }>();
 
-  private enqueueCardMutation(task: () => Promise<boolean>): Promise<boolean> {
-    const run = this.cardMutationQueue.then(task);
+  private enqueueCardMutation(sourcePath: string, task: () => Promise<boolean>): Promise<boolean> {
+    const state = this.mutationStateByPath.get(sourcePath) ?? { queued: 0, sections: null };
+    state.queued++;
+    this.mutationStateByPath.set(sourcePath, state);
+    const run = this.cardMutationQueue.then(async () => {
+      try {
+        return await task();
+      } finally {
+        // Runs for every outcome — success, failure, early return, throw — so a path can
+        // never be stranded in the map by a mutation that ended on an unusual path.
+        state.queued--;
+        if (state.queued <= 0) this.mutationStateByPath.delete(sourcePath);
+      }
+    });
     this.cardMutationQueue = run.then(
       () => undefined,
       () => undefined,
@@ -577,8 +604,7 @@ export class ParallelReaderView extends ItemView {
    */
   private cardMutationBase(sourcePath: string, snapshot: ResolvedCard[]): ResolvedCard[] {
     if (this.stillShowing(sourcePath)) return this.sections;
-    if (this.lastMutationState?.path === sourcePath) return this.lastMutationState.sections;
-    return snapshot;
+    return this.mutationStateByPath.get(sourcePath)?.sections ?? snapshot;
   }
 
   /**
@@ -599,7 +625,10 @@ export class ParallelReaderView extends ItemView {
       console.error(failureLabel, e);
       ok = false;
     }
-    this.lastMutationState = { path: sourcePath, sections: ok ? nextSections : base };
+    // The entry is guaranteed to exist: this runs inside the queued task, whose enqueue
+    // created it and whose completion is what removes it.
+    const state = this.mutationStateByPath.get(sourcePath);
+    if (state) state.sections = ok ? nextSections : base;
     return ok;
   }
 
@@ -613,7 +642,7 @@ export class ParallelReaderView extends ItemView {
     const target = snapshot[index];
     if (!target) return false;
 
-    return this.enqueueCardMutation(async () => {
+    return this.enqueueCardMutation(sourcePath, async () => {
       const base = this.cardMutationBase(sourcePath, snapshot);
       const targetIdx = base.indexOf(target);
       // Already removed by a mutation that ran first — nothing left to delete.
@@ -660,7 +689,7 @@ export class ParallelReaderView extends ItemView {
     const target = snapshot[index];
     if (!target) return false;
 
-    return this.enqueueCardMutation(async () => {
+    return this.enqueueCardMutation(sourcePath, async () => {
       const base = this.cardMutationBase(sourcePath, snapshot);
       const targetIdx = base.indexOf(target);
       if (targetIdx < 0) return false;

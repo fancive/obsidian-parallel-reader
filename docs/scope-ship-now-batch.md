@@ -41,14 +41,30 @@ deliberately, and recorded here rather than crossed silently.
 
 The cross-model review flagged the `prefers-reduced-motion` media query and the
 `scrollIntoView` behaviour switch as belonging to N8's ARIA slice, and asked for them to
-be deferred. **They are being kept.**
+be deferred. **They are being kept — as the implementer's call, not as an approved one.**
 
-S7 added CSS transitions and a JS `behavior: 'smooth'` scroll. Shipping new motion
-without a reduced-motion escape is an incomplete change, not a separate feature. The
-roadmap happened to list the media query under N8's ARIA slice, but the accessibility
-obligation is created by S7 itself. Reverting working a11y code to satisfy a taxonomy
-boundary would make the product worse. Keeping it; the boundary is documented rather
-than silently crossed.
+Be precise about the authority here. The maintainer approved the **full** card
+visual-state treatment for S7 (decision D3), and that approval is what puts the
+transitions and the smooth scroll in the batch. It does **not** extend to the
+reduced-motion escape hatch: that specific addition was the implementer's judgement,
+made while building S7, and was never put to the maintainer.
+
+The rationale for keeping it stands on its own. S7 added CSS transitions and a JS
+`behavior: 'smooth'` scroll. Shipping new motion without a reduced-motion escape is an
+incomplete change, not a separate feature. The roadmap happened to list the media query
+under N8's ARIA slice, but the accessibility obligation is created by S7 itself.
+
+It is recorded here so the maintainer can **veto it in one revert** if they disagree.
+The escape hatch is exactly three places, and nothing else depends on them:
+
+| Where | What to remove |
+|---|---|
+| `src/view.ts` | the `scrollSyncBehavior()` helper (the `prefers-reduced-motion: reduce` `matchMedia` probe that picks `'auto'` over `'smooth'`) and its one call site in `setActiveSection`, which reverts to a literal `behavior: 'smooth'` |
+| `styles.css` | the `@media (prefers-reduced-motion: reduce)` block |
+| `tests/view-render.test.js` | `testSetActiveSection_ScrollBehavior_RespectsReducedMotion` (and its call in the runner list) |
+
+Reverting those three leaves S7's approved treatment intact and unconditionally
+animated.
 
 Nothing else from N8 (the ARIA listbox roles, keyboard semantics, focus management) is
 in this batch — only the motion escape hatch that S7's own change requires.

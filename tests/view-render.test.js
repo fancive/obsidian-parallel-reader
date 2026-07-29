@@ -952,6 +952,128 @@ async function testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself() {
 }
 
 /* ============================================================
+ * Round-4 review P1 (src/view.ts): the queue's authoritative "what does this note
+ * look like now" state must be kept PER NOTE.
+ *
+ * A single global slot can only remember one note at a time, so an INTERLEAVED queue
+ * (A → B → A) loses A's state the moment B's mutation records its own: the second A
+ * mutation then finds a slot belonging to B, falls back to the snapshot the user was
+ * looking at, and writes a payload computed from A's PRE-delete list — resurrecting a
+ * card that the first mutation had already successfully deleted, while both report
+ * success.
+ * ============================================================ */
+function makeInterleavedCardStore(plugin, initialDisk) {
+  const store = { writes: [], disk: { ...initialDisk } };
+  plugin.cacheReplaceCards = async (path, sections) => {
+    const titles = sections.map((s) => s.title);
+    store.writes.push([path, titles]);
+    await tick(); // a real write is asynchronous
+    store.disk[path] = titles;
+    return true;
+  };
+  return store;
+}
+
+async function testInterleavedMutations_ABA_SecondANoteMutationDoesNotResurrectADeletedCard() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin); // A.md showing [a, b, c]
+  const cardsA = view.sections;
+  const store = makeInterleavedCardStore(plugin, { 'A.md': ['a', 'b', 'c'], 'B.md': ['x', 'y'] });
+
+  // 1. On A.md the user deletes card `a`.
+  const first = view.deleteCard(0);
+
+  // 2. Before that write lands the user opens B.md and deletes a card there.
+  const sectionsB = [makeSection('x', 0), makeSection('y', 10)];
+  view.loadFor(makeFakeFile('B.md'), sectionsB, false);
+  const second = view.deleteCard(0);
+
+  // 3. Still before anything has landed, the user goes back to A.md. Its cache entry has
+  //    not been rewritten yet, so the panel shows the same pre-delete list — and the user
+  //    deletes card `b` from it.
+  view.loadFor(makeFakeFile('A.md'), cardsA, false);
+  const third = view.deleteCard(1);
+
+  // 4. ...and switches back to B.md before the queue drains, so the last A mutation runs
+  //    with the panel pointed somewhere else. This is the only door through which the
+  //    queue's own record of A.md can be consulted.
+  view.loadFor(makeFakeFile('B.md'), sectionsB, false);
+
+  const [firstOk, secondOk, thirdOk] = await Promise.all([first, second, third]);
+
+  assert.deepStrictEqual(
+    store.disk['A.md'],
+    ['c'],
+    'the second A.md mutation must be computed from the first A.md mutation’s result, not from the ' +
+      'stale pre-delete snapshot — a B.md mutation queued between them may not resurrect card `a`',
+  );
+  assert.deepStrictEqual(
+    store.writes,
+    [
+      ['A.md', ['b', 'c']],
+      ['B.md', ['y']],
+      ['A.md', ['c']],
+    ],
+    'each write targets its own note and inherits that note’s own latest authoritative array',
+  );
+  assert.deepStrictEqual(store.disk['B.md'], ['y'], 'B.md keeps its own delete');
+  assert.strictEqual(firstOk, true, 'the first A.md delete succeeded');
+  assert.strictEqual(secondOk, true, 'the B.md delete succeeded');
+  assert.strictEqual(thirdOk, true, 'the second A.md delete succeeded');
+  assert.deepStrictEqual(titlesOf(view.sections), ['y'], 'and no A.md write may repaint B.md');
+  assert.strictEqual(
+    view.mutationStateByPath.size,
+    0,
+    'per-note mutation state must be dropped once no mutation for that note is queued — it may not ' +
+      'accumulate one entry per note touched for the lifetime of the session',
+  );
+}
+
+/**
+ * The same interleaving, but the return to A.md re-resolves the cards from cache, so the
+ * panel holds equal-but-not-identical card objects. The inherited array is still the right
+ * base: the card the user acted on is not in it by identity, so the mutation aborts and
+ * reports failure — exactly like the documented same-card race. What it must NOT do is fall
+ * back to a positional edit or to the stale snapshot, either of which un-deletes card `a`.
+ */
+async function testInterleavedMutations_ABA_ReResolvedCardsAbortRatherThanResurrect() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin); // A.md showing [a, b, c]
+  const store = makeInterleavedCardStore(plugin, { 'A.md': ['a', 'b', 'c'], 'B.md': ['x', 'y'] });
+
+  const first = view.deleteCard(0);
+
+  const sectionsB = [makeSection('x', 0), makeSection('y', 10)];
+  view.loadFor(makeFakeFile('B.md'), sectionsB, false);
+  const second = view.deleteCard(0);
+
+  // Back on A.md, but through a fresh cache resolve: same content, new objects.
+  view.loadFor(makeFakeFile('A.md'), [makeSection('a', 0), makeSection('b', 10), makeSection('c', 20)], false);
+  const third = view.deleteCard(1);
+
+  view.loadFor(makeFakeFile('B.md'), sectionsB, false);
+
+  const [firstOk, secondOk, thirdOk] = await Promise.all([first, second, third]);
+
+  assert.strictEqual(firstOk, true, 'the first A.md delete succeeded');
+  assert.strictEqual(secondOk, true, 'the B.md delete succeeded');
+  assert.strictEqual(thirdOk, false, 'a mutation whose target is absent from the authoritative array reports failure');
+  assert.deepStrictEqual(
+    store.disk['A.md'],
+    ['b', 'c'],
+    'the aborted mutation must leave A.md exactly as the first delete left it — no resurrection of `a`',
+  );
+  assert.deepStrictEqual(
+    store.writes,
+    [
+      ['A.md', ['b', 'c']],
+      ['B.md', ['y']],
+    ],
+    'an aborted mutation must not write at all',
+  );
+}
+
+/* ============================================================
  * Review P1 (main.ts): initial editor→card synchronization.
  * bindScrollSync() only INSTALLS the scroll listener. Because loadFor() resets
  * activeIdx to -1 whenever the file changes, opening or switching to a note with
@@ -1474,6 +1596,8 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testConcurrentUpdateAndDelete_BothApply();
   await testConcurrentDeletes_FileSwitchesMidQueue_SecondInheritsTheFirstsResult();
   await testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself();
+  await testInterleavedMutations_ABA_SecondANoteMutationDoesNotResurrectADeletedCard();
+  await testInterleavedMutations_ABA_ReResolvedCardsAbortRatherThanResurrect();
   testBindScrollSync_SyncsActiveCardWithoutAnyScrollEvent();
   await testSyncViewToFile_SyncsActiveCardWithoutAnyScrollEvent();
   await testToggleParallelView_CachedCards_HighlightsCardAfterPanelTakesFocus();
