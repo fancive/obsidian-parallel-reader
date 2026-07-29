@@ -1,5 +1,5 @@
 'use strict';
-import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { Component, MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import {
   type BatchRunState,
   batchProgressVars,
@@ -60,7 +60,11 @@ class ParallelReaderPlugin extends Plugin {
   cacheManager!: CacheManager;
   jobs!: GenerationJobManager;
   activeBatch: BatchRunState | null = null;
-  _scrollDispose: (() => void) | null = null;
+  // Owns the editor scroll listener as a child Component (see bindScrollSync) so a
+  // rebind can detach *only* the previous binding via removeChild, and unloading the
+  // plugin detaches it automatically through Obsidian's normal Component unload cascade
+  // (rather than the previous raw addEventListener, which onunload() never disposed).
+  _scrollSync: Component | null = null;
   _settingsSaveTimer: number | null = null;
 
   get cache(): Record<string, CacheEntry> {
@@ -177,6 +181,22 @@ class ParallelReaderPlugin extends Plugin {
       this.app.vault.on('delete', (file) => {
         if (file instanceof TFile)
           this.handleFileDelete(file).catch((e: unknown) => console.error('[parallel-reader] file delete', e));
+      }),
+    );
+    // onunload() below still fires best-effort flushes for the plain disable/reload
+    // path (the event loop keeps running then, so they usually land), but Obsidian
+    // does NOT await onunload — during an actual app quit the process can exit before
+    // those floating promises settle. `workspace.on('quit', ...)` + `Tasks.addPromise`
+    // is the documented mechanism Obsidian itself waits on before exiting, so it is the
+    // only path that can actually guarantee these debounced writes reach disk.
+    this.registerEvent(
+      this.app.workspace.on('quit', (tasks) => {
+        tasks.addPromise(
+          this.flushSettingsSave().catch((e: unknown) => console.error('[parallel-reader] flush settings on quit', e)),
+        );
+        tasks.addPromise(
+          this.flushCacheSave().catch((e: unknown) => console.error('[parallel-reader] flush cache on quit', e)),
+        );
       }),
     );
     this.bindScrollSync();
@@ -758,22 +778,34 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   bindScrollSync() {
-    if (this._scrollDispose) {
-      this._scrollDispose();
-      this._scrollDispose = null;
+    // Detach the PREVIOUS binding before creating a new one. This runs on every
+    // `active-leaf-change`, so without this teardown a plugin-level
+    // `this.registerDomEvent(...)` would accumulate one listener (and keep this plugin
+    // instance reachable from the CodeMirror scroller) per leaf change for the plugin's
+    // entire lifetime.
+    if (this._scrollSync) {
+      this.removeChild(this._scrollSync);
+      this._scrollSync = null;
     }
     const mdView = this.getActiveView();
     if (!mdView) return;
     const editor = mdView.editor;
     const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
-    const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector('.cm-scroller');
+    const scrollDom = cm?.scrollDOM
+      ? cm.scrollDOM
+      : (mdView.contentEl.querySelector('.cm-scroller') as HTMLElement | null);
     if (!scrollDom) return;
     const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
-    scrollDom.addEventListener('scroll', handler, { passive: true });
-    this._scrollDispose = () => {
-      handler.cancel();
-      scrollDom.removeEventListener('scroll', handler);
-    };
+    // Own the listener with a dedicated child Component (not a bare `this.registerDomEvent`
+    // on the plugin itself) so THIS rebind can detach only the binding it owns via
+    // `removeChild`, and so unloading the plugin detaches it automatically through
+    // Obsidian's normal Component-unload cascade — no dependency on onunload() remembering
+    // to dispose it.
+    const scrollSync = new Component();
+    scrollSync.registerDomEvent(scrollDom, 'scroll', handler, { passive: true });
+    scrollSync.register(() => handler.cancel());
+    this._scrollSync = scrollSync;
+    this.addChild(scrollSync);
   }
 
   handleEditorScroll(mdView: MarkdownView) {

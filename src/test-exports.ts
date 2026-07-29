@@ -67,6 +67,7 @@ export {
   normalizeStreamingTimeoutMs,
   pruneCacheEntries,
 } from './settings';
+export { ParallelReaderSettingTab } from './settings-tab';
 export { deltaExtractorForFormat, parseSseBuffer, streamErrorMessage } from './streaming';
 export { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
 export { folderPathsForTarget } from './vault';

@@ -32,6 +32,7 @@
         "error-ui.test.js",
         "generation-job-manager.test.js",
         "plugin-batch.test.js",
+        "plugin-lifecycle.test.js",
         "view-render.test.js"
       ]
     },

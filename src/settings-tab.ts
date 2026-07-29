@@ -42,6 +42,17 @@ export class ParallelReaderSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  /**
+   * Closing the settings modal (or switching to another tab) races the 400ms debounce
+   * in `saveSettingsDebounced` against the user quitting the app or the vault unloading.
+   * Commit any pending edit immediately instead of leaving it to that timer.
+   */
+  hide(): void {
+    this.plugin
+      .flushSettingsSave()
+      .catch((e: unknown) => console.error('[parallel-reader] flush settings on settings-tab hide', e));
+  }
+
   private tr(key: string, vars?: Record<string, string | number>) {
     return this.plugin.t(key, vars);
   }

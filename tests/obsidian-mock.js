@@ -76,7 +76,67 @@ class FakeNoticeEl {
 
 Module._load = function load(request, parent, isMain) {
   if (request === 'obsidian') {
-    class Plugin {}
+    // Minimal but behaviorally-accurate re-implementation of Obsidian's Component: enough
+    // to exercise the S9 lifecycle fix (child-Component-owned scroll listener, detached on
+    // rebind via removeChild and on plugin unload via the normal unload cascade) under test.
+    class Component {
+      constructor() {
+        this._loaded = false;
+        this._children = [];
+        this._cleanups = [];
+      }
+      load() {
+        if (this._loaded) return;
+        this._loaded = true;
+        this.onload();
+        for (const child of this._children) child.load();
+      }
+      onload() {}
+      unload() {
+        if (!this._loaded) return;
+        this._loaded = false;
+        for (const child of this._children.slice()) child.unload();
+        this._children = [];
+        const cleanups = this._cleanups.splice(0, this._cleanups.length);
+        for (const cb of cleanups) {
+          try {
+            cb();
+          } catch (_e) {
+            // Obsidian tolerates a throwing cleanup callback rather than aborting the rest.
+          }
+        }
+        this.onunload();
+      }
+      onunload() {}
+      addChild(component) {
+        this._children.push(component);
+        if (this._loaded) component.load();
+        return component;
+      }
+      removeChild(component) {
+        const i = this._children.indexOf(component);
+        if (i >= 0) this._children.splice(i, 1);
+        component.unload();
+        return component;
+      }
+      register(cb) {
+        this._cleanups.push(cb);
+      }
+      registerEvent(eventRef) {
+        this.register(() => {
+          if (eventRef && typeof eventRef.detach === 'function') eventRef.detach();
+        });
+      }
+      registerDomEvent(el, type, callback, options) {
+        el.addEventListener(type, callback, options);
+        this.register(() => el.removeEventListener(type, callback, options));
+      }
+      registerInterval(id) {
+        this.register(() => clearInterval(id));
+        return id;
+      }
+    }
+    class Plugin extends Component {}
     class ItemView {
       constructor(leaf) {
         this.leaf = leaf;
@@ -113,6 +173,7 @@ Module._load = function load(request, parent, isMain) {
     class Menu {}
     class Modal {}
     return {
+      Component,
       Plugin,
       ItemView,
       PluginSettingTab,
