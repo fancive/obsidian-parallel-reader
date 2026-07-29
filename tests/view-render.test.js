@@ -5,6 +5,7 @@
  * (silentView) interact in specific combinations.
  */
 const { assert, t } = require('./test-setup');
+const { takeTooltips } = require('./obsidian-mock');
 
 const { CACHE_SCHEMA_VERSION, generationFingerprint } = t;
 const crypto = require('crypto');
@@ -79,7 +80,9 @@ class FakeEl {
     const e = { target: this, preventDefault() {}, stopPropagation() {}, ...evtOverrides };
     for (const h of handlers) h(e);
   }
-  scrollIntoView() {}
+  scrollIntoView(opts) {
+    this.lastScrollIntoView = opts;
+  }
   querySelector() {
     return null;
   }
@@ -742,6 +745,83 @@ async function testRenderStaleBanner_HasIconCueAndRegenerateAction() {
   );
 }
 
+/* ============================================================
+ * S7: doubled tooltip -- addIconButton used to set the native `title`
+ * attribute on top of Obsidian's own aria-label-driven tooltip, so hovering
+ * an icon button showed Obsidian's tooltip and then the OS tooltip a moment
+ * later. It must now route through Obsidian's setTooltip() exclusively.
+ * ============================================================ */
+function testAddIconButton_UsesObsidianTooltip_NotNativeTitle() {
+  takeTooltips(); // drain setTooltip calls accumulated by earlier tests' renders in this file
+  const parent = new FakeEl('div');
+  t.addIconButton(parent, 'refresh-cw', 'Regenerate', () => {});
+
+  const button = parent.children[0];
+  assert.strictEqual(
+    button.title,
+    undefined,
+    "native title attribute must stay unset -- it used to double Obsidian's own tooltip",
+  );
+
+  const tooltips = takeTooltips();
+  assert.strictEqual(tooltips.length, 1, 'addIconButton must call setTooltip exactly once');
+  assert.strictEqual(tooltips[0].el, button, 'setTooltip must target the created button element');
+  assert.strictEqual(tooltips[0].tooltip, 'Regenerate', 'tooltip text must match the requested title');
+  assert.strictEqual(tooltips[0].options?.placement, 'bottom', 'tooltip should be placed below the button');
+}
+
+/* ============================================================
+ * S7: `Element.scrollIntoView`'s explicit `behavior: 'smooth'` overrides the
+ * CSS `scroll-behavior` property, so a media query in styles.css alone cannot
+ * honor `prefers-reduced-motion` for the scroll-sync jump -- the JS call site
+ * must check it directly (see ParallelReaderView.scrollSyncBehavior).
+ * ============================================================ */
+function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
+  const plugin = makeBasePlugin(makeSettings());
+  const fakeLeaf = { view: {} };
+  const view = new t.ParallelReaderView(fakeLeaf, plugin);
+  const rootEl = new FakeEl('div');
+  view.containerEl = { children: [{}, rootEl] };
+
+  const file = makeFakeFile('A.md');
+  const sections = [
+    { title: 'a', anchor: '', gist: '', bullets: [], startLine: 0, level: 0 },
+    { title: 'b', anchor: '', gist: '', bullets: [], startLine: 1, level: 0 },
+  ];
+  view.loadFor(file, sections, false);
+
+  const hadMatchMedia = Object.hasOwn(globalThis, 'matchMedia');
+  const originalMatchMedia = globalThis.matchMedia;
+  try {
+    delete globalThis.matchMedia;
+    view.setActiveSection(0);
+    assert.strictEqual(
+      view.cards[0].lastScrollIntoView?.behavior,
+      'smooth',
+      'without a matchMedia API available, scroll-sync must default to smooth',
+    );
+
+    globalThis.matchMedia = (query) => ({ matches: true, media: query });
+    view.setActiveSection(1);
+    assert.strictEqual(
+      view.cards[1].lastScrollIntoView?.behavior,
+      'auto',
+      'prefers-reduced-motion: reduce must switch scroll-sync to an instant (non-smooth) scroll',
+    );
+
+    globalThis.matchMedia = (query) => ({ matches: false, media: query });
+    view.setActiveSection(0);
+    assert.strictEqual(
+      view.cards[0].lastScrollIntoView?.behavior,
+      'smooth',
+      'without a reduced-motion preference, scroll-sync must stay smooth',
+    );
+  } finally {
+    if (hadMatchMedia) globalThis.matchMedia = originalMatchMedia;
+    else delete globalThis.matchMedia;
+  }
+}
+
 (async () => {
   await testShouldRender_NonSilent_FreshView();
   await testShouldRender_NonSilent_DifferentFile();
@@ -767,6 +847,8 @@ async function testRenderStaleBanner_HasIconCueAndRegenerateAction() {
   await testLoadFor_ResetsActiveIdxOnFileSwitch_PreservesOnSameFile();
   await testCardClick_OwnsHighlight_SuppressesStealFromPrecedingCard();
   await testRenderStaleBanner_HasIconCueAndRegenerateAction();
+  testAddIconButton_UsesObsidianTooltip_NotNativeTitle();
+  testSetActiveSection_ScrollBehavior_RespectsReducedMotion();
   console.log('view-render tests passed');
 })().catch((e) => {
   console.error(e);

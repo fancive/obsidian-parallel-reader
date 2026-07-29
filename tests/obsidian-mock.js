@@ -14,6 +14,11 @@ let requestUrlMock = async () => ({ status: 200, json: {}, text: '{}' });
 // return them. Cleared per-file since each *.test.js runs as its own `node` process.
 const noticeInstances = [];
 
+// Every `setTooltip(el, tooltip, options)` call made through the mock is recorded here so
+// tests can verify Obsidian's own tooltip manager is used instead of the native `title`
+// attribute (see src/ui-helpers.ts). Cleared per-file for the same reason as noticeInstances.
+const tooltipCalls = [];
+
 /**
  * Minimal fake DOM element supporting the subset of Obsidian's HTMLElement extensions
  * (createDiv/createEl/createSpan/addClass/addEventListener) that Notice.messageEl consumers
@@ -120,6 +125,9 @@ Module._load = function load(request, parent, isMain) {
       MarkdownRenderer: { render: async () => {} },
       requestUrl: (params) => requestUrlMock(params),
       setIcon: () => {},
+      setTooltip: (el, tooltip, options) => {
+        tooltipCalls.push({ el, tooltip, options });
+      },
     };
   }
   return originalLoad.call(this, request, parent, isMain);
@@ -139,5 +147,13 @@ module.exports = {
   /** Returns and clears all captured Notice instances (oldest first). */
   takeNotices() {
     return noticeInstances.splice(0, noticeInstances.length);
+  },
+  /** All setTooltip(el, tooltip, options) calls made so far, oldest first. Does not clear. */
+  getTooltips() {
+    return tooltipCalls.slice();
+  },
+  /** Returns and clears all captured setTooltip calls (oldest first). */
+  takeTooltips() {
+    return tooltipCalls.splice(0, tooltipCalls.length);
   },
 };

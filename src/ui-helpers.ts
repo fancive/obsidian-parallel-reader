@@ -1,13 +1,18 @@
 'use strict';
 
-import { Notice, setIcon } from 'obsidian';
+import { Notice, setIcon, setTooltip } from 'obsidian';
 
 export function addIconButton(parent: HTMLElement, icon: string, title: string, onClick: () => void | Promise<void>) {
   const button = parent.createEl('button', {
     cls: 'parallel-reader-icon-button',
     attr: { type: 'button', 'aria-label': title },
   });
-  button.title = title;
+  // Use Obsidian's own tooltip manager instead of the native `title` attribute:
+  // the two used to stack (Obsidian's tooltip on hover, then the OS tooltip a
+  // moment later), showing the same text twice.
+  if (typeof setTooltip === 'function') {
+    setTooltip(button, title, { placement: 'bottom' });
+  }
   if (typeof setIcon === 'function') {
     setIcon(button, icon);
   } else {

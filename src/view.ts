@@ -405,8 +405,22 @@ export class ParallelReaderView extends ItemView {
     this.activeIdx = idx;
     if (idx >= 0 && this.cards[idx]) {
       this.cards[idx].addClass('is-active');
-      this.cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      this.cards[idx].scrollIntoView({ block: 'nearest', behavior: this.scrollSyncBehavior() });
     }
+  }
+
+  /**
+   * `smooth` normally; `auto` (instant, no animation) when the user has
+   * requested reduced motion. `Element.scrollIntoView`'s explicit `behavior`
+   * option overrides the CSS `scroll-behavior` property, so a
+   * `prefers-reduced-motion` media query in styles.css alone cannot suppress
+   * this JS-driven scroll -- it has to be checked here instead.
+   */
+  private scrollSyncBehavior(): ScrollBehavior {
+    const prefersReduced =
+      typeof activeWindow.matchMedia === 'function' &&
+      activeWindow.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return prefersReduced ? 'auto' : 'smooth';
   }
 
   /** Arms the click-vs-scroll-sync suppression window (see SCROLL_SYNC_CLICK_SUPPRESS_MS). */
