@@ -29,6 +29,30 @@ changelog-guard step.
   instead of an esbuild bundle, so branch and function coverage are real
   (32 -> 1180 measured branches, 12 -> 316 functions); set thresholds to the
   measured floor and add a CI assertion on the absolute totals (S1b)
+- fix: the summary card highlight no longer stays on the previous note's card
+  after switching files, and no longer jumps to the card above the one you
+  clicked (S3)
+- fix: offer Retry on timeout, rate-limit, schema and unrecognised generation
+  errors — previously only network errors could be retried from the notice (S4)
+- fix: the stale-cards banner is rebuilt from the warning colour instead of the
+  error red it was painted on, raising its contrast from ~1.4:1, and gains an
+  icon so the state is not signalled by colour alone (S6)
+- fix: the active summary card is now visually distinct from a hovered one
+  (both previously repainted to the sidebar's own background), activation no
+  longer nudges card text by 1px, keyboard focus is distinguishable from hover,
+  and icon buttons no longer show a duplicate OS tooltip (S7)
+- fix: clearing the cache from Settings now refreshes the panel, matching the
+  command; a failed card edit or delete no longer leaves the UI showing a
+  change that was not saved (S8)
+- fix: the editor scroll listener is released on unload instead of leaking the
+  plugin instance on every in-place update, and pending settings and cache
+  writes are flushed when Obsidian quits (S9)
+- fix: localise the three clipboard/action failure notices that were hardcoded
+  in English despite translations existing in all seven locales (S10)
+- test: replace two architecture guards that could never match with a real
+  cache-debounce test (S11)
+- a11y: honour `prefers-reduced-motion` for the loading spinner and card
+  scroll-sync animation
 
 ## [1.0.24] - 2026-06-16
 
