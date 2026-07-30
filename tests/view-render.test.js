@@ -5,7 +5,7 @@
  * (silentView) interact in specific combinations.
  */
 const { assert, t } = require('./test-setup');
-const { takeTooltips } = require('./obsidian-mock.mjs');
+const { takeTooltips, takeNotices } = require('./obsidian-mock.mjs');
 
 const { CACHE_SCHEMA_VERSION, generationFingerprint } = t;
 const crypto = require('crypto');
@@ -952,6 +952,75 @@ async function testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself() {
 }
 
 /* ============================================================
+ * Cross-model review P3 (src/view.ts:649): a superseded same-card mutation must still
+ * fail CLOSED — that behavior is correct and documented, and these tests don't touch
+ * it — but it used to fail SILENTLY, with no feedback at all, unlike the write-failure
+ * path (`cardPersistFailed`). Both tests below drive two mutations at the SAME card
+ * (same index, before the first's write lands, so both capture the identical target
+ * object) and assert the superseded one now surfaces `cardMutationSuperseded`.
+ * ============================================================ */
+async function testViewDeleteCard_SupersededBySameCardMutation_ShowsNoticeAndReturnsFalse() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin); // A.md showing [a, b, c]
+  const store = makeSerializedCardStore(view);
+  takeNotices();
+
+  // Both calls fire before view.sections has changed, so both capture the SAME `a`
+  // card object as their target — the documented same-card race, not a different-card one.
+  const [firstOk, secondOk] = await Promise.all([view.deleteCard(0), view.deleteCard(0)]);
+
+  assert.strictEqual(firstOk, true, 'the first delete of card `a` succeeds');
+  assert.strictEqual(
+    secondOk,
+    false,
+    'the second delete targets the SAME card by identity; once the first delete removes it, the second ' +
+      'can no longer find it and must fail closed (documented limitation — must stay false)',
+  );
+  assert.deepStrictEqual(store.writes, [['A.md', ['b', 'c']]], 'the superseded delete must not write at all');
+  assert.deepStrictEqual(titlesOf(view.sections), ['b', 'c'], 'only the first delete is reflected in the panel');
+
+  const notices = takeNotices().map((n) => n.message);
+  assert.deepStrictEqual(
+    notices,
+    ['cardDeleted', 'cardMutationSuperseded'],
+    'the superseded delete must now surface feedback instead of failing silently, without reusing ' +
+      '`cardPersistFailed` (nothing failed to persist here — the mutation was superseded)',
+  );
+}
+
+async function testViewUpdateCard_SupersededBySameCardMutation_ShowsNoticeAndReturnsFalse() {
+  const plugin = makeBasePlugin(makeSettings());
+  const view = makeThreeCardView(plugin); // A.md showing [a, b, c]
+  const store = makeSerializedCardStore(view);
+  takeNotices();
+
+  // Same race as the delete test above, but for updateCard: `updateCardAt` replaces the
+  // edited card with a NEW object (never mutates in place), so the second edit's captured
+  // target is gone from `sections` by the time it runs, even though it targeted the same index.
+  const [firstOk, secondOk] = await Promise.all([
+    view.updateCard(0, { title: 'a-edited' }),
+    view.updateCard(0, { title: 'a-edited-again' }),
+  ]);
+
+  assert.strictEqual(firstOk, true, 'the first edit of card `a` succeeds');
+  assert.strictEqual(
+    secondOk,
+    false,
+    'the second edit targets the SAME pre-edit card object by identity; it is no longer in the ' +
+      'authoritative array after the first edit replaces it, so it must fail closed',
+  );
+  assert.deepStrictEqual(store.writes, [['A.md', ['a-edited', 'b', 'c']]], 'the superseded edit must not write at all');
+  assert.deepStrictEqual(titlesOf(view.sections), ['a-edited', 'b', 'c'], 'only the first edit lands');
+
+  const notices = takeNotices().map((n) => n.message);
+  assert.deepStrictEqual(
+    notices,
+    ['cardSaved', 'cardMutationSuperseded'],
+    'the superseded edit must now surface feedback instead of failing silently',
+  );
+}
+
+/* ============================================================
  * Round-4 review P1 (src/view.ts): the queue's authoritative "what does this note
  * look like now" state must be kept PER NOTE.
  *
@@ -1258,6 +1327,79 @@ async function testRunForFile_CacheHit_HighlightsCardAfterPanelTakesFocus() {
     view.activeIdx,
     1,
     'a run that opens the panel and lands on the cache must still highlight the card at the editor viewport top',
+  );
+}
+
+/* ============================================================
+ * Cross-model review P2 (main.ts:879): getMarkdownViewForFile must prefer the ACTIVE
+ * markdown leaf when it shows the target file. `findLeafForFile` returns the FIRST
+ * leaf whose view matches by path, in workspace enumeration order — with the same
+ * note open in two leaves (a split), that first match need not be the leaf the user
+ * is actually looking at, so the initial card sync used to read the wrong viewport
+ * and highlight a card for a scroll position the user isn't at.
+ *
+ * These three tests pin down ONE coherent resolution order: active-if-matching, else
+ * first matching leaf — and confirm the round-3 P1 fallback (sidebar focused, no
+ * active markdown view at all) still works under the new ordering.
+ * ============================================================ */
+function testGetMarkdownViewForFile_TwoLeavesSameFile_PrefersActiveLeaf() {
+  const plugin = makeBasePlugin(makeSettings());
+  const file = makeFakeFile('A.md');
+
+  // Two leaves both show the same file (a split). The first is earlier in workspace
+  // enumeration order; the SECOND is the one actually focused.
+  const firstLeafMdView = makeFakeEditorMdView(file, makeFakeEditorScrollDom(), 3);
+  const secondLeafMdView = makeFakeEditorMdView(file, makeFakeEditorScrollDom(), 25);
+
+  plugin.app.workspace.getLeavesOfType = (type) =>
+    type === 'markdown' ? [{ view: firstLeafMdView }, { view: secondLeafMdView }] : [];
+  plugin.getActiveView = () => secondLeafMdView;
+
+  const resolved = plugin.getMarkdownViewForFile(file);
+
+  assert.strictEqual(
+    resolved,
+    secondLeafMdView,
+    'with the same file open in two leaves, the ACTIVE leaf must win over the first enumeration match, ' +
+      'or the initial sync reads the wrong viewport and highlights the wrong card',
+  );
+}
+
+function testGetMarkdownViewForFile_ActiveShowsDifferentFile_FallsBackToMatchingLeaf() {
+  const plugin = makeBasePlugin(makeSettings());
+  const file = makeFakeFile('A.md');
+  const otherFile = makeFakeFile('B.md');
+  const targetLeafMdView = makeFakeEditorMdView(file, makeFakeEditorScrollDom(), 3);
+  const activeMdView = makeFakeEditorMdView(otherFile, makeFakeEditorScrollDom(), 9);
+
+  plugin.app.workspace.getLeavesOfType = (type) => (type === 'markdown' ? [{ view: targetLeafMdView }] : []);
+  plugin.getActiveView = () => activeMdView; // focused elsewhere, on a different note
+
+  const resolved = plugin.getMarkdownViewForFile(file);
+
+  assert.strictEqual(
+    resolved,
+    targetLeafMdView,
+    'when the active view shows a DIFFERENT file, resolution must fall back to the leaf actually showing the target file',
+  );
+}
+
+function testGetMarkdownViewForFile_NoActiveMarkdownView_FallsBackToFirstMatchingLeaf() {
+  const plugin = makeBasePlugin(makeSettings());
+  const file = makeFakeFile('A.md');
+  const mdView = makeFakeEditorMdView(file, makeFakeEditorScrollDom(), 3);
+
+  plugin.app.workspace.getLeavesOfType = (type) => (type === 'markdown' ? [{ view: mdView }] : []);
+  // Round-3 P1: the sidebar has focus, so getActiveViewOfType(MarkdownView) returns null.
+  plugin.getActiveView = () => null;
+
+  const resolved = plugin.getMarkdownViewForFile(file);
+
+  assert.strictEqual(
+    resolved,
+    mdView,
+    'with no active markdown view at all (sidebar focused), resolution must still fall back to the matching leaf — ' +
+      'the round-3 P1 fix must not regress under the new active-first ordering',
   );
 }
 
@@ -1573,6 +1715,9 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testToggleParallelView_LeafExists_SidebarOpen_Collapses();
   await testToggleParallelView_LeafExists_SidebarCollapsed_Reveals();
   await testToggleParallelView_NoRightSplit_FallsBackToReveal();
+  testGetMarkdownViewForFile_TwoLeavesSameFile_PrefersActiveLeaf();
+  testGetMarkdownViewForFile_ActiveShowsDifferentFile_FallsBackToMatchingLeaf();
+  testGetMarkdownViewForFile_NoActiveMarkdownView_FallsBackToFirstMatchingLeaf();
   await testRefreshViewAfterCacheDelete_MatchingFile();
   await testRefreshViewAfterCacheDelete_DifferentFile();
   await testRefreshViewAfterCacheClear_AlwaysClears();
@@ -1596,6 +1741,8 @@ function testSetActiveSection_ScrollBehavior_RespectsReducedMotion() {
   await testConcurrentUpdateAndDelete_BothApply();
   await testConcurrentDeletes_FileSwitchesMidQueue_SecondInheritsTheFirstsResult();
   await testConcurrentDeletes_SecondWriteFails_RollsBackOnlyItself();
+  await testViewDeleteCard_SupersededBySameCardMutation_ShowsNoticeAndReturnsFalse();
+  await testViewUpdateCard_SupersededBySameCardMutation_ShowsNoticeAndReturnsFalse();
   await testInterleavedMutations_ABA_SecondANoteMutationDoesNotResurrectADeletedCard();
   await testInterleavedMutations_ABA_ReResolvedCardsAbortRatherThanResurrect();
   testBindScrollSync_SyncsActiveCardWithoutAnyScrollEvent();

@@ -645,8 +645,14 @@ export class ParallelReaderView extends ItemView {
     return this.enqueueCardMutation(sourcePath, async () => {
       const base = this.cardMutationBase(sourcePath, snapshot);
       const targetIdx = base.indexOf(target);
-      // Already removed by a mutation that ran first — nothing left to delete.
-      if (targetIdx < 0) return false;
+      // Already removed by a mutation that ran first — nothing left to delete. This is
+      // the documented fail-closed limitation for two mutations targeting the SAME card
+      // concurrently; it must stay fail-closed, but the user still needs to be told
+      // nothing happened, or the click silently does nothing.
+      if (targetIdx < 0) {
+        new Notice(this.plugin.t('cardMutationSuperseded'));
+        return false;
+      }
       const nextSections = removeCardAt(base, targetIdx);
 
       // Await the cache write BEFORE touching any visible state. `removeCardAt`/
@@ -692,7 +698,12 @@ export class ParallelReaderView extends ItemView {
     return this.enqueueCardMutation(sourcePath, async () => {
       const base = this.cardMutationBase(sourcePath, snapshot);
       const targetIdx = base.indexOf(target);
-      if (targetIdx < 0) return false;
+      // Same documented same-card race as deleteCard (see the comment there): fail
+      // closed, but tell the user so the edit's disappearance isn't silent.
+      if (targetIdx < 0) {
+        new Notice(this.plugin.t('cardMutationSuperseded'));
+        return false;
+      }
       const nextSections = updateCardAt(base, targetIdx, patch);
 
       const ok = await this.persistCards(

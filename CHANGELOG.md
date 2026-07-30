@@ -72,6 +72,13 @@ changelog-guard step.
 - build: `scripts/bump-version.mjs --tag` refuses to tag when the tag already
   exists, when the CHANGELOG section is missing, or when unrelated changes are
   staged, and commits only the release files
+- fix: the initial card-highlight sync now prefers the Markdown leaf that is
+  actually focused when the same note is open in two leaves (a split),
+  instead of always reading whichever leaf the workspace happened to
+  enumerate first
+- fix: a card edit or delete superseded by a concurrent mutation on the same
+  card now shows a notice instead of silently doing nothing; it still fails
+  closed and does not persist, only the missing feedback was fixed
 
 ## [1.0.24] - 2026-06-16
 

@@ -33,6 +33,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     emptyCard: '（未生成）',
     cardUntitled: '(无标题)',
     cardPersistFailed: '卡片改动未保存（缓存失效）',
+    cardMutationSuperseded: '此卡片已被其他操作修改，本次改动未应用，请重试。',
     generationAlreadyRunning: '该笔记正在生成对照笔记',
     anchorMismatch: 'anchor 匹配失败，无法滚动联动',
     menuCopyMarkdown: '复制 Markdown',
@@ -245,6 +246,7 @@ export const STRINGS: Record<string, Record<string, string>> = {
     emptyCard: '(not generated)',
     cardUntitled: '(Untitled)',
     cardPersistFailed: 'Card change not persisted (cache missing).',
+    cardMutationSuperseded: 'This card changed before your edit could be applied. Please try again.',
     generationAlreadyRunning: 'This note is already being summarized.',
     anchorMismatch: 'Anchor did not match; scroll sync is unavailable',
     menuCopyMarkdown: 'Copy Markdown',
@@ -601,6 +603,7 @@ defineLocale('ja', {
   cmdCardNext: '次の要約カードにフォーカス',
   cmdCardJump: '現在の要約カードを原文へジャンプ',
   cardPersistFailed: 'カードの変更を保存できませんでした（キャッシュがありません）。',
+  cardMutationSuperseded: 'この編集を適用する前にカードが変更されました。もう一度お試しください。',
   cancelRequestedApiInFlight:
     'キャンセルを要求しました。実行中の API リクエストはすぐには中断できないため、結果は無視されます。',
   errorModalTimeoutTitle: 'CLI タイムアウト診断',
@@ -817,6 +820,7 @@ defineLocale('ko', {
   cmdCardNext: '다음 요약 카드에 포커스',
   cmdCardJump: '현재 요약 카드를 원문으로 이동',
   cardPersistFailed: '카드 변경 사항을 저장하지 못했습니다(캐시 없음).',
+  cardMutationSuperseded: '편집을 적용하기 전에 이 카드가 변경되었습니다. 다시 시도해 주세요.',
   cancelRequestedApiInFlight: '취소를 요청했습니다. 진행 중인 API 요청은 즉시 중단할 수 없으며 결과는 무시됩니다.',
   errorModalTimeoutTitle: 'CLI 시간 초과 진단',
   errorModalExitTitle: 'CLI 비정상 종료',
@@ -1043,6 +1047,8 @@ defineLocale('fr', {
   cmdCardNext: 'Focus sur la carte de résumé suivante',
   cmdCardJump: 'Aller de la carte de résumé actuelle vers la source',
   cardPersistFailed: 'Modification de carte non enregistrée (cache manquant).',
+  cardMutationSuperseded:
+    'Cette carte a changé avant que votre modification ne puisse être appliquée. Veuillez réessayer.',
   cancelRequestedApiInFlight:
     'Annulation demandée. La requête API en cours ne peut pas être interrompue immédiatement ; son résultat sera ignoré.',
   errorModalTimeoutTitle: 'Diagnostic de délai CLI',
@@ -1278,6 +1284,8 @@ defineLocale('de', {
   cmdCardNext: 'Nächste Zusammenfassungskarte fokussieren',
   cmdCardJump: 'Aktuelle Zusammenfassungskarte zur Quelle springen lassen',
   cardPersistFailed: 'Kartenänderung nicht gespeichert (Cache fehlt).',
+  cardMutationSuperseded:
+    'Diese Karte wurde geändert, bevor Ihre Änderung angewendet werden konnte. Bitte versuchen Sie es erneut.',
   cancelRequestedApiInFlight:
     'Abbruch angefordert. Die laufende API-Anfrage kann nicht sofort abgebrochen werden; ihr Ergebnis wird ignoriert.',
   errorModalTimeoutTitle: 'CLI-Timeout-Diagnose',
@@ -1511,6 +1519,7 @@ defineLocale('es', {
   cmdCardNext: 'Enfocar tarjeta de resumen siguiente',
   cmdCardJump: 'Ir desde la tarjeta de resumen actual a la fuente',
   cardPersistFailed: 'Cambio de tarjeta no guardado (falta caché).',
+  cardMutationSuperseded: 'Esta tarjeta cambió antes de que se pudiera aplicar tu edición. Inténtalo de nuevo.',
   cancelRequestedApiInFlight:
     'Cancelación solicitada. La solicitud API en curso no puede abortarse de inmediato; su resultado se ignorará.',
   errorModalTimeoutTitle: 'Diagnóstico de tiempo de espera CLI',

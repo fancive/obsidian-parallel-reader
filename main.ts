@@ -864,26 +864,35 @@ class ParallelReaderPlugin extends Plugin {
 
   /**
    * The Markdown editor showing `file`, resolved from the FILE rather than from whatever
-   * happens to be focused right now.
+   * happens to be focused right now — except that the active view is preferred FIRST
+   * when it demonstrably shows this file, because that is the one viewport the user is
+   * actually looking at.
    *
-   * "What is active?" is the wrong question at post-load synchronization time.
-   * `ensureView()` reveals — and therefore FOCUSES — the right-side panel, so on the
-   * ribbon/open-view path the active view by then is our own `ItemView` and
-   * `getActiveViewOfType(MarkdownView)` returns null: the panel loaded its cached cards
-   * and highlighted none of them. Resolving from the file is stateless and cannot go
-   * stale when focus moves.
+   * Resolution order (one coherent chain, not two competing ones):
+   *   1. The active Markdown view, IF its `file` matches — this also covers layouts
+   *      where the file's leaf is not enumerated as a `markdown` leaf at all.
+   *   2. Otherwise, the first leaf `findLeafForFile` finds among `markdown`-typed leaves.
    *
-   * The active view is consulted only as a fallback, and only when it demonstrably shows
-   * THIS file — for layouts where the file's leaf is not enumerated as a `markdown` leaf.
+   * Why the active view must come first: if the same note is open in two Markdown
+   * leaves (a split), `findLeafForFile` returns the FIRST matching leaf in workspace
+   * enumeration order, which need not be the one the user is looking at. Checking the
+   * active view first resolves the split correctly whenever a matching leaf is focused.
+   *
+   * Why the fallback still matters (round-3 P1): `ensureView()` reveals — and therefore
+   * FOCUSES — the right-side panel, so on the ribbon/open-view path the active view by
+   * then is our own `ItemView` and `getActiveViewOfType(MarkdownView)` returns null (or,
+   * with the sidebar focused for any other reason, may return a view for a different
+   * file entirely). Falling back to `findLeafForFile` keeps that path working exactly as
+   * before — resolving from the file is stateless and cannot go stale when focus moves.
    */
   getMarkdownViewForFile(file: TFile | null): MarkdownView | null {
     if (!file) return null;
+    const active = this.getActiveView();
+    if (active?.file?.path === file.path) return active;
     const leaf = this.findLeafForFile(file);
     // findLeafForFile only ever scans `getLeavesOfType('markdown')`, so the view it
     // returns is a MarkdownView; the cast just narrows the leaf's declared `View` type.
-    if (leaf) return leaf.view as MarkdownView;
-    const active = this.getActiveView();
-    return active?.file?.path === file.path ? active : null;
+    return leaf ? (leaf.view as MarkdownView) : null;
   }
 
   /**

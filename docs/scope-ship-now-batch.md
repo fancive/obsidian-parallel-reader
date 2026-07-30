@@ -34,28 +34,32 @@ Scope is exactly the **(a) Ship now** tier. The (b) Next and (c) Bets tiers are 
 
 ## Owned scope deviations
 
-One change in this batch sits outside the (a) tier's stated boundary. It is kept
-deliberately, and recorded here rather than crossed silently.
+One change in this batch sits outside the (a) tier's stated boundary. It has since been
+put to the maintainer directly and **approved to stay** — recorded here as a standing,
+approved deviation, not crossed silently and not an open item.
 
-### Reduced-motion support (`src/view.ts`, `styles.css`)
+### Reduced-motion support (`src/view.ts`, `styles.css`) — approved, standing deviation
 
 The cross-model review flagged the `prefers-reduced-motion` media query and the
-`scrollIntoView` behaviour switch as belonging to N8's ARIA slice, and asked for them to
-be deferred. **They are being kept — as the implementer's call, not as an approved one.**
+`scrollIntoView` behaviour switch as belonging to N8's ARIA slice and asked for them to
+be deferred. **It flagged this three times across review rounds, escalating to P1 on the
+last round.**
 
-Be precise about the authority here. The maintainer approved the **full** card
-visual-state treatment for S7 (decision D3), and that approval is what puts the
-transitions and the smooth scroll in the batch. It does **not** extend to the
-reduced-motion escape hatch: that specific addition was the implementer's judgement,
-made while building S7, and was never put to the maintainer.
+That repeated flagging is why this was put to the maintainer as an explicit decision
+rather than left to stand on implementer judgment alone. **The maintainer was asked
+directly and chose to keep it**, with the rationale that S7 introduced the motion (the
+CSS transitions and the JS `behavior: 'smooth'` scroll), so the reduced-motion escape
+hatch belongs with the change that created the need for it — shipping new motion
+without an escape hatch would have been an incomplete change, not a separate feature the
+roadmap could defer to N8.
 
-The rationale for keeping it stands on its own. S7 added CSS transitions and a JS
-`behavior: 'smooth'` scroll. Shipping new motion without a reduced-motion escape is an
-incomplete change, not a separate feature. The roadmap happened to list the media query
-under N8's ARIA slice, but the accessibility obligation is created by S7 itself.
+**This is therefore an approved, standing deviation — not an unresolved finding.** A
+future review round that re-flags it should be treated as acknowledged-and-declined, not
+as a new defect owed another round of justification.
 
-It is recorded here so the maintainer can **veto it in one revert** if they disagree.
-The escape hatch is exactly three places, and nothing else depends on them:
+The revert table below is kept — it is still useful if the maintainer ever wants to
+reverse the decision — but doing so now takes a new, explicit reversal, not another
+review flag. The escape hatch is exactly three places, and nothing else depends on them:
 
 | Where | What to remove |
 |---|---|
@@ -68,6 +72,27 @@ animated.
 
 Nothing else from N8 (the ARIA listbox roles, keyboard semantics, focus management) is
 in this batch — only the motion escape hatch that S7's own change requires.
+
+### Two further findings closed in the same pass
+
+Alongside recording the maintainer's decision above, two more cross-model review
+findings were closed in this batch, so this document reflects the batch's true final
+state:
+
+- **P2 (`main.ts`, `getMarkdownViewForFile`)** — the initial editor→card sync could read
+  the wrong viewport when the same note was open in two Markdown leaves (a split):
+  `findLeafForFile` returned the first matching leaf in workspace enumeration order, not
+  necessarily the leaf the user was actually looking at. Fixed by preferring the active
+  Markdown leaf when it demonstrably shows the target file, falling back to the first
+  matching leaf otherwise — one coherent resolution order that still preserves the
+  round-3 P1 fix for when the sidebar has focus and no Markdown view is active at all.
+- **P3 (`src/view.ts`, card mutation queue)** — a mutation superseded by a concurrent
+  edit of the SAME card (aborted by the object-identity check, per the documented
+  fail-closed limitation) reported failure with no user-visible feedback at all, unlike
+  the write-failure path (`cardPersistFailed`). Fixed by adding a dedicated
+  `cardMutationSuperseded` notice on that path in both `deleteCard` and `updateCard`; the
+  fail-closed behavior itself — and the requirement that it stay fail-closed — is
+  unchanged.
 
 ---
 
