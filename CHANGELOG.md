@@ -12,7 +12,7 @@ the tag being released and uses it as the GitHub release body via
 here **before** tagging a release, or the release job will fail its
 changelog-guard step.
 
-## [Unreleased]
+## [1.0.25] - 2026-08-01
 
 - ci: guard the release workflow so a pushed tag must match `manifest.json`'s
   version and must exist as a key in `versions.json`, failing before any
