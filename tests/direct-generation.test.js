@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const generation = await requireBundledModule('src/generation.ts');
+    const generation = await requireSourceModule('src/generation.ts');
 
     // ── cancellationNoticeKey: API backend during generation ──
     assert.strictEqual(

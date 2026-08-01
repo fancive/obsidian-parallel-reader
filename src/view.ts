@@ -1,15 +1,27 @@
 'use strict';
 
-import { ItemView, MarkdownRenderer, Menu, Notice, TFile, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from 'obsidian';
 import { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 import { cardsToMarkdown, cardToMarkdown, cardToPlain } from './markdown';
 import { CardEditModal, confirmExportOverwrite } from './modal';
 import { activeSectionLine, nextCardIndex } from './navigation';
 import type { CardPatch, PluginHost, ResolvedCard } from './types';
-import { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
+import { addIconButton, addTextButton, copyToClipboard, type Translator } from './ui-helpers';
 import { ensureVaultFolder, normalizeVaultPath } from './vault';
 
 export const VIEW_TYPE_PARALLEL = 'parallel-reader-view';
+
+/**
+ * How long (ms) to ignore scroll-sync reassignment after a card click drives an
+ * editor scroll. `editor.scrollIntoView(..., true)` centers the target line, so
+ * the scroll handler's near-top probe (see `visibleTopProbeY` in scroll.ts) can
+ * land inside the PRECEDING card's line range and steal the highlight straight
+ * back from the card the user just clicked. A short window absorbs that one
+ * scroll event. A timestamp deadline is used rather than a boolean latch: if the
+ * expected scroll event never fires, a boolean would leave the view permanently
+ * desynced, whereas a deadline self-expires and can never wedge sync forever.
+ */
+const SCROLL_SYNC_CLICK_SUPPRESS_MS = 400;
 
 export class ParallelReaderView extends ItemView {
   plugin: PluginHost;
@@ -22,6 +34,16 @@ export class ParallelReaderView extends ItemView {
   errorMessage = '';
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private keydownTarget: Element | null = null;
+  /** Date.now()-based deadline; see SCROLL_SYNC_CLICK_SUPPRESS_MS. */
+  private scrollSyncSuppressedUntil = 0;
+  /**
+   * Bound translator passed into `ui-helpers.ts` (addIconButton/addTextButton/copyToClipboard)
+   * so their failure toasts localize via `actionFailed`/`copyFailed` instead of hardcoding
+   * English. Declared as an arrow field (not `this.plugin.t.bind(this.plugin)`) so it closes
+   * over `this` lazily -- field initializers run before the constructor body assigns
+   * `this.plugin`, and this body isn't evaluated until the helper actually calls it.
+   */
+  private tr: Translator = (key, vars) => this.plugin.t(key, vars);
 
   constructor(leaf: WorkspaceLeaf, plugin: PluginHost) {
     super(leaf);
@@ -64,9 +86,35 @@ export class ParallelReaderView extends ItemView {
     return Promise.resolve();
   }
 
+  /**
+   * Bookkeeping that must happen every time `sections` is replaced — including
+   * with an empty array for a loading/error/empty state. `cards` is always
+   * cleared, since the DOM elements it references are about to be rebuilt or
+   * removed by the caller's own render pass. `activeIdx` only resets when the
+   * file actually changed: this keeps scroll-sync position intact across an
+   * ordinary refresh/regenerate of the SAME note, while guaranteeing a stale
+   * highlight from the PREVIOUS note can never survive a file switch.
+   *
+   * The click-suppression deadline resets on the same condition, and for the same
+   * reason. It belongs to a click on a card of the note that was showing; a note opened
+   * inside that 400ms window would otherwise inherit it, and its first
+   * `syncActiveFromEditor` pass would return early — leaving the new note with no
+   * highlight at all until the user physically scrolled. A same-file refresh must NOT
+   * reset it: surviving the render that follows a click is exactly its job.
+   */
+  private beginSectionsReplace(file: TFile | null, sections: ResolvedCard[]) {
+    const switchedFile = (this.sourceFile?.path ?? null) !== (file?.path ?? null);
+    this.sourceFile = file;
+    this.sections = sections;
+    this.cards = [];
+    if (switchedFile) {
+      this.activeIdx = -1;
+      this.scrollSyncSuppressedUntil = 0;
+    }
+  }
+
   renderEmpty() {
-    this.sourceFile = null;
-    this.sections = [];
+    this.beginSectionsReplace(null, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -86,7 +134,7 @@ export class ParallelReaderView extends ItemView {
   private appendSetupNudge(parent: HTMLElement): boolean {
     if (this.plugin.isCredentialConfigured()) return false;
     parent.createEl('p', { cls: 'parallel-reader-setup-hint', text: this.plugin.t('emptyNeedsSetup') });
-    addTextButton(parent, 'settings', this.plugin.t('actionSetupProvider'), () => this.plugin.openSettings());
+    addTextButton(parent, 'settings', this.plugin.t('actionSetupProvider'), () => this.plugin.openSettings(), this.tr);
     return true;
   }
 
@@ -98,8 +146,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   loadFor(file: TFile, sections: ResolvedCard[], stale: boolean) {
-    this.sourceFile = file;
-    this.sections = sections;
+    this.beginSectionsReplace(file, sections);
     this.stale = !!stale;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -107,8 +154,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderLoading(file: TFile, message: string) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = message || this.plugin.t('loadingDefault');
     this.errorMessage = '';
@@ -133,9 +179,15 @@ export class ParallelReaderView extends ItemView {
     const headerRow = header.createDiv({ cls: 'parallel-reader-header-row' });
     headerRow.createDiv({ text: file.basename, cls: 'parallel-reader-title' });
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
-    addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => {
-      this.plugin.cancelGenerationForFile(file);
-    });
+    addIconButton(
+      actions,
+      'square',
+      this.plugin.t('actionCancel'),
+      () => {
+        this.plugin.cancelGenerationForFile(file);
+      },
+      this.tr,
+    );
 
     const state = container.createDiv({
       cls: 'parallel-reader-state parallel-reader-loading parallel-reader-streaming-preview',
@@ -149,8 +201,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderError(file: TFile, message: string) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = message || this.plugin.t('errorTitle');
@@ -158,8 +209,7 @@ export class ParallelReaderView extends ItemView {
   }
 
   renderEmptyWithHint(file: TFile) {
-    this.sourceFile = file;
-    this.sections = [];
+    this.beginSectionsReplace(file, []);
     this.stale = false;
     this.loadingMessage = '';
     this.errorMessage = '';
@@ -170,10 +220,16 @@ export class ParallelReaderView extends ItemView {
     hint.createEl('p', { text: this.plugin.t('emptyNoCache') });
     hint.createEl('code', { text: this.plugin.t('commandGenerate') });
     this.appendSetupNudge(hint);
-    addTextButton(hint, null, this.plugin.t('actionGenerate'), () => {
-      if (this.plugin.isGeneratingFile(file)) return;
-      void this.plugin.runForFile(file, false);
-    });
+    addTextButton(
+      hint,
+      null,
+      this.plugin.t('actionGenerate'),
+      () => {
+        if (this.plugin.isGeneratingFile(file)) return;
+        void this.plugin.runForFile(file, false);
+      },
+      this.tr,
+    );
   }
 
   render() {
@@ -200,30 +256,46 @@ export class ParallelReaderView extends ItemView {
     const actions = headerRow.createDiv({ cls: 'parallel-reader-actions' });
     if (this.sourceFile) {
       if (this.plugin.isGeneratingFile(this.sourceFile)) {
-        addIconButton(actions, 'square', this.plugin.t('actionCancel'), () => {
-          this.plugin.cancelGenerationForFile(this.sourceFile);
-        });
+        addIconButton(
+          actions,
+          'square',
+          this.plugin.t('actionCancel'),
+          () => {
+            this.plugin.cancelGenerationForFile(this.sourceFile);
+          },
+          this.tr,
+        );
       } else {
         addIconButton(
           actions,
           'refresh-cw',
           this.plugin.t('actionRegenerate'),
           () => void this.plugin.runForFile(this.sourceFile, true),
+          this.tr,
         );
       }
-      addIconButton(actions, 'copy', this.plugin.t('actionCopyAll'), () => void this.plugin.copyCurrentViewMarkdown());
-      addIconButton(actions, 'download', this.plugin.t('actionExport'), () => void this.exportToVault());
+      addIconButton(
+        actions,
+        'copy',
+        this.plugin.t('actionCopyAll'),
+        () => void this.plugin.copyCurrentViewMarkdown(),
+        this.tr,
+      );
+      addIconButton(actions, 'download', this.plugin.t('actionExport'), () => void this.exportToVault(), this.tr);
     }
   }
 
   private renderStaleBanner(container: Element) {
     const banner = container.createDiv({ cls: 'parallel-reader-stale-banner' });
-    banner.createSpan({ text: this.plugin.t('staleBanner') });
+    const icon = banner.createSpan({ cls: 'parallel-reader-stale-icon' });
+    if (typeof setIcon === 'function') setIcon(icon, 'alert-triangle');
+    banner.createSpan({ text: this.plugin.t('staleBanner'), cls: 'parallel-reader-stale-text' });
     addTextButton(
       banner,
       'refresh-cw',
       this.plugin.t('actionRegenerate'),
       () => void this.plugin.runForFile(this.sourceFile, true),
+      this.tr,
       'parallel-reader-stale-button',
     );
   }
@@ -248,13 +320,15 @@ export class ParallelReaderView extends ItemView {
       'refresh-cw',
       this.plugin.t('actionRegenerate'),
       () => void this.plugin.runForFile(this.sourceFile, true),
+      this.tr,
       'parallel-reader-text-button',
     );
     addTextButton(
       actions,
       'copy',
       this.plugin.t('actionCopyError'),
-      () => void copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError')),
+      () => void copyToClipboard(this.errorMessage, this.plugin.t('actionCopyError'), this.tr),
+      this.tr,
       'parallel-reader-text-button',
     );
   }
@@ -305,7 +379,13 @@ export class ParallelReaderView extends ItemView {
       if (sel && sel.toString().length > 0) return;
       const target = e.target as HTMLElement | null;
       if (target && target.tagName === 'A') return;
-      if (s.startLine >= 0) void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
+      if (s.startLine < 0) return;
+      // Own the highlight immediately: don't wait for the scroll-sync handler
+      // to (maybe) agree, since its centered-scroll probe can otherwise land
+      // on the preceding card and steal it back (see SCROLL_SYNC_CLICK_SUPPRESS_MS).
+      this.setActiveSection(i);
+      this.suppressScrollSync();
+      void this.plugin.scrollEditorToLine(s.startLine, this.sourceFile);
     });
 
     card.addEventListener('contextmenu', (e) => {
@@ -322,20 +402,20 @@ export class ParallelReaderView extends ItemView {
       it
         .setTitle(this.plugin.t('menuCopyMarkdown'))
         .setIcon('copy')
-        .onClick(() => void copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'))),
+        .onClick(() => void copyToClipboard(cardToMarkdown(s), this.plugin.t('copiedMarkdown'), this.tr)),
     );
     menu.addItem((it) =>
       it
         .setTitle(this.plugin.t('menuCopyPlain'))
         .setIcon('clipboard-copy')
-        .onClick(() => void copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'))),
+        .onClick(() => void copyToClipboard(cardToPlain(s), this.plugin.t('copiedPlain'), this.tr)),
     );
     if (s.anchor) {
       menu.addItem((it) =>
         it
           .setTitle(this.plugin.t('menuCopyAnchor'))
           .setIcon('quote-glyph')
-          .onClick(() => void copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'))),
+          .onClick(() => void copyToClipboard(s.anchor, this.plugin.t('copiedAnchor'), this.tr)),
       );
     }
     menu.addSeparator();
@@ -371,8 +451,32 @@ export class ParallelReaderView extends ItemView {
     this.activeIdx = idx;
     if (idx >= 0 && this.cards[idx]) {
       this.cards[idx].addClass('is-active');
-      this.cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      this.cards[idx].scrollIntoView({ block: 'nearest', behavior: this.scrollSyncBehavior() });
     }
+  }
+
+  /**
+   * `smooth` normally; `auto` (instant, no animation) when the user has
+   * requested reduced motion. `Element.scrollIntoView`'s explicit `behavior`
+   * option overrides the CSS `scroll-behavior` property, so a
+   * `prefers-reduced-motion` media query in styles.css alone cannot suppress
+   * this JS-driven scroll -- it has to be checked here instead.
+   */
+  private scrollSyncBehavior(): ScrollBehavior {
+    const prefersReduced =
+      typeof activeWindow.matchMedia === 'function' &&
+      activeWindow.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return prefersReduced ? 'auto' : 'smooth';
+  }
+
+  /** Arms the click-vs-scroll-sync suppression window (see SCROLL_SYNC_CLICK_SUPPRESS_MS). */
+  private suppressScrollSync() {
+    this.scrollSyncSuppressedUntil = Date.now() + SCROLL_SYNC_CLICK_SUPPRESS_MS;
+  }
+
+  /** Whether the scroll-sync handler should skip reassigning the active card right now. */
+  isScrollSyncSuppressed(): boolean {
+    return Date.now() < this.scrollSyncSuppressedUntil;
   }
 
   moveActiveSection(delta: number) {
@@ -406,21 +510,173 @@ export class ParallelReaderView extends ItemView {
     }
   }
 
-  async deleteCard(index: number) {
-    if (!this.sourceFile) return false;
-    const nextSections = removeCardAt(this.sections, index);
-    if (nextSections.length === this.sections.length) return false;
-    const previousLength = this.sections.length;
-    this.sections = nextSections;
-    this.activeIdx = activeIndexAfterCardDelete(index, previousLength, this.activeIdx);
-    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
-    this.render();
-    if (!ok) {
-      new Notice(this.plugin.t('cardPersistFailed'));
-      return false;
+  /**
+   * True when the panel still shows the note a pending write was started on.
+   *
+   * `cacheReplaceCards` is awaited, and the user can open another note during that
+   * await. The cache write is still correct — it targets the captured path — but
+   * committing the resulting VIEW state unconditionally used to repaint the newly
+   * opened note with the previous note's cards.
+   */
+  private stillShowing(sourcePath: string): boolean {
+    return this.sourceFile?.path === sourcePath;
+  }
+
+  /**
+   * Runs card mutations one at a time, so that computing a replacement array,
+   * persisting it, and committing the visible state form ONE ordered step.
+   *
+   * Two mutations issued before the first one's write landed used to compute their
+   * payloads from the same untouched `sections` array and then race: the later, stale
+   * payload silently overwrote the earlier successful one, and BOTH reported success
+   * (deleting cards 0 and 1 wrote `[b,c]` and then `[a,c]`, ending at `[a,c]` instead of
+   * `[c]`). Serializing the cache writes cannot fix that — by the time a write is
+   * ordered, its payload was computed from a snapshot that is already stale. The
+   * computation and the persistence have to share a single ordering boundary, and this
+   * queue is it.
+   *
+   * Deadlock safety: a link only ever awaits `plugin.cacheReplaceCards`, i.e.
+   * CacheManager's own transaction queue. CacheManager never calls back into the view —
+   * its transaction bodies touch only its lock-free internals and the vault adapter — so
+   * no cache transaction can wait on this queue while this queue waits on it. The
+   * dependency is strictly one-way: view queue → cache queue.
+   *
+   * Invariant: the tail never rejects, so one failed mutation cannot wedge every later
+   * one. Each caller still sees its own outcome through the promise it is handed.
+   */
+  private cardMutationQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * The card array this queue last treated as authoritative, PER NOTE.
+   *
+   * Consulted ONLY when the panel moved to a different note while a mutation was still
+   * queued: the view no longer holds that note's cards, but the link that ran before
+   * this one does. On a successful write this is the array that was persisted; on a
+   * failed one it is the array the write was computed from, which is what disk still
+   * holds.
+   *
+   * Keyed by path rather than kept in one global slot because the queue interleaves
+   * notes. With a single slot, a mutation queued for B between two mutations for A
+   * evicted A's state, and the second A mutation fell back to the snapshot the user
+   * was looking at — a payload computed from A's PRE-mutation list, which silently
+   * resurrected the card the first A mutation had already deleted. Both still reported
+   * success. One slot cannot represent an A → B → A queue; a map can.
+   *
+   * Bounded: `queued` counts the mutations for that path that are enqueued but not yet
+   * settled, and the key is deleted the moment it reaches zero (see
+   * `enqueueCardMutation`). A path is therefore present only while it has outstanding
+   * work, and the map is empty whenever the queue is idle — it cannot grow into a
+   * per-note leak over a long session. Serialization keeps this honest: increments
+   * happen synchronously at enqueue time, so a later mutation for the same path has
+   * already registered before an earlier one can settle and drop the key.
+   */
+  private mutationStateByPath = new Map<string, { queued: number; sections: ResolvedCard[] | null }>();
+
+  private enqueueCardMutation(sourcePath: string, task: () => Promise<boolean>): Promise<boolean> {
+    const state = this.mutationStateByPath.get(sourcePath) ?? { queued: 0, sections: null };
+    state.queued++;
+    this.mutationStateByPath.set(sourcePath, state);
+    const run = this.cardMutationQueue.then(async () => {
+      try {
+        return await task();
+      } finally {
+        // Runs for every outcome — success, failure, early return, throw — so a path can
+        // never be stranded in the map by a mutation that ended on an unusual path.
+        state.queued--;
+        if (state.queued <= 0) this.mutationStateByPath.delete(sourcePath);
+      }
+    });
+    this.cardMutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * The array a queued mutation must compute from at the moment it actually runs.
+   *
+   * Normally the view's own `sections`: every mutation that ran before this one already
+   * committed into it, which is exactly what makes the second of two concurrent edits
+   * see the first one's result instead of a stale snapshot. `snapshot` (the array the
+   * user was looking at when they acted) is the last resort, for a mutation whose note
+   * left the panel before it could run and that has no predecessor to inherit from.
+   */
+  private cardMutationBase(sourcePath: string, snapshot: ResolvedCard[]): ResolvedCard[] {
+    if (this.stillShowing(sourcePath)) return this.sections;
+    return this.mutationStateByPath.get(sourcePath)?.sections ?? snapshot;
+  }
+
+  /**
+   * Persist `nextSections` for `sourcePath` and record what the queue should treat as
+   * authoritative afterwards. Never throws: a rejected write is reported as `false`, so
+   * the caller leaves every piece of visible state untouched (S8, hole 2).
+   */
+  private async persistCards(
+    sourcePath: string,
+    base: ResolvedCard[],
+    nextSections: ResolvedCard[],
+    failureLabel: string,
+  ): Promise<boolean> {
+    let ok = false;
+    try {
+      ok = await this.plugin.cacheReplaceCards(sourcePath, nextSections);
+    } catch (e: unknown) {
+      console.error(failureLabel, e);
+      ok = false;
     }
-    new Notice(this.plugin.t('cardDeleted'));
-    return true;
+    // The entry is guaranteed to exist: this runs inside the queued task, whose enqueue
+    // created it and whose completion is what removes it.
+    const state = this.mutationStateByPath.get(sourcePath);
+    if (state) state.sections = ok ? nextSections : base;
+    return ok;
+  }
+
+  async deleteCard(index: number): Promise<boolean> {
+    if (!this.sourceFile) return false;
+    const sourcePath = this.sourceFile.path;
+    // Capture WHICH card the user acted on (by identity) and the list they saw it in,
+    // synchronously, before anything is awaited. Positions shift under a mutation that
+    // runs first; the card the user right-clicked does not.
+    const snapshot = this.sections;
+    const target = snapshot[index];
+    if (!target) return false;
+
+    return this.enqueueCardMutation(sourcePath, async () => {
+      const base = this.cardMutationBase(sourcePath, snapshot);
+      const targetIdx = base.indexOf(target);
+      // Already removed by a mutation that ran first — nothing left to delete. This is
+      // the documented fail-closed limitation for two mutations targeting the SAME card
+      // concurrently; it must stay fail-closed, but the user still needs to be told
+      // nothing happened, or the click silently does nothing.
+      if (targetIdx < 0) {
+        new Notice(this.plugin.t('cardMutationSuperseded'));
+        return false;
+      }
+      const nextSections = removeCardAt(base, targetIdx);
+
+      // Await the cache write BEFORE touching any visible state. `removeCardAt`/
+      // `updateCardAt` always return fresh arrays (never mutate in place), so nothing is
+      // changed yet and a failed write has nothing to restore (S8, hole 2).
+      const ok = await this.persistCards(
+        sourcePath,
+        base,
+        nextSections,
+        '[parallel-reader] failed to persist card delete',
+      );
+      if (!ok) {
+        new Notice(this.plugin.t('cardPersistFailed'));
+        return false;
+      }
+
+      new Notice(this.plugin.t('cardDeleted'));
+      // The write above is committed either way; only the visible state is conditional.
+      if (!this.stillShowing(sourcePath)) return true;
+      this.activeIdx = activeIndexAfterCardDelete(targetIdx, base.length, this.activeIdx);
+      this.sections = nextSections;
+      this.render();
+      return true;
+    });
   }
 
   openEditCardModal(index: number) {
@@ -431,19 +687,43 @@ export class ParallelReaderView extends ItemView {
     return true;
   }
 
-  async updateCard(index: number, patch: CardPatch) {
+  async updateCard(index: number, patch: CardPatch): Promise<boolean> {
     if (!this.sourceFile) return false;
-    const nextSections = updateCardAt(this.sections, index, patch);
-    if (nextSections.length !== this.sections.length) return false;
-    this.sections = nextSections;
-    const ok = await this.plugin.cacheReplaceCards(this.sourceFile.path, nextSections);
-    this.render();
-    if (!ok) {
-      new Notice(this.plugin.t('cardPersistFailed'));
-      return false;
-    }
-    new Notice(this.plugin.t('cardSaved'));
-    return true;
+    const sourcePath = this.sourceFile.path;
+    // Same identity capture + queue as deleteCard (see the comments there).
+    const snapshot = this.sections;
+    const target = snapshot[index];
+    if (!target) return false;
+
+    return this.enqueueCardMutation(sourcePath, async () => {
+      const base = this.cardMutationBase(sourcePath, snapshot);
+      const targetIdx = base.indexOf(target);
+      // Same documented same-card race as deleteCard (see the comment there): fail
+      // closed, but tell the user so the edit's disappearance isn't silent.
+      if (targetIdx < 0) {
+        new Notice(this.plugin.t('cardMutationSuperseded'));
+        return false;
+      }
+      const nextSections = updateCardAt(base, targetIdx, patch);
+
+      const ok = await this.persistCards(
+        sourcePath,
+        base,
+        nextSections,
+        '[parallel-reader] failed to persist card update',
+      );
+      if (!ok) {
+        new Notice(this.plugin.t('cardPersistFailed'));
+        return false;
+      }
+
+      new Notice(this.plugin.t('cardSaved'));
+      // See deleteCard: the note may have changed under the await.
+      if (!this.stillShowing(sourcePath)) return true;
+      this.sections = nextSections;
+      this.render();
+      return true;
+    });
   }
 
   async exportToVault() {

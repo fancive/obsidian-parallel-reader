@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const md = await requireBundledModule('src/markdown.ts');
+    const md = await requireSourceModule('src/markdown.ts');
 
     // ── cardToMarkdown ──
     const full = md.cardToMarkdown({

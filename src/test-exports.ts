@@ -22,6 +22,7 @@ export { serializeCacheFile, shouldConfirmRegenerate, touchCacheEntry } from './
 export { CacheManager } from './cache-manager';
 export { activeIndexAfterCardDelete, removeCardAt, updateCardAt } from './cards';
 export { CliProcessError, resolveCliPath, runCli, summarizeViaClaudeCode, summarizeViaCodex } from './cli';
+export { showGenerationError } from './error-ui';
 export { cancellationNoticeKey, summarizeDocument } from './generation';
 export {
   classifyGenerationError,
@@ -66,6 +67,7 @@ export {
   normalizeStreamingTimeoutMs,
   pruneCacheEntries,
 } from './settings';
+export { ParallelReaderSettingTab } from './settings-tab';
 export { deltaExtractorForFormat, parseSseBuffer, streamErrorMessage } from './streaming';
 export { addIconButton, addTextButton, copyToClipboard } from './ui-helpers';
 export { folderPathsForTarget } from './vault';

@@ -4,7 +4,6 @@
 	"version": "1.0.24",
 	"minAppVersion": "1.8.7",
 	"description": "AI-powered split-view reading: source note on the left, LLM-generated summary cards on the right with scroll-sync highlighting.",
-	"author": "lancivez",
-	"fundingUrl": "https://github.com/fancive",
+	"author": "fancive",
 	"isDesktopOnly": true
 }

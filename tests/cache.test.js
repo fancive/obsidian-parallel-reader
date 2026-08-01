@@ -63,6 +63,294 @@ async function testCacheManagerMove() {
   assert.ok(JSON.parse(writes[0].content).entries['new.md'], 'persisted cache uses moved path');
 }
 
+// ── CacheManager: a rejected adapter write must not leave the edit in memory ──
+// Review P1 (src/cache-manager.ts): every mutator wrote `this.cache` BEFORE awaiting
+// save(). When the adapter write rejected, the view correctly reported failure but the
+// in-memory cache kept the edit, so reopening the note silently applied the change the
+// UI had just called failed — and the next successful write (a debounced touch, say)
+// flushed it to disk. Memory must never diverge from what the write actually committed.
+
+function makeRejectingAdapter(message = 'disk full') {
+  return {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async () => {
+      throw new Error(message);
+    },
+  };
+}
+
+function makeManager(adapter) {
+  return new t.CacheManager(adapter, '.obsidian', 'parallel-reader', () => ({ maxCacheEntries: 100 }));
+}
+
+function makeEntry(title) {
+  return {
+    schemaVersion: t.CACHE_SCHEMA_VERSION,
+    contentHash: 'content-hash',
+    settingsHash: 'settings-hash',
+    cards: [{ title, anchor: '', gist: '', bullets: [] }],
+    generatedAt: '2024-01-01T00:00:00.000Z',
+  };
+}
+
+async function testReplaceCardsRestoresEntryWhenWriteRejects() {
+  const manager = makeManager(makeRejectingAdapter());
+  const original = makeEntry('old');
+  manager.cache = { 'a.md': original };
+
+  await assert.rejects(
+    () => manager.replaceCards('a.md', [{ title: 'new', anchor: '', gist: '', bullets: [] }]),
+    /disk full/,
+    'a rejected adapter write must surface as a rejection',
+  );
+
+  assert.strictEqual(
+    manager.cache['a.md'].cards[0].title,
+    'old',
+    'a rejected write must not leave the edit in the in-memory cache — reopening the note would apply a change the UI reported as failed',
+  );
+  assert.deepStrictEqual(manager.cache['a.md'], original, 'the previous cache entry must be restored verbatim');
+}
+
+async function testPutRestoresEntryWhenWriteRejects() {
+  const manager = makeManager(makeRejectingAdapter());
+  const original = makeEntry('old');
+  manager.cache = { 'a.md': original };
+
+  await assert.rejects(
+    () => manager.put('a.md', 'new content', [{ title: 'new', anchor: '', gist: '', bullets: [] }], { maxCards: 5 }),
+    /disk full/,
+    'put must surface a rejected adapter write',
+  );
+
+  assert.deepStrictEqual(manager.cache['a.md'], original, 'a rejected put must not leave the new entry in memory');
+}
+
+async function testDeleteRestoresEntryWhenWriteRejects() {
+  const manager = makeManager(makeRejectingAdapter());
+  const original = makeEntry('old');
+  manager.cache = { 'a.md': original };
+
+  await assert.rejects(() => manager.delete('a.md'), /disk full/, 'delete must surface a rejected adapter write');
+
+  assert.deepStrictEqual(
+    manager.cache['a.md'],
+    original,
+    'a rejected delete must not remove the entry from memory — the entry is still on disk',
+  );
+}
+
+async function testMoveAndClearRestoreCacheWhenWriteRejects() {
+  const moveManager = makeManager(makeRejectingAdapter());
+  const moved = makeEntry('moved');
+  moveManager.cache = { 'old.md': moved };
+  await assert.rejects(() => moveManager.move('old.md', 'new.md'), /disk full/, 'move must surface a rejected write');
+  assert.deepStrictEqual(
+    moveManager.cache,
+    { 'old.md': moved },
+    'a rejected move must not leave the entry under the new path',
+  );
+
+  const clearManager = makeManager(makeRejectingAdapter());
+  const kept = makeEntry('kept');
+  clearManager.cache = { 'a.md': kept };
+  await assert.rejects(() => clearManager.clear(), /disk full/, 'clear must surface a rejected write');
+  assert.deepStrictEqual(clearManager.cache, { 'a.md': kept }, 'a rejected clear must not empty the in-memory cache');
+}
+
+/**
+ * flush() is the quit path's guarantee that pending cache work reached disk. A debounce
+ * whose timer already fired leaves no timer behind, so flush() used to see "no timer" and
+ * fire a SECOND, concurrent write of its own instead of awaiting the one already running.
+ * (Unlike main.ts's flushSettingsSave it never lost the data outright — `_dirty` stayed
+ * set until the write landed — but two concurrent writes to the same file can land out of
+ * order, and a mutation arriving mid-write had its dirty flag cleared by that write.)
+ */
+async function testFlushAwaitsTheWriteAlreadyInFlight() {
+  const writes = [];
+  let resolveWrite = null;
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async (_filePath, content) => {
+      writes.push(content);
+      return new Promise((resolve) => {
+        resolveWrite = resolve;
+      });
+    },
+  };
+
+  const originalActiveWindow = globalThis.activeWindow;
+  const pendingTimers = new Map();
+  let nextTimerId = 1;
+  globalThis.activeWindow = {
+    setTimeout: (fn) => {
+      const id = nextTimerId++;
+      pendingTimers.set(id, fn);
+      return id;
+    },
+    clearTimeout: (id) => {
+      pendingTimers.delete(id);
+    },
+  };
+
+  try {
+    const manager = makeManager(adapter);
+    manager.cache = { 'a.md': makeEntry('one') };
+    manager.scheduleSave(5000);
+
+    const [[timerId, fireTimer]] = pendingTimers;
+    pendingTimers.delete(timerId);
+    fireTimer(); // the debounce elapses: the write starts and is now in flight
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(writes.length, 1, 'sanity: the debounced write started');
+
+    let flushResolved = false;
+    const flush = manager.flush().then(() => {
+      flushResolved = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.strictEqual(writes.length, 1, 'flush must await the in-flight write, not race a second one past it');
+    assert.strictEqual(flushResolved, false, 'flush must not resolve while the cache write it flushes is pending');
+
+    resolveWrite();
+    await flush;
+    assert.strictEqual(flushResolved, true, 'flush resolves once the in-flight write lands');
+    assert.strictEqual(writes.length, 1, 'one scheduled save produces exactly one write, even with a flush on top');
+  } finally {
+    globalThis.activeWindow = originalActiveWindow;
+  }
+}
+
+/**
+ * Round-2 review P1 (src/cache-manager.ts): rollback used to restore a snapshot of the
+ * WHOLE cache object, which is only correct if nothing else can mutate the cache in
+ * between. Nothing guaranteed that: GenerationJobManager runs up to 3 jobs at once, so
+ * batch generation issues genuinely concurrent put() calls. With put(A) and put(B) in
+ * flight together, B's write landing successfully and A's older write rejecting made A's
+ * rollback restore the pre-A snapshot — erasing B's committed entry as collateral.
+ *
+ * The fix is to serialize cache transactions (mutation + write are one atomic unit) and
+ * to scope every rollback to the keys that transaction touched. A rollback must undo its
+ * own entry, never anyone else's.
+ */
+async function testConcurrentPuts_RollbackOnlyUndoesTheFailedEntry() {
+  const writes = [];
+  let rejectFirstWrite = null;
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: (_filePath, content) => {
+      writes.push(content);
+      // The FIRST write issued (the older mutation's) hangs until the test fails it;
+      // every later write succeeds immediately.
+      if (writes.length === 1) {
+        return new Promise((_resolve, reject) => {
+          rejectFirstWrite = () => reject(new Error('disk full'));
+        });
+      }
+      return Promise.resolve();
+    },
+  };
+
+  const manager = makeManager(adapter);
+  const settings = { maxCards: 5 };
+  const putA = manager.put('a.md', 'content A', [{ title: 'A', anchor: '', gist: '', bullets: [] }], settings);
+  const putB = manager.put('b.md', 'content B', [{ title: 'B', anchor: '', gist: '', bullets: [] }], settings);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  rejectFirstWrite();
+  await assert.rejects(putA, /disk full/, "the failed mutation's own caller must still see the rejection");
+  await putB;
+
+  assert.ok(
+    manager.cache['b.md'],
+    "a concurrent mutation whose write SUCCEEDED must survive another mutation's rollback — the rollback may only undo its own entry",
+  );
+  assert.strictEqual(manager.cache['b.md'].cards[0].title, 'B', 'the surviving entry keeps its own cards');
+  assert.ok(
+    !Object.hasOwn(manager.cache, 'a.md'),
+    'the mutation whose write rejected must still be rolled back out of memory',
+  );
+
+  const lastPayload = JSON.parse(writes[writes.length - 1]).entries;
+  assert.ok(lastPayload['b.md'], 'the last write persisted the successful entry');
+  assert.ok(
+    !lastPayload['a.md'],
+    'no write may carry an entry whose own transaction failed — a later successful write would commit it to disk',
+  );
+}
+
+/**
+ * The mechanism behind the test above: cache writes must be serialized, so a mutation and
+ * the write that commits it are atomic with respect to every other mutation. Two adapter
+ * writes overlapping means some write is serializing a cache state that another
+ * transaction has not committed yet.
+ */
+async function testCacheWritesAreSerialized() {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const payloads = [];
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async (_filePath, content) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      payloads.push(content);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight--;
+    },
+  };
+
+  const manager = makeManager(adapter);
+  const settings = { maxCards: 5 };
+  await Promise.all([
+    manager.put('a.md', 'A', [{ title: 'A', anchor: '', gist: '', bullets: [] }], settings),
+    manager.put('b.md', 'B', [{ title: 'B', anchor: '', gist: '', bullets: [] }], settings),
+    manager.put('c.md', 'C', [{ title: 'C', anchor: '', gist: '', bullets: [] }], settings),
+  ]);
+
+  assert.strictEqual(
+    maxInFlight,
+    1,
+    'cache writes must never overlap — mutation + write is one serialized transaction',
+  );
+  assert.deepStrictEqual(
+    Object.keys(manager.cache).sort(),
+    ['a.md', 'b.md', 'c.md'],
+    'every successful concurrent mutation is retained',
+  );
+  const lastPayload = JSON.parse(payloads[payloads.length - 1]).entries;
+  assert.deepStrictEqual(
+    Object.keys(lastPayload).sort(),
+    ['a.md', 'b.md', 'c.md'],
+    'the final write on disk carries every committed entry',
+  );
+}
+
+async function testSuccessfulWriteKeepsTheMutation() {
+  const writes = [];
+  const adapter = {
+    exists: async () => true,
+    mkdir: async () => {},
+    read: async () => '{}',
+    write: async (filePath, content) => writes.push({ filePath, content }),
+  };
+  const manager = makeManager(adapter);
+  manager.cache = { 'a.md': makeEntry('old') };
+
+  assert.strictEqual(await manager.replaceCards('a.md', [{ title: 'new', anchor: '', gist: '', bullets: [] }]), true);
+  assert.strictEqual(manager.cache['a.md'].cards[0].title, 'new', 'a successful write still commits the edit');
+  assert.strictEqual(writes.length, 1, 'a successful replaceCards writes exactly once');
+}
+
 // ── pruneCacheEntries ──
 
 const cache = {
@@ -81,6 +369,14 @@ assert.deepStrictEqual(t.pruneCacheEntries(smallCache, 10), [], 'nothing pruned 
 
 (async () => {
   await testCacheManagerMove();
+  await testReplaceCardsRestoresEntryWhenWriteRejects();
+  await testPutRestoresEntryWhenWriteRejects();
+  await testDeleteRestoresEntryWhenWriteRejects();
+  await testMoveAndClearRestoreCacheWhenWriteRejects();
+  await testFlushAwaitsTheWriteAlreadyInFlight();
+  await testConcurrentPuts_RollbackOnlyUndoesTheFailedEntry();
+  await testCacheWritesAreSerialized();
+  await testSuccessfulWriteKeepsTheMutation();
   console.log('cache tests passed');
 })().catch((e) => {
   console.error(e);

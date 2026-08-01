@@ -1,9 +1,9 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const prompt = await requireBundledModule('src/prompt.ts');
-    const settings = await requireBundledModule('src/settings.ts');
+    const prompt = await requireSourceModule('src/prompt.ts');
+    const settings = await requireSourceModule('src/settings.ts');
     const base = { ...settings.DEFAULT_SETTINGS, promptLanguage: 'en', minCards: 3, maxCards: 7 };
 
     // ── promptLanguageInstruction ──

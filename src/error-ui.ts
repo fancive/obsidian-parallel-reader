@@ -50,6 +50,18 @@ function showActionableNotice(message: string, actions: ActionableNoticeAction[]
   return notice;
 }
 
+/**
+ * Retry action, hoisted so every re-rollable error kind wires it up the same way instead of
+ * four copies of the same `if (ctx.onRetry) actions.push(...)` line. Returns an empty array
+ * when no retry callback was supplied so callers can always spread it into their actions list.
+ */
+function retryAction(
+  ctx: GenerationErrorContext,
+  tr: (key: string, vars?: Record<string, string | number>) => string,
+): ActionableNoticeAction[] {
+  return ctx.onRetry ? [{ label: tr('errorActionRetry'), primary: true, onClick: ctx.onRetry }] : [];
+}
+
 function reasonCopyKeys(reason: CliErrorDetails['reason']): { titleKey: string; reasonKey: string } {
   switch (reason) {
     case 'wall-timeout':
@@ -140,7 +152,9 @@ class CliDiagnosticsModal extends Modal {
     new Setting(contentEl)
       .addButton((b) =>
         b.setButtonText(translate(this.settings, 'errorModalActionCopy')).onClick(() => {
-          void copyToClipboard(this.fullMessage, translate(this.settings, 'errorModalCopySuccess'));
+          void copyToClipboard(this.fullMessage, translate(this.settings, 'errorModalCopySuccess'), (k, v) =>
+            translate(this.settings, k, v),
+          );
         }),
       )
       .addButton((b) =>
@@ -180,12 +194,15 @@ export function showGenerationError(
 
   if (kind === 'timeout') {
     // API streaming timeout: no structured details, show actionable notice with raw message tail.
+    // Timeouts are frequently transient (slow model, brief network hang), so retry is the most
+    // useful action when available and takes the primary slot.
     showActionableNotice(tr('errorNoticeTimeout'), [
+      ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyDetails'),
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
-      { label: tr('errorActionOpenSettings'), primary: true, onClick: ctx.openSettings },
+      { label: tr('errorActionOpenSettings'), primary: !ctx.onRetry, onClick: ctx.openSettings },
     ]);
     return;
   }
@@ -198,32 +215,37 @@ export function showGenerationError(
   }
 
   if (kind === 'rate-limit') {
+    // Deliberately no countdown/auto-retry: this notice auto-hides (~12s, see
+    // showActionableNotice) which is often shorter than a real rate-limit backoff, so a timed
+    // button would vanish before it could fire. A plain manual Retry avoids that trap.
     showActionableNotice(tr('errorNoticeRateLimit', { error: message }), [
+      ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyDetails'),
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
     ]);
     return;
   }
 
   if (kind === 'network') {
-    const actions: ActionableNoticeAction[] = [];
-    if (ctx.onRetry) actions.push({ label: tr('errorActionRetry'), primary: true, onClick: ctx.onRetry });
-    actions.push({
-      label: tr('errorActionCopyDetails'),
-      onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
-    });
-    showActionableNotice(tr('errorNoticeNetwork'), actions);
+    showActionableNotice(tr('errorNoticeNetwork'), [
+      ...retryAction(ctx, tr),
+      {
+        label: tr('errorActionCopyDetails'),
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
+      },
+    ]);
     return;
   }
 
   if (kind === 'schema') {
     showActionableNotice(tr('errorNoticeSchema'), [
+      ...retryAction(ctx, tr),
       {
         label: tr('errorActionCopyRaw'),
-        primary: true,
-        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess')),
+        primary: !ctx.onRetry,
+        onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
       },
       { label: tr('errorActionOpenSettings'), onClick: ctx.openSettings },
     ]);
@@ -237,6 +259,21 @@ export function showGenerationError(
     return;
   }
 
-  // Unknown / fallback: keep the legacy short Notice with kind tag, no buttons.
-  new Notice(tr('generationFailed', { kind: kind === 'unknown' ? '' : ` (${kind})`, error: message }));
+  if (kind === 'cancelled') {
+    // Cancellation isn't a failure to retry — keep the legacy quiet Notice, no action buttons.
+    new Notice(tr('generationFailed', { kind: ` (${kind})`, error: message }));
+    return;
+  }
+
+  // Unknown: routed through the same actionable-notice path as the classified kinds above
+  // (previously a bare, buttonless Notice). `unknown` is where a lot of real failures land —
+  // classifyGenerationError pattern-matches English prose, so non-English locales frequently
+  // fall through here — so it needs the same Retry/Copy-details recourse, not a dead end.
+  showActionableNotice(tr('generationFailed', { kind: '', error: message }), [
+    ...retryAction(ctx, tr),
+    {
+      label: tr('errorActionCopyDetails'),
+      onClick: () => void copyToClipboard(message, tr('errorModalCopySuccess'), tr),
+    },
+  ]);
 }

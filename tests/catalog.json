@@ -29,8 +29,10 @@
       "files": [
         "cache.test.js",
         "direct-cache.test.js",
+        "error-ui.test.js",
         "generation-job-manager.test.js",
         "plugin-batch.test.js",
+        "plugin-lifecycle.test.js",
         "view-render.test.js"
       ]
     },
@@ -42,6 +44,7 @@
         "cli.test.js",
         "direct-providers.test.js",
         "providers.test.js",
+        "release-tooling.test.js",
         "test-exports.test.js"
       ]
     }

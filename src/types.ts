@@ -176,6 +176,8 @@ export interface PluginHost {
   cacheReplaceCards(filePath: string, cards: ResolvedCard[]): Promise<boolean>;
   saveSettings(): Promise<void>;
   saveSettingsDebounced(delayMs?: number): void;
+  /** Immediately commit a pending debounced settings write, if one is scheduled. */
+  flushSettingsSave(): Promise<void>;
   cacheClear(): Promise<void>;
   pruneCacheIfNeeded(): Promise<string[]>;
 }

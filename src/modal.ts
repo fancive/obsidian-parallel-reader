@@ -70,6 +70,10 @@ export class CardEditModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
+    // Bound translator for ui-helpers' failure toasts (actionFailed) -- an arrow closing
+    // over `this.plugin` rather than a bare `this.plugin.t` reference, since the latter
+    // would lose its `this` binding once passed as a standalone callback.
+    const tr = (key: string, vars?: Record<string, string | number>) => this.plugin.t(key, vars);
     contentEl.createEl('h2', { text: this.plugin.t('editCardTitle') });
 
     const titleInput = this.createLabeledInput(contentEl, this.plugin.t('editCardTitleField'), this.card.title || '');
@@ -87,7 +91,14 @@ export class CardEditModal extends Modal {
     );
 
     const actions = contentEl.createDiv({ cls: 'parallel-reader-modal-actions' });
-    addTextButton(actions, null, this.plugin.t('editCardCancel'), () => this.close(), 'parallel-reader-text-button');
+    addTextButton(
+      actions,
+      null,
+      this.plugin.t('editCardCancel'),
+      () => this.close(),
+      tr,
+      'parallel-reader-text-button',
+    );
     addTextButton(
       actions,
       null,
@@ -103,6 +114,7 @@ export class CardEditModal extends Modal {
         });
         this.close();
       },
+      tr,
       'parallel-reader-text-button',
     );
   }

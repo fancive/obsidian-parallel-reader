@@ -1,5 +1,5 @@
 'use strict';
-import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { Component, MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import {
   type BatchRunState,
   batchProgressVars,
@@ -60,8 +60,29 @@ class ParallelReaderPlugin extends Plugin {
   cacheManager!: CacheManager;
   jobs!: GenerationJobManager;
   activeBatch: BatchRunState | null = null;
-  _scrollDispose: (() => void) | null = null;
+  // Owns the editor scroll listener as a child Component (see bindScrollSync) so a
+  // rebind can detach *only* the previous binding via removeChild, and unloading the
+  // plugin detaches it automatically through Obsidian's normal Component unload cascade
+  // (rather than the previous raw addEventListener, which onunload() never disposed).
+  _scrollSync: Component | null = null;
   _settingsSaveTimer: number | null = null;
+  /**
+   * Tail of the settings-write queue.
+   *
+   * The debounce callback clears `_settingsSaveTimer` BEFORE the async write settles, so
+   * the timer alone cannot tell `flushSettingsSave()` whether a write is still in flight;
+   * quit landing in that window used to await nothing and lose the setting. Tracking the
+   * pending write in a single slot was not enough either: a second save overwrote the
+   * slot, so two writes could be in flight at once, land in either order, and leave an
+   * OLDER payload as the final state on disk — while flush, awaiting only the newest
+   * slot, reported success. Writes are therefore chained: each starts after the previous
+   * one settles, and flush awaits this tail.
+   *
+   * Invariant: the tail never rejects (errors are swallowed when it is republished), so
+   * one failed write cannot wedge every later write. Each caller still sees its own
+   * rejection through the promise `saveSettings()` returns.
+   */
+  _settingsSaveQueue: Promise<void> = Promise.resolve();
 
   get cache(): Record<string, CacheEntry> {
     return this.cacheManager.cache;
@@ -133,8 +154,7 @@ class ParallelReaderPlugin extends Plugin {
       name: this.t('cmdClearAll'),
       callback: async () => {
         const n = Object.keys(this.cacheManager.cache).length;
-        await this.cacheManager.clear();
-        this.refreshViewAfterCacheClear();
+        await this.cacheClear();
         new Notice(this.t('cacheClearedAll', { count: n }));
       },
     });
@@ -180,6 +200,22 @@ class ParallelReaderPlugin extends Plugin {
           this.handleFileDelete(file).catch((e: unknown) => console.error('[parallel-reader] file delete', e));
       }),
     );
+    // onunload() below still fires best-effort flushes for the plain disable/reload
+    // path (the event loop keeps running then, so they usually land), but Obsidian
+    // does NOT await onunload — during an actual app quit the process can exit before
+    // those floating promises settle. `workspace.on('quit', ...)` + `Tasks.addPromise`
+    // is the documented mechanism Obsidian itself waits on before exiting, so it is the
+    // only path that can actually guarantee these debounced writes reach disk.
+    this.registerEvent(
+      this.app.workspace.on('quit', (tasks) => {
+        tasks.addPromise(
+          this.flushSettingsSave().catch((e: unknown) => console.error('[parallel-reader] flush settings on quit', e)),
+        );
+        tasks.addPromise(
+          this.flushCacheSave().catch((e: unknown) => console.error('[parallel-reader] flush cache on quit', e)),
+        );
+      }),
+    );
     this.bindScrollSync();
   }
 
@@ -209,7 +245,16 @@ class ParallelReaderPlugin extends Plugin {
       activeWindow.clearTimeout(this._settingsSaveTimer);
       this._settingsSaveTimer = null;
     }
-    await this.saveData({ settings: this.settings });
+    // Queue behind any write already running or queued, so writes reach disk in the
+    // order they were requested and the last one requested is the last one committed.
+    // `this.settings` is read when this link runs, not now, so a queued write always
+    // persists the current settings rather than a snapshot that is already stale.
+    const run = this._settingsSaveQueue.then(() => Promise.resolve(this.saveData({ settings: this.settings })));
+    this._settingsSaveQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    await run;
   }
 
   saveSettingsDebounced(delayMs = 400) {
@@ -221,10 +266,20 @@ class ParallelReaderPlugin extends Plugin {
   }
 
   async flushSettingsSave() {
-    if (!this._settingsSaveTimer) return;
-    activeWindow.clearTimeout(this._settingsSaveTimer);
-    this._settingsSaveTimer = null;
-    await this.saveSettings();
+    if (this._settingsSaveTimer) {
+      activeWindow.clearTimeout(this._settingsSaveTimer);
+      this._settingsSaveTimer = null;
+      // saveSettings() enqueues behind everything already pending and awaits its own
+      // link, so awaiting it also awaits every write queued before it.
+      await this.saveSettings();
+      return;
+    }
+    // A debounce that already fired has no timer left, but its write can still be in
+    // flight — and older writes can still be queued behind a newer one that already
+    // resolved. Await the TAIL, so the quit hook holds until the queue is fully drained;
+    // resolving early would let the process exit mid-queue and leave a stale payload as
+    // the last thing written.
+    await this._settingsSaveQueue;
   }
 
   /* ---------- Cache delegation ---------- */
@@ -242,7 +297,12 @@ class ParallelReaderPlugin extends Plugin {
     return this.cacheManager.replaceCards(filePath, cards);
   }
   async cacheClear() {
-    return this.cacheManager.clear();
+    await this.cacheManager.clear();
+    // Keep this delegation in sync with the `clear-all` command below, which
+    // has always refreshed the view after clearing — the Settings tab's
+    // "Clear all cache" button used to skip this and leave dead cards on
+    // screen (S8, hole 1).
+    this.refreshViewAfterCacheClear();
   }
   async pruneCacheIfNeeded() {
     return this.cacheManager.pruneIfNeeded();
@@ -465,6 +525,7 @@ class ParallelReaderPlugin extends Plugin {
     await copyToClipboard(
       cardsToMarkdown(`${view.sourceFile.basename} · ${this.t('displayName')}`, view.sections),
       this.t('copiedAllMarkdown'),
+      (key, vars) => this.t(key, vars),
     );
   }
 
@@ -540,6 +601,7 @@ class ParallelReaderPlugin extends Plugin {
             this.cacheTouch(file.path);
             if (view && shouldRender && this.activeFileStillMatches(file)) {
               view.loadFor(file, resolveCardAnchors(content, entry.cards), false);
+              this.syncActiveFromFile(file);
             }
             outcome = 'cached';
             return;
@@ -567,7 +629,10 @@ class ParallelReaderPlugin extends Plugin {
         job.throwIfCancelled();
         await this.cacheManager.put(file.path, content, rawCards, this.settings);
         job.throwIfCancelled();
-        if (view && shouldRender) view.loadFor(file, sections, false);
+        if (view && shouldRender) {
+          view.loadFor(file, sections, false);
+          this.syncActiveFromFile(file);
+        }
         const unanchored = sections.filter((s) => s.startLine < 0).length;
         new Notice(
           this.t('generationDone', {
@@ -751,30 +816,115 @@ class ParallelReaderPlugin extends Plugin {
     const stale = !cacheEntryMatches(entry, content, this.settings);
     this.cacheTouch(file.path);
     view.loadFor(file, resolveCardAnchors(content, entry.cards), stale);
+    // loadFor() cleared the highlight (the file changed); point it at wherever the
+    // editor is already scrolled to instead of waiting for the user to scroll.
+    this.syncActiveFromFile(file);
   }
 
   bindScrollSync() {
-    if (this._scrollDispose) {
-      this._scrollDispose();
-      this._scrollDispose = null;
+    // Detach the PREVIOUS binding before creating a new one. This runs on every
+    // `active-leaf-change`, so without this teardown a plugin-level
+    // `this.registerDomEvent(...)` would accumulate one listener (and keep this plugin
+    // instance reachable from the CodeMirror scroller) per leaf change for the plugin's
+    // entire lifetime.
+    if (this._scrollSync) {
+      this.removeChild(this._scrollSync);
+      this._scrollSync = null;
     }
     const mdView = this.getActiveView();
     if (!mdView) return;
     const editor = mdView.editor;
     const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
-    const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector('.cm-scroller');
+    // querySelector's generic (rather than an `as` cast) keeps both tsc and
+    // @typescript-eslint/no-unnecessary-type-assertion satisfied: registerDomEvent
+    // needs HTMLElement, but an assertion here is reported as redundant.
+    const scrollDom = cm?.scrollDOM ? cm.scrollDOM : mdView.contentEl.querySelector<HTMLElement>('.cm-scroller');
     if (!scrollDom) return;
     const handler = createRafThrottledHandler(() => this.handleEditorScroll(mdView));
-    scrollDom.addEventListener('scroll', handler, { passive: true });
-    this._scrollDispose = () => {
-      handler.cancel();
-      scrollDom.removeEventListener('scroll', handler);
-    };
+    // Own the listener with a dedicated child Component (not a bare `this.registerDomEvent`
+    // on the plugin itself) so THIS rebind can detach only the binding it owns via
+    // `removeChild`, and so unloading the plugin detaches it automatically through
+    // Obsidian's normal Component-unload cascade — no dependency on onunload() remembering
+    // to dispose it.
+    const scrollSync = new Component();
+    scrollSync.registerDomEvent(scrollDom, 'scroll', handler, { passive: true });
+    scrollSync.register(() => handler.cancel());
+    this._scrollSync = scrollSync;
+    this.addChild(scrollSync);
+    // Installing the listener is not enough: until a scroll event actually fires, the
+    // panel would show no active card at all (loadFor resets activeIdx on a file
+    // change). Synchronize once, immediately, so switching panes highlights the card
+    // the editor is already sitting on.
+    this.syncActiveFromEditor(mdView);
   }
 
   handleEditorScroll(mdView: MarkdownView) {
+    this.syncActiveFromEditor(mdView);
+  }
+
+  /**
+   * The Markdown editor showing `file`, resolved from the FILE rather than from whatever
+   * happens to be focused right now — except that the active view is preferred FIRST
+   * when it demonstrably shows this file, because that is the one viewport the user is
+   * actually looking at.
+   *
+   * Resolution order (one coherent chain, not two competing ones):
+   *   1. The active Markdown view, IF its `file` matches — this also covers layouts
+   *      where the file's leaf is not enumerated as a `markdown` leaf at all.
+   *   2. Otherwise, the first leaf `findLeafForFile` finds among `markdown`-typed leaves.
+   *
+   * Why the active view must come first: if the same note is open in two Markdown
+   * leaves (a split), `findLeafForFile` returns the FIRST matching leaf in workspace
+   * enumeration order, which need not be the one the user is looking at. Checking the
+   * active view first resolves the split correctly whenever a matching leaf is focused.
+   *
+   * Why the fallback still matters (round-3 P1): `ensureView()` reveals — and therefore
+   * FOCUSES — the right-side panel, so on the ribbon/open-view path the active view by
+   * then is our own `ItemView` and `getActiveViewOfType(MarkdownView)` returns null (or,
+   * with the sidebar focused for any other reason, may return a view for a different
+   * file entirely). Falling back to `findLeafForFile` keeps that path working exactly as
+   * before — resolving from the file is stateless and cannot go stale when focus moves.
+   */
+  getMarkdownViewForFile(file: TFile | null): MarkdownView | null {
+    if (!file) return null;
+    const active = this.getActiveView();
+    if (active?.file?.path === file.path) return active;
+    const leaf = this.findLeafForFile(file);
+    // findLeafForFile only ever scans `getLeavesOfType('markdown')`, so the view it
+    // returns is a MarkdownView; the cast just narrows the leaf's declared `View` type.
+    return leaf ? (leaf.view as MarkdownView) : null;
+  }
+
+  /**
+   * Point the active-card highlight at the editor showing `file`.
+   *
+   * Used by every post-load synchronization (`syncViewToFile`, and both of
+   * `runForFile`'s render points), all of which run AFTER `ensureView()` may have moved
+   * focus to the panel. See `getMarkdownViewForFile` for why they must not ask for the
+   * active view instead.
+   */
+  syncActiveFromFile(file: TFile | null) {
+    this.syncActiveFromEditor(this.getMarkdownViewForFile(file));
+  }
+
+  /**
+   * Point the active-card highlight at whatever the editor's viewport currently shows.
+   *
+   * Extracted from the scroll handler because a scroll EVENT is not the only moment the
+   * highlight can be wrong: `loadFor()` resets `activeIdx` to -1 whenever the file
+   * changes, so opening or switching to a note with cached cards used to leave every
+   * card unhighlighted until the user physically scrolled. `bindScrollSync()` calls this
+   * directly with the leaf it just bound; every other first-synchronization caller goes
+   * through `syncActiveFromFile()`.
+   */
+  syncActiveFromEditor(mdView: MarkdownView | null) {
+    if (!mdView) return;
     const view = this.getParallelView();
     if (!view || !mdView.file || view.sourceFile?.path !== mdView.file.path) return;
+    // A card click just drove this scroll; let the click's own highlight stand
+    // instead of letting the centered-scroll landing point reassign it (often
+    // to the preceding card). See view.ts's SCROLL_SYNC_CLICK_SUPPRESS_MS.
+    if (view.isScrollSyncSuppressed()) return;
     const editor = mdView.editor;
     const cm = editor && (editor as unknown as ObsidianEditorWithCm).cm;
     if (!cm?.scrollDOM) return;

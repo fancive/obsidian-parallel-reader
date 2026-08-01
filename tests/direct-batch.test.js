@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const batch = await requireBundledModule('src/batch.ts');
+    const batch = await requireSourceModule('src/batch.ts');
 
     // ── isFileInBatchFolder (not tested directly before) ──
     assert.strictEqual(

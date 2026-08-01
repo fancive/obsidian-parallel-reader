@@ -20,7 +20,6 @@ main.js.map
 
 # Coverage
 coverage/
-.test-bundles/
 
 # Agent state
 .agent/

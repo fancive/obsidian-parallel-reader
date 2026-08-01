@@ -1,8 +1,8 @@
-const { assert, requireBundledModule, cleanup } = require('./direct-test-setup');
+const { assert, requireSourceModule, cleanup } = require('./direct-test-setup');
 
 (async () => {
   try {
-    const settings = await requireBundledModule('src/settings.ts');
+    const settings = await requireSourceModule('src/settings.ts');
     const base = settings.DEFAULT_SETTINGS;
     const supportedLanguageIds = ['auto', 'zh', 'en', 'ja', 'ko', 'fr', 'de', 'es'];
 
